@@ -1,6 +1,5 @@
 __pycache__/
 *.py[cod]
-dist/
 *.zip
 .idea/
 .vscode/

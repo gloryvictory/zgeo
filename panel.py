@@ -34,6 +34,10 @@ from qgis.PyQt.QtWidgets import (
 )
 
 from .charts import BarChart, BarDatum
+from .explorer import reveal_files
+from .file_info import inspect_geofile
+from .formatting import format_size
+from .info_dialog import FileInfoDialog
 from .scanner import OTHER, RASTER, TABLE, VECTOR, GeoFile, scan_folder
 from .stats import build_size_distribution, build_type_distribution
 
@@ -67,6 +71,7 @@ class ZGeoPanel(QDockWidget):
 
         self._folder: Optional[Path] = None
         self._files: List[GeoFile] = []
+        self._file_by_path: Dict[str, GeoFile] = {}
         self._entries: List[Tuple[QTreeWidgetItem, str]] = []
         self._busy = False
         self._settings = QSettings()
@@ -208,7 +213,56 @@ class ZGeoPanel(QDockWidget):
         self.stack.addWidget(self._build_tree())
         self.stack.setMinimumHeight(260)
         layout.addWidget(self.stack, 1)
+        layout.addWidget(self._build_file_actions())
+        self.tree.itemSelectionChanged.connect(self._update_file_actions)
         return page
+
+    def _build_file_actions(self) -> QWidget:
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 2, 0, 0)
+        layout.setSpacing(3)
+
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
+        layout.addWidget(line)
+
+        buttons = QHBoxLayout()
+        buttons.setContentsMargins(0, 0, 0, 0)
+        buttons.setSpacing(4)
+
+        self.info_button = QToolButton()
+        self.info_button.setIcon(
+            self.style().standardIcon(
+                QStyle.StandardPixmap.SP_MessageBoxInformation
+            )
+        )
+        self.info_button.setIconSize(QSize(18, 18))
+        self.info_button.setAutoRaise(True)
+        self.info_button.setFixedSize(30, 30)
+        self.info_button.setToolTip("Информация")
+        self.info_button.setAccessibleName("Информация")
+        self.info_button.clicked.connect(self._show_file_info)
+        buttons.addWidget(self.info_button)
+
+        self.explorer_button = QToolButton()
+        self.explorer_button.setIcon(
+            self.style().standardIcon(
+                QStyle.StandardPixmap.SP_DirOpenIcon
+            )
+        )
+        self.explorer_button.setIconSize(QSize(18, 18))
+        self.explorer_button.setAutoRaise(True)
+        self.explorer_button.setFixedSize(30, 30)
+        self.explorer_button.setToolTip("Открыть в проводнике")
+        self.explorer_button.setAccessibleName("Открыть в проводнике")
+        self.explorer_button.clicked.connect(self._open_in_explorer)
+        buttons.addWidget(self.explorer_button)
+
+        buttons.addStretch(1)
+        layout.addLayout(buttons)
+        return container
 
     def _build_stats_page(self) -> QWidget:
         page = QWidget()
@@ -503,6 +557,9 @@ class ZGeoPanel(QDockWidget):
         self.tree.setUpdatesEnabled(False)
         self.tree.clear()
         self._entries = []
+        self._file_by_path = {
+            str(geo_file.path): geo_file for geo_file in files
+        }
 
         try:
             for geo_file in files:
@@ -538,10 +595,13 @@ class ZGeoPanel(QDockWidget):
             [
                 geo_file.relative_posix,
                 geo_file.format.name,
-                self._human_size(geo_file.size),
+                format_size(geo_file.size),
             ]
         )
         item.setIcon(0, self._icon_for(geo_file))
+        item.setData(
+            0, Qt.ItemDataRole.UserRole, str(geo_file.path)
+        )
         item.setToolTip(0, str(geo_file.path))
         item.setToolTip(
             1,
@@ -563,6 +623,74 @@ class ZGeoPanel(QDockWidget):
         return self._icon_cache[cache_key]
 
     # ------------------------------------------------------------------
+    # Действия с выбранными файлами
+    # ------------------------------------------------------------------
+
+    def _selected_files(self) -> List[GeoFile]:
+        selected: List[GeoFile] = []
+        for item in self.tree.selectedItems():
+            if item.isHidden():
+                continue
+            path = item.data(0, Qt.ItemDataRole.UserRole)
+            geo_file = self._file_by_path.get(str(path))
+            if geo_file is not None:
+                selected.append(geo_file)
+        return selected
+
+    def _update_file_actions(self) -> None:
+        selected = self._selected_files()
+        self.info_button.setEnabled(
+            len(selected) == 1 and not self._busy
+        )
+        self.explorer_button.setEnabled(
+            bool(selected) and not self._busy
+        )
+
+    def _show_file_info(self) -> None:
+        selected = self._selected_files()
+        if len(selected) != 1:
+            return
+
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        QApplication.processEvents()
+        error_message = None
+        try:
+            file_info = inspect_geofile(selected[0])
+        except Exception as error:
+            error_message = str(error)
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        if error_message is not None:
+            QMessageBox.critical(
+                self,
+                "ZGeo",
+                "Не удалось получить информацию о файле:\n{}".format(
+                    error_message
+                ),
+            )
+            return
+
+        FileInfoDialog(file_info, self).exec()
+
+    def _open_in_explorer(self) -> None:
+        selected = self._selected_files()
+        if not selected:
+            return
+
+        errors = reveal_files(
+            geo_file.path for geo_file in selected
+        )
+        if errors:
+            QMessageBox.warning(
+                self,
+                "ZGeo",
+                "Не удалось открыть проводник:\n\n{}".format(
+                    "\n".join(errors)
+                ),
+            )
+
+    # ------------------------------------------------------------------
     # Статистика
     # ------------------------------------------------------------------
 
@@ -578,7 +706,7 @@ class ZGeoPanel(QDockWidget):
         total_count = len(files)
         self.stats_summary_label.setText(
             "Файлов: {} · {}".format(
-                total_count, self._human_size(total_size)
+                total_count, format_size(total_size)
             )
         )
 
@@ -590,14 +718,14 @@ class ZGeoPanel(QDockWidget):
                     label=bucket.label,
                     value=float(bucket.count),
                     value_text="{} · {}".format(
-                        bucket.count, self._human_size(bucket.total_size)
+                        bucket.count, format_size(bucket.total_size)
                     ),
                     color=SIZE_CHART_COLOR,
                     tooltip="{}: {} файлов ({:.0f}%), {}".format(
                         bucket.label,
                         bucket.count,
                         percent,
-                        self._human_size(bucket.total_size),
+                        format_size(bucket.total_size),
                     ),
                 )
             )
@@ -612,7 +740,7 @@ class ZGeoPanel(QDockWidget):
                 type_stat.name,
                 type_stat.count,
                 percent,
-                self._human_size(type_stat.total_size),
+                format_size(type_stat.total_size),
             )
             if len(type_stat.formats) > 1:
                 tooltip += "\n" + ", ".join(type_stat.formats)
@@ -622,7 +750,7 @@ class ZGeoPanel(QDockWidget):
                     value=float(type_stat.count),
                     value_text="{} · {}".format(
                         type_stat.count,
-                        self._human_size(type_stat.total_size),
+                        format_size(type_stat.total_size),
                     ),
                     color=TYPE_CHART_COLORS[index % len(TYPE_CHART_COLORS)],
                     tooltip=tooltip,
@@ -700,6 +828,7 @@ class ZGeoPanel(QDockWidget):
         self.choose_button.setEnabled(not self._busy)
         self.refresh_button.setEnabled(self._folder is not None and not self._busy)
         self.filter_edit.setEnabled(bool(self._files) and not self._busy)
+        self._update_file_actions()
 
     def _set_empty(self, title: str, hint: str) -> None:
         self.empty_title_label.setText(title)
@@ -727,18 +856,3 @@ class ZGeoPanel(QDockWidget):
         font.setBold(bold)
         widget.setFont(font)
 
-    @staticmethod
-    def _human_size(size: int) -> str:
-        units = ("Б", "КБ", "МБ", "ГБ", "ТБ")
-        value = float(size)
-
-        for unit in units:
-            if value < 1024 or unit == units[-1]:
-                if unit == "Б":
-                    return "{} Б".format(int(value))
-                if value >= 100:
-                    return "{:.0f} {}".format(value, unit)
-                return "{:.1f} {}".format(value, unit).replace(".0 ", " ")
-            value /= 1024
-
-        return "{} Б".format(size)
