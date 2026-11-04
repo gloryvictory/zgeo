@@ -1,0 +1,18 @@
+[general]
+name=ZGeo
+qgisMinimumVersion=3.16
+description=Плавающий каталог пространственных файлов: шейпфайлы, GeoPackage, растры и другие геоданные.
+about=ZGeo открывает плавающую панель, в которой можно выбрать папку и рекурсивно собрать все поддерживаемые пространственные файлы. Результат выводится списком с именем, относительным путём, форматом и размером; список можно фильтровать.
+version=1.0.1
+author=ZGeo
+email=
+repository=
+tracker=
+icon=icon.svg
+experimental=False
+deprecated=False
+hasProcessingProvider=no
+supportsQt6=True
+tags=geodata,shapefile,geopackage,catalog,scanner
+category=Plugins
+changelog=1.0.1 — поддержка QGIS 4 / Qt 6; 1.0.0 — первый выпуск.
