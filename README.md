@@ -9,6 +9,7 @@
 - все поддерживаемые пространственные файлы находятся рекурсивно, включая вложенные папки;
 - результат выводится списком: относительный путь, формат и размер файла;
 - список можно фильтровать по имени, формату или пути;
+- на вкладке **«Статистика»** строятся диаграммы по размеру и по типу файлов;
 - кнопка обновления пересканирует текущую папку.
 
 Поддерживается QGIS 3.16 и новее, включая QGIS 4 / Qt 6.
@@ -23,7 +24,7 @@
 powershell -ExecutionPolicy Bypass -File .\scripts\build_zip.ps1
 ```
 
-Готовый файл появится в `dist\zgeo-1.0.1.zip`. В QGIS откройте:
+Готовый файл появится в `dist\zgeo-1.1.0.zip`. В QGIS откройте:
 
 **Плагины → Управление и установка плагинов → Установить из ZIP-архива**
 
@@ -33,9 +34,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build_zip.ps1
 
 Скопируйте папку `zgeo` целиком в каталог плагинов QGIS:
 
-- Windows: `%APPDATA%\QGIS\QGIS3\profiles\default\python\plugins\`
-- Linux: `~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/`
-- macOS: `~/Library/Application Support/QGIS/QGIS3/profiles/default/python/plugins/`
+- Windows QGIS 4: `%APPDATA%\QGIS\QGIS4\profiles\default\python\plugins\`
+- Windows QGIS 3: `%APPDATA%\QGIS\QGIS3\profiles\default\python\plugins\`
+- Linux: `~/.local/share/QGIS/QGIS4/profiles/default/python/plugins/`
+- macOS: `~/Library/Application Support/QGIS/QGIS4/profiles/default/python/plugins/`
 
 Затем включите **ZGeo** в менеджере плагинов QGIS.
 
@@ -46,8 +48,18 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build_zip.ps1
 3. Выберите каталог с геоданными.
 4. Имя папки появится вверху, а найденные файлы — в списке.
 5. При необходимости введите часть имени или формата в строку фильтра.
+6. Откройте вкладку **«Статистика»**, чтобы посмотреть диаграммы.
 
 Последняя выбранная папка запоминается и используется как стартовый каталог в следующий раз.
+
+## Статистика
+
+После каждого сканирования на вкладке **«Статистика»** обновляются две диаграммы:
+
+- **«По размеру»** — количество файлов в диапазонах: до 1 МБ, 1–10 МБ, 10–100 МБ, 100 МБ–1 ГБ, 1 ГБ и более. Справа показан суммарный объём файлов в диапазоне.
+- **«По типу»** — количество файлов по форматам. Справа показан суммарный объём; при большом числе форматов редкие объединяются в «Другие форматы».
+
+Диаграммы строятся по всем найденным файлам и не зависят от фильтра списка.
 
 ## Поддерживаемые форматы
 
@@ -67,18 +79,21 @@ zgeo/
 ├── __init__.py          # точка входа classFactory
 ├── metadata.txt         # метаданные плагина QGIS
 ├── plugin.py            # кнопка на панели инструментов и жизненный цикл панели
-├── panel.py             # плавающая панель и список файлов
+├── panel.py             # плавающая панель, список и вкладка статистики
 ├── scanner.py           # поиск и классификация пространственных файлов
+├── stats.py             # агрегация файлов по размеру и формату
+├── charts.py            # столбчатые диаграммы без внешних зависимостей
 ├── icon.svg             # иконка плагина
 ├── scripts/
 │   └── build_zip.ps1    # сборка ZIP для установки
 └── tests/
-    └── test_scanner.py  # тесты сканера
+    ├── test_scanner.py  # тесты сканера
+    └── test_stats.py    # тесты агрегации статистики
 ```
 
 ## Разработка
 
-Тесты сканера не требуют QGIS и PyQt:
+Тесты сканера и статистики не требуют QGIS и PyQt:
 
 ```powershell
 cd zgeo
@@ -88,7 +103,7 @@ python -m unittest discover -s tests -t .. -v
 Проверка синтаксиса:
 
 ```powershell
-python -m py_compile __init__.py plugin.py panel.py scanner.py
+python -m py_compile __init__.py plugin.py panel.py scanner.py stats.py charts.py
 ```
 
 Сканирование выполняется синхронно. Для очень больших каталогов на сетевых дисках открытие списка может занять заметное время.

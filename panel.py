@@ -14,15 +14,18 @@ from qgis.PyQt.QtWidgets import (
     QFileDialog,
     QFileIconProvider,
     QFrame,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QStackedWidget,
     QStyle,
+    QTabWidget,
     QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
@@ -30,7 +33,9 @@ from qgis.PyQt.QtWidgets import (
     QWidget,
 )
 
+from .charts import BarChart, BarDatum
 from .scanner import OTHER, RASTER, TABLE, VECTOR, GeoFile, scan_folder
+from .stats import build_size_distribution, build_type_distribution
 
 CATEGORY_LABELS = {
     VECTOR: "Векторные данные",
@@ -41,6 +46,17 @@ CATEGORY_LABELS = {
 
 LAST_FOLDER_KEY = "zgeo/last_folder"
 ICON_PATH = Path(__file__).with_name("icon.svg")
+SIZE_CHART_COLOR = "#0F766E"
+TYPE_CHART_COLORS = (
+    "#0F766E",
+    "#D97706",
+    "#2563EB",
+    "#7C3AED",
+    "#DB2777",
+    "#0891B2",
+    "#65A30D",
+    "#64748B",
+)
 
 
 class ZGeoPanel(QDockWidget):
@@ -70,7 +86,7 @@ class ZGeoPanel(QDockWidget):
             | QDockWidget.DockWidgetFeature.DockWidgetClosable
         )
         self.setMinimumWidth(420)
-        self.resize(540, 650)
+        self.resize(560, 700)
 
         self._build_ui()
         self._update_controls()
@@ -78,6 +94,11 @@ class ZGeoPanel(QDockWidget):
             "Геоданные не выбраны",
             "Нажмите «Выбрать папку», чтобы найти шейпфайлы, GeoPackage "
             "и другие пространственные данные.",
+        )
+        self._set_stats_empty(
+            "Статистика пуста",
+            "Выберите папку и выполните сканирование. Здесь появятся "
+            "диаграммы по размеру и типу файлов.",
         )
 
     # ------------------------------------------------------------------
@@ -152,6 +173,26 @@ class ZGeoPanel(QDockWidget):
         separator.setFrameShadow(QFrame.Shadow.Sunken)
         layout.addWidget(separator)
 
+        self.tabs = QTabWidget()
+        self.tabs.setDocumentMode(True)
+        self.tabs.addTab(self._build_files_page(), "Файлы")
+        self.tabs.addTab(self._build_stats_page(), "Статистика")
+        self.tabs.setTabToolTip(
+            0, "Найденные пространственные файлы"
+        )
+        self.tabs.setTabToolTip(
+            1, "Диаграммы по размеру и типу файлов"
+        )
+        layout.addWidget(self.tabs, 1)
+
+        self.setWidget(root)
+
+    def _build_files_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 8, 0, 0)
+        layout.setSpacing(8)
+
         self.summary_label = QLabel("Файлов: 0")
         self._set_font(self.summary_label, 0, bold=True)
         layout.addWidget(self.summary_label)
@@ -167,8 +208,19 @@ class ZGeoPanel(QDockWidget):
         self.stack.addWidget(self._build_tree())
         self.stack.setMinimumHeight(260)
         layout.addWidget(self.stack, 1)
+        return page
 
-        self.setWidget(root)
+    def _build_stats_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 8, 0, 0)
+
+        self.stats_stack = QStackedWidget()
+        self.stats_stack.addWidget(self._build_stats_empty_page())
+        self.stats_content_widget = self._build_stats_content()
+        self.stats_stack.addWidget(self.stats_content_widget)
+        layout.addWidget(self.stats_stack, 1)
+        return page
 
     def _build_brand(self) -> QHBoxLayout:
         brand = QHBoxLayout()
@@ -188,7 +240,9 @@ class ZGeoPanel(QDockWidget):
         titles.addWidget(title)
 
         subtitle = QLabel("Каталог пространственных данных")
-        subtitle.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        subtitle.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
         self._set_font(subtitle, -1)
         self._set_muted(subtitle)
         titles.addWidget(subtitle)
@@ -228,6 +282,108 @@ class ZGeoPanel(QDockWidget):
         page_layout.addWidget(self.empty_hint_label)
         page_layout.addStretch(1)
         return page
+
+    def _build_stats_empty_page(self) -> QWidget:
+        page = QWidget()
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(20, 16, 20, 16)
+        page_layout.setSpacing(8)
+        page_layout.addStretch(1)
+
+        empty_icon = QLabel()
+        empty_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_icon.setPixmap(QIcon(str(ICON_PATH)).pixmap(52, 52))
+        page_layout.addWidget(empty_icon)
+
+        self.stats_empty_title_label = QLabel()
+        self.stats_empty_title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.stats_empty_title_label.setWordWrap(True)
+        self.stats_empty_title_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        self._set_font(self.stats_empty_title_label, 1, bold=True)
+        page_layout.addWidget(self.stats_empty_title_label)
+
+        self.stats_empty_hint_label = QLabel()
+        self.stats_empty_hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.stats_empty_hint_label.setWordWrap(True)
+        self.stats_empty_hint_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        self._set_font(self.stats_empty_hint_label, -1)
+        self._set_muted(self.stats_empty_hint_label)
+        page_layout.addWidget(self.stats_empty_hint_label)
+        page_layout.addStretch(1)
+        return page
+
+    def _build_stats_content(self) -> QScrollArea:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+
+        self.stats_summary_label = QLabel("Файлов: 0 · 0 Б")
+        self._set_font(self.stats_summary_label, 1, bold=True)
+        layout.addWidget(self.stats_summary_label)
+
+        note = QLabel("Диаграммы построены по всем найденным файлам.")
+        note.setWordWrap(True)
+        note.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        self._set_font(note, -1)
+        self._set_muted(note)
+        layout.addWidget(note)
+
+        size_group = QGroupBox("По размеру")
+        size_layout = QVBoxLayout(size_group)
+        size_layout.setContentsMargins(10, 8, 10, 10)
+        size_layout.setSpacing(4)
+
+        size_note = QLabel(
+            "Количество файлов в диапазонах размера; справа — суммарный объём."
+        )
+        size_note.setWordWrap(True)
+        size_note.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        self._set_font(size_note, -1)
+        self._set_muted(size_note)
+        size_layout.addWidget(size_note)
+
+        self.size_chart = BarChart()
+        size_layout.addWidget(self.size_chart)
+        layout.addWidget(size_group)
+
+        type_group = QGroupBox("По типу")
+        type_layout = QVBoxLayout(type_group)
+        type_layout.setContentsMargins(10, 8, 10, 10)
+        type_layout.setSpacing(4)
+
+        type_note = QLabel(
+            "Количество файлов по формату; справа — суммарный объём. "
+            "Показаны основные форматы, остальные объединены "
+            "в «Другие форматы»."
+        )
+        type_note.setWordWrap(True)
+        type_note.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        self._set_font(type_note, -1)
+        self._set_muted(type_note)
+        type_layout.addWidget(type_note)
+
+        self.type_chart = BarChart()
+        type_layout.addWidget(self.type_chart)
+        layout.addWidget(type_group)
+
+        layout.addStretch(1)
+        scroll.setWidget(content)
+        return scroll
 
     def _build_tree(self) -> QTreeWidget:
         self.tree = QTreeWidget()
@@ -319,6 +475,10 @@ class ZGeoPanel(QDockWidget):
                 "Папка недоступна",
                 "Каталог был перемещён или удалён. Выберите другую папку.",
             )
+            self._clear_statistics(
+                "Нет данных",
+                "Каталог был перемещён или удалён. Выберите другую папку.",
+            )
             self._update_controls()
             return
 
@@ -332,6 +492,7 @@ class ZGeoPanel(QDockWidget):
             self.tree.clear()
             self.summary_label.setText("Файлов: 0")
             self._set_empty("Не удалось прочитать папку", str(error))
+            self._clear_statistics("Нет данных", str(error))
         else:
             self._populate(self._files)
         finally:
@@ -358,6 +519,8 @@ class ZGeoPanel(QDockWidget):
                 self._entries.append((item, search_text))
         finally:
             self.tree.setUpdatesEnabled(True)
+
+        self._update_statistics(files)
 
         if not files:
             self.summary_label.setText("Файлов: 0")
@@ -398,6 +561,87 @@ class ZGeoPanel(QDockWidget):
                 QFileInfo(str(geo_file.path))
             )
         return self._icon_cache[cache_key]
+
+    # ------------------------------------------------------------------
+    # Статистика
+    # ------------------------------------------------------------------
+
+    def _update_statistics(self, files: List[GeoFile]) -> None:
+        if not files:
+            self._clear_statistics(
+                "Файлы не найдены",
+                "После сканирования диаграммы появятся здесь.",
+            )
+            return
+
+        total_size = sum(geo_file.size for geo_file in files)
+        total_count = len(files)
+        self.stats_summary_label.setText(
+            "Файлов: {} · {}".format(
+                total_count, self._human_size(total_size)
+            )
+        )
+
+        size_rows: List[BarDatum] = []
+        for bucket in build_size_distribution(files):
+            percent = 100.0 * bucket.count / total_count
+            size_rows.append(
+                BarDatum(
+                    label=bucket.label,
+                    value=float(bucket.count),
+                    value_text="{} · {}".format(
+                        bucket.count, self._human_size(bucket.total_size)
+                    ),
+                    color=SIZE_CHART_COLOR,
+                    tooltip="{}: {} файлов ({:.0f}%), {}".format(
+                        bucket.label,
+                        bucket.count,
+                        percent,
+                        self._human_size(bucket.total_size),
+                    ),
+                )
+            )
+        self.size_chart.set_rows(size_rows)
+
+        type_rows: List[BarDatum] = []
+        for index, type_stat in enumerate(
+            build_type_distribution(files, limit=8)
+        ):
+            percent = 100.0 * type_stat.count / total_count
+            tooltip = "{}: {} файлов ({:.0f}%), {}".format(
+                type_stat.name,
+                type_stat.count,
+                percent,
+                self._human_size(type_stat.total_size),
+            )
+            if len(type_stat.formats) > 1:
+                tooltip += "\n" + ", ".join(type_stat.formats)
+            type_rows.append(
+                BarDatum(
+                    label=type_stat.name,
+                    value=float(type_stat.count),
+                    value_text="{} · {}".format(
+                        type_stat.count,
+                        self._human_size(type_stat.total_size),
+                    ),
+                    color=TYPE_CHART_COLORS[index % len(TYPE_CHART_COLORS)],
+                    tooltip=tooltip,
+                )
+            )
+        self.type_chart.set_rows(type_rows)
+
+        self.stats_stack.setCurrentWidget(self.stats_content_widget)
+
+    def _clear_statistics(self, title: str, hint: str) -> None:
+        self.stats_summary_label.setText("Файлов: 0 · 0 Б")
+        self.size_chart.set_rows([])
+        self.type_chart.set_rows([])
+        self._set_stats_empty(title, hint)
+
+    def _set_stats_empty(self, title: str, hint: str) -> None:
+        self.stats_empty_title_label.setText(title)
+        self.stats_empty_hint_label.setText(hint)
+        self.stats_stack.setCurrentWidget(self.stats_stack.widget(0))
 
     # ------------------------------------------------------------------
     # Фильтрация и состояния интерфейса
@@ -443,6 +687,10 @@ class ZGeoPanel(QDockWidget):
             self._set_empty(
                 "Сканирование папки…",
                 "Ищем пространственные файлы, включая вложенные папки.",
+            )
+            self._set_stats_empty(
+                "Сканирование…",
+                "Диаграммы обновятся после завершения поиска файлов.",
             )
         self._update_controls()
         if busy:
