@@ -73,6 +73,49 @@ class ScanFolderTests(unittest.TestCase):
     def test_empty_folder_returns_empty_list(self) -> None:
         self.assertEqual(scan_folder(self.root), [])
 
+    def test_progress_callback_reports_files_and_found_count(self) -> None:
+        self.write("roads.gpkg")
+        self.write("notes.txt")
+        self.write("dem.tif")
+
+        seen = []
+        files = scan_folder(
+            self.root,
+            progress_callback=lambda path, count: seen.append(
+                (path.name, count)
+            ),
+        )
+
+        self.assertEqual(len(seen), 2)
+        self.assertEqual(
+            {name for name, _count in seen},
+            {"roads.gpkg", "dem.tif"},
+        )
+        self.assertEqual([count for _name, count in seen], [1, 2])
+        self.assertEqual(seen[-1][1], len(files))
+        self.assertEqual(len(files), 2)
+
+    def test_scan_can_be_cancelled_with_partial_result(self) -> None:
+        for index in range(10):
+            self.write("layer_{}.gpkg".format(index))
+
+        seen = []
+        files = scan_folder(
+            self.root,
+            progress_callback=lambda path, count: seen.append(path),
+            should_cancel=lambda: len(seen) >= 3,
+        )
+
+        self.assertEqual(len(seen), 3)
+        self.assertEqual(len(files), 3)
+
+    def test_scan_can_be_cancelled_before_start(self) -> None:
+        self.write("roads.gpkg")
+
+        files = scan_folder(self.root, should_cancel=lambda: True)
+
+        self.assertEqual(files, [])
+
     def test_missing_folder_raises(self) -> None:
         with self.assertRaises(NotADirectoryError):
             scan_folder(self.root / "does-not-exist")

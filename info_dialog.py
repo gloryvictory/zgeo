@@ -17,8 +17,10 @@ from qgis.PyQt.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QPushButton,
     QSizePolicy,
     QStackedWidget,
+    QStyle,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -27,6 +29,7 @@ from qgis.PyQt.QtWidgets import (
 
 from .file_info import FieldInfo, FileInfo, RasterLayerInfo, VectorLayerInfo
 from .formatting import format_size
+from .table_export import export_table_with_dialog
 
 ICON_PATH = Path(__file__).with_name("icon.svg")
 
@@ -183,7 +186,25 @@ class FileInfoDialog(QDialog):
         layout.addWidget(fields_caption)
 
         if layer.fields:
-            layout.addWidget(self._build_fields_table(layer.fields), 1)
+            fields_table = self._build_fields_table(layer.fields)
+            layout.addWidget(fields_table, 1)
+
+            export_row = QHBoxLayout()
+            export_row.addStretch(1)
+            export_button = QPushButton("Экспорт в Excel")
+            export_button.setIcon(
+                self.style().standardIcon(
+                    QStyle.StandardPixmap.SP_DialogSaveButton
+                )
+            )
+            export_button.setMinimumHeight(30)
+            export_button.clicked.connect(
+                lambda _checked=False, table=fields_table: (
+                    self._export_fields_table(table)
+                )
+            )
+            export_row.addWidget(export_button)
+            layout.addLayout(export_row)
         else:
             empty = QLabel("Атрибутивные поля отсутствуют.")
             empty.setWordWrap(True)
@@ -191,6 +212,14 @@ class FileInfoDialog(QDialog):
             layout.addWidget(empty, 1)
 
         return page
+
+    def _export_fields_table(self, table: QTableWidget) -> None:
+        export_table_with_dialog(
+            self,
+            table,
+            "{}_поля.xlsx".format(self._info.path.stem),
+            "Атрибутивные поля",
+        )
 
     def _build_raster_page(self, layer: RasterLayerInfo) -> QWidget:
         page = QWidget()
@@ -271,6 +300,10 @@ class FileInfoDialog(QDialog):
                         Qt.AlignmentFlag.AlignRight
                         | Qt.AlignmentFlag.AlignVCenter
                     )
+                    if value != "—":
+                        item.setData(
+                            Qt.ItemDataRole.UserRole, int(value)
+                        )
                 table.setItem(row, column, item)
 
         return table

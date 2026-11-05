@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 from qgis.core import (
     Qgis,
@@ -15,6 +15,10 @@ from qgis.core import (
 )
 
 from .scanner import OTHER, RASTER, TABLE, VECTOR, GeoFile
+
+_LAYER_TYPE = getattr(Qgis, "LayerType", None)
+_VECTOR_LAYER_TYPE = getattr(_LAYER_TYPE, "Vector", 0)
+_RASTER_LAYER_TYPE = getattr(_LAYER_TYPE, "Raster", 1)
 
 
 @dataclass(frozen=True)
@@ -81,11 +85,6 @@ def inspect_geofile(geo_file: GeoFile) -> FileInfo:
         except Exception as error:
             notes.append("Растровые данные: {}".format(error))
 
-    if not vector_layers and not raster_layers:
-        notes.append(
-            "QGIS не смог определить пространственные слои в этом файле."
-        )
-
     return FileInfo(
         path=path,
         format_name=geo_file.format.name,
@@ -102,7 +101,7 @@ def _inspect_vector_layers(geo_file: GeoFile) -> List[VectorLayerInfo]:
     seen_uris = set()
 
     for details in _query_sublayers("ogr", path):
-        if details.type() != Qgis.LayerType.Vector:
+        if details.type() != _VECTOR_LAYER_TYPE:
             continue
         provider = details.providerKey() or "ogr"
         layer = QgsVectorLayer(details.uri(), details.name(), provider)
@@ -127,7 +126,7 @@ def _inspect_raster_layers(geo_file: GeoFile) -> List[RasterLayerInfo]:
     seen_uris = set()
 
     for details in _query_sublayers("gdal", path):
-        if details.type() != Qgis.LayerType.Raster:
+        if details.type() != _RASTER_LAYER_TYPE:
             continue
         provider = details.providerKey() or "gdal"
         layer = QgsRasterLayer(details.uri(), details.name(), provider)
@@ -147,11 +146,17 @@ def _inspect_raster_layers(geo_file: GeoFile) -> List[RasterLayerInfo]:
 
 
 def _query_sublayers(provider: str, path: Path):
-    registry = QgsProviderRegistry.instance()
-    metadata = registry.providerMetadata(provider)
-    if metadata is None:
+    try:
+        registry = QgsProviderRegistry.instance()
+        metadata = registry.providerMetadata(provider)
+        if metadata is None:
+            return []
+        query = getattr(metadata, "querySublayers", None)
+        if query is None:
+            return []
+        return list(query(str(path)))
+    except Exception:
         return []
-    return list(metadata.querySublayers(str(path)))
 
 
 def _should_inspect_raster(
@@ -224,8 +229,10 @@ def _crs_text(layer) -> str:
 
 
 def _geometry_text(layer: QgsVectorLayer) -> str:
+    if not layer.isSpatial():
+        return "Без геометрии"
     try:
-        return QgsWkbTypes.displayString(layer.wkbType()) or "Без геометрии"
+        return QgsWkbTypes.displayString(layer.wkbType()) or "Не определена"
     except (TypeError, AttributeError):
         return "Не определена"
 

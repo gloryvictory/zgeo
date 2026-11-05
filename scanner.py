@@ -8,7 +8,10 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Set, Tuple
+
+ProgressCallback = Callable[[Path, int], None]
+CancelCallback = Callable[[], bool]
 
 # Категории используются интерфейсом для подсказок и фильтрации.
 VECTOR = "vector"
@@ -23,6 +26,15 @@ class FormatInfo:
 
     name: str
     category: str
+
+
+@dataclass(frozen=True)
+class FormatGroup:
+    """Формат с одним или несколькими расширениями."""
+
+    name: str
+    category: str
+    extensions: Tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -108,6 +120,30 @@ FORMATS: Dict[str, FormatInfo] = {
 }
 
 SUPPORTED_EXTENSIONS = tuple(sorted(FORMATS))
+DEFAULT_DISABLED_FORMATS = frozenset({"Excel"})
+
+
+def get_format_groups() -> List[FormatGroup]:
+    """Вернуть форматы, сгруппированные по отображаемому имени."""
+
+    groups: Dict[str, FormatGroup] = {}
+    for extension, format_info in FORMATS.items():
+        group = groups.get(format_info.name)
+        if group is None:
+            groups[format_info.name] = FormatGroup(
+                format_info.name,
+                format_info.category,
+                (extension,),
+            )
+            continue
+
+        groups[format_info.name] = FormatGroup(
+            group.name,
+            group.category,
+            group.extensions + (extension,),
+        )
+
+    return list(groups.values())
 
 
 def get_format(path: Path) -> Optional[FormatInfo]:
@@ -132,12 +168,24 @@ def _make_geofile(path: Path, root: Path, format_info: FormatInfo) -> GeoFile:
     )
 
 
-def scan_folder(folder: Path, recursive: bool = True) -> List[GeoFile]:
+def scan_folder(
+    folder: Path,
+    recursive: bool = True,
+    progress_callback: Optional[ProgressCallback] = None,
+    should_cancel: Optional[CancelCallback] = None,
+    enabled_formats: Optional[Set[str]] = None,
+) -> List[GeoFile]:
     """Найти поддерживаемые пространственные файлы в каталоге.
 
     Args:
         folder: Каталог для сканирования.
         recursive: Искать ли файлы во вложенных каталогах.
+        progress_callback: Получает путь текущего найденного файла
+            поддерживаемого формата и число уже найденных файлов.
+        should_cancel: Если возвращает True, поиск останавливается.
+            Уже найденные файлы возвращаются как частичный результат.
+        enabled_formats: Имена форматов, которые нужно искать.
+            Если None, ищутся все поддерживаемые форматы.
 
     Returns:
         Отсортированный по относительному пути список файлов.
@@ -152,14 +200,37 @@ def scan_folder(folder: Path, recursive: bool = True) -> List[GeoFile]:
 
     found: List[GeoFile] = []
 
+    def cancelled() -> bool:
+        return should_cancel is not None and should_cancel()
+
+    def format_enabled(format_info: FormatInfo) -> bool:
+        return (
+            enabled_formats is None
+            or format_info.name in enabled_formats
+        )
+
+    def report(path: Path) -> None:
+        if progress_callback is not None:
+            progress_callback(path, len(found))
+
     if recursive:
+        stopped = False
         for dir_path, _dir_names, file_names in os.walk(root):
+            if cancelled():
+                break
             directory = Path(dir_path)
             for file_name in file_names:
-                format_info = FORMATS.get(Path(file_name).suffix.lower())
+                if cancelled():
+                    stopped = True
+                    break
+                path = directory / file_name
+                format_info = FORMATS.get(path.suffix.lower())
                 if format_info is None:
                     continue
-                found.append(_make_geofile(directory / file_name, root, format_info))
+                found.append(_make_geofile(path, root, format_info))
+                report(path)
+            if stopped:
+                break
     else:
         try:
             entries = list(root.iterdir())
@@ -167,12 +238,20 @@ def scan_folder(folder: Path, recursive: bool = True) -> List[GeoFile]:
             entries = []
 
         for path in entries:
+            if cancelled():
+                break
             if not path.is_file():
                 continue
             format_info = FORMATS.get(path.suffix.lower())
             if format_info is None:
                 continue
             found.append(_make_geofile(path, root, format_info))
+            report(path)
 
-    found.sort(key=lambda item: (item.relative_posix.casefold(), item.path.name.casefold()))
+    found.sort(
+        key=lambda item: (
+            item.relative_posix.casefold(),
+            item.path.name.casefold(),
+        )
+    )
     return found

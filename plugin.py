@@ -9,14 +9,16 @@ from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
 
 try:
-    from qgis.PyQt.QtWidgets import QAction
+    from qgis.PyQt.QtWidgets import QAction, QToolBar
 except ImportError:  # Qt 6 / PyQt 6
     from qgis.PyQt.QtGui import QAction
+    from qgis.PyQt.QtWidgets import QToolBar
 
 from .panel import ZGeoPanel
 
 PLUGIN_DIR = Path(__file__).resolve().parent
 MENU_NAME = "&ZGeo"
+TOOLBAR_NAME = "ZGeo"
 
 
 class ZGeoPlugin:
@@ -25,19 +27,30 @@ class ZGeoPlugin:
     def __init__(self, iface) -> None:
         self.iface = iface
         self.action: Optional[QAction] = None
+        self.toolbar: Optional[QToolBar] = None
         self.panel: Optional[ZGeoPanel] = None
 
     def initGui(self) -> None:
         icon = QIcon(str(PLUGIN_DIR / "icon.svg"))
 
-        self.action = QAction(icon, "ZGeo", self.iface.mainWindow())
+        self.action = QAction(
+            icon, "ZGeo-Каталог", self.iface.mainWindow()
+        )
         self.action.setObjectName("ZGeoAction")
         self.action.setCheckable(True)
-        self.action.setToolTip("ZGeo — каталог пространственных данных")
-        self.action.setStatusTip("Открыть плавающую панель ZGeo")
+        self.action.setToolTip(
+            "ZGeo-Каталог — каталог пространственных данных"
+        )
+        self.action.setStatusTip(
+            "Открыть плавающую панель ZGeo-Каталог"
+        )
         self.action.triggered.connect(self._toggle_panel)
 
-        self.iface.addToolBarIcon(self.action)
+        self.toolbar = QToolBar(TOOLBAR_NAME, self.iface.mainWindow())
+        self.toolbar.setObjectName("ZGeoToolbar")
+        self.toolbar.addAction(self.action)
+        self.iface.mainWindow().addToolBar(self.toolbar)
+
         self.iface.addPluginToMenu(MENU_NAME, self.action)
 
     def unload(self) -> None:
@@ -50,13 +63,18 @@ class ZGeoPlugin:
                 pass
 
             self.iface.mainWindow().removeDockWidget(self.panel)
+            self.panel.shutdown()
             self.panel.close()
             self.panel.deleteLater()
             self.panel = None
 
+        if self.toolbar is not None:
+            self.iface.mainWindow().removeToolBar(self.toolbar)
+            self.toolbar.deleteLater()
+            self.toolbar = None
+
         if self.action is not None:
             self.iface.removePluginMenu(MENU_NAME, self.action)
-            self.iface.removeToolBarIcon(self.action)
             self.action.deleteLater()
             self.action = None
 
