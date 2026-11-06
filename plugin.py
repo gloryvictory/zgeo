@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QTimer, Qt
 from qgis.PyQt.QtGui import QIcon
 
 try:
@@ -33,6 +33,8 @@ class ZGeoPlugin:
     def initGui(self) -> None:
         icon = QIcon(str(PLUGIN_DIR / "icon.svg"))
 
+        self._remove_stale_toolbar()
+
         self.action = QAction(
             icon, "ZGeo-Каталог", self.iface.mainWindow()
         )
@@ -49,9 +51,18 @@ class ZGeoPlugin:
         self.toolbar = QToolBar(TOOLBAR_NAME, self.iface.mainWindow())
         self.toolbar.setObjectName("ZGeoToolbar")
         self.toolbar.addAction(self.action)
-        self.iface.mainWindow().addToolBar(self.toolbar)
+        self._add_toolbar()
 
         self.iface.addPluginToMenu(MENU_NAME, self.action)
+        add_toolbar_icon = getattr(self.iface, "addToolBarIcon", None)
+        if callable(add_toolbar_icon):
+            add_toolbar_icon(self.action)
+
+        # QGIS восстанавливает состояние главного окна после загрузки
+        # плагинов и может скрыть только что созданную панель.
+        QTimer.singleShot(0, self._ensure_toolbar_visible)
+        QTimer.singleShot(750, self._ensure_toolbar_visible)
+        QTimer.singleShot(2500, self._ensure_toolbar_visible)
 
     def unload(self) -> None:
         if self.panel is not None:
@@ -62,21 +73,81 @@ class ZGeoPlugin:
             except (TypeError, RuntimeError):
                 pass
 
-            self.iface.mainWindow().removeDockWidget(self.panel)
-            self.panel.shutdown()
-            self.panel.close()
-            self.panel.deleteLater()
+            try:
+                self.iface.mainWindow().removeDockWidget(self.panel)
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                self.panel.shutdown()
+                self.panel.close()
+                self.panel.deleteLater()
+            except (TypeError, RuntimeError):
+                pass
             self.panel = None
 
         if self.toolbar is not None:
-            self.iface.mainWindow().removeToolBar(self.toolbar)
+            try:
+                self._remove_toolbar()
+            except (TypeError, RuntimeError):
+                pass
             self.toolbar.deleteLater()
             self.toolbar = None
 
         if self.action is not None:
-            self.iface.removePluginMenu(MENU_NAME, self.action)
-            self.action.deleteLater()
+            remove_toolbar_icon = getattr(
+                self.iface, "removeToolBarIcon", None
+            )
+            if callable(remove_toolbar_icon):
+                try:
+                    remove_toolbar_icon(self.action)
+                except (TypeError, RuntimeError):
+                    pass
+            try:
+                self.iface.removePluginMenu(MENU_NAME, self.action)
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                self.action.deleteLater()
+            except (TypeError, RuntimeError):
+                pass
             self.action = None
+
+    def _add_toolbar(self) -> None:
+        add_toolbar = getattr(self.iface, "addToolBar", None)
+        if callable(add_toolbar):
+            add_toolbar(self.toolbar)
+        else:
+            self.iface.mainWindow().addToolBar(self.toolbar)
+        self.toolbar.show()
+
+    def _remove_toolbar(self) -> None:
+        if self.toolbar is None:
+            return
+        remove_toolbar = getattr(self.iface, "removeToolBar", None)
+        if callable(remove_toolbar):
+            remove_toolbar(self.toolbar)
+        else:
+            self.iface.mainWindow().removeToolBar(self.toolbar)
+
+    def _remove_stale_toolbar(self) -> None:
+        """Убрать панель, оставшуюся после перезагрузки плагина."""
+
+        main_window = self.iface.mainWindow()
+        stale = main_window.findChild(QToolBar, "ZGeoToolbar")
+        if stale is not None and stale is not self.toolbar:
+            main_window.removeToolBar(stale)
+            stale.deleteLater()
+
+    def _ensure_toolbar_visible(self) -> None:
+        if self.toolbar is None:
+            return
+        try:
+            if self.toolbar.parentWidget() is None:
+                self._add_toolbar()
+            self.toolbar.show()
+        except RuntimeError:
+            # Виджет уже удалён при выгрузке плагина.
+            pass
 
     def _toggle_panel(self, checked: bool) -> None:
         if checked:

@@ -4,7 +4,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from zgeo.scanner import RASTER, TABLE, VECTOR, get_format, scan_folder
+from zgeo.scanner import (
+    DEFAULT_DISABLED_FORMATS,
+    FORMATS,
+    RASTER,
+    TABLE,
+    VECTOR,
+    get_format,
+    get_format_groups,
+    scan_folder,
+)
 
 
 class ScanFolderTests(unittest.TestCase):
@@ -116,6 +125,47 @@ class ScanFolderTests(unittest.TestCase):
 
         self.assertEqual(files, [])
 
+    def test_enabled_formats_filter_scan(self) -> None:
+        self.write("keep.gpkg")
+        self.write("skip.xlsx")
+        self.write("keep.tif")
+        self.write("skip.csv")
+
+        files = scan_folder(
+            self.root,
+            enabled_formats={"GeoPackage", "GeoTIFF / TIFF"},
+        )
+
+        self.assertEqual(
+            [item.relative_posix for item in files],
+            ["keep.gpkg", "keep.tif"],
+        )
+
+    def test_empty_enabled_formats_finds_nothing(self) -> None:
+        self.write("roads.gpkg")
+
+        self.assertEqual(
+            scan_folder(self.root, enabled_formats=set()), []
+        )
+
+    def test_excel_is_disabled_by_default(self) -> None:
+        self.write("roads.gpkg")
+        self.write("table.xlsx")
+
+        enabled = {
+            info.name
+            for info in FORMATS.values()
+            if info.name not in DEFAULT_DISABLED_FORMATS
+        }
+        files = scan_folder(
+            self.root, enabled_formats=enabled
+        )
+
+        self.assertEqual(
+            [item.relative_posix for item in files],
+            ["roads.gpkg"],
+        )
+
     def test_missing_folder_raises(self) -> None:
         with self.assertRaises(NotADirectoryError):
             scan_folder(self.root / "does-not-exist")
@@ -123,6 +173,20 @@ class ScanFolderTests(unittest.TestCase):
     def test_get_format(self) -> None:
         self.assertIsNotNone(get_format(Path("layer.TIF")))
         self.assertIsNone(get_format(Path("notes.docx")))
+
+    def test_format_groups_and_defaults(self) -> None:
+        groups = {
+            group.name: group for group in get_format_groups()
+        }
+
+        self.assertEqual(
+            set(groups),
+            {info.name for info in FORMATS.values()},
+        )
+        self.assertEqual(
+            groups["Excel"].extensions, (".xls", ".xlsx")
+        )
+        self.assertIn("Excel", DEFAULT_DISABLED_FORMATS)
 
 
 if __name__ == "__main__":

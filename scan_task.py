@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set
 
 from qgis.PyQt.QtCore import QObject, QRunnable, pyqtSignal
 
@@ -24,9 +24,14 @@ class ScanTask(QRunnable):
 
     PROGRESS_INTERVAL = 0.05
 
-    def __init__(self, folder: Path) -> None:
+    def __init__(
+        self,
+        folder: Path,
+        enabled_formats: Optional[Set[str]] = None,
+    ) -> None:
         super().__init__()
         self.folder = Path(folder)
+        self.enabled_formats = enabled_formats
         self.signals = ScanSignals()
         self._cancel_event = threading.Event()
         self._last_progress_at = 0.0
@@ -45,6 +50,7 @@ class ScanTask(QRunnable):
                 self.folder,
                 progress_callback=self._report_progress,
                 should_cancel=self._should_cancel,
+                enabled_formats=self.enabled_formats,
             )
         except Exception as caught:
             error = caught

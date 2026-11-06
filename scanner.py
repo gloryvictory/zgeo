@@ -225,7 +225,7 @@ def scan_folder(
                     break
                 path = directory / file_name
                 format_info = FORMATS.get(path.suffix.lower())
-                if format_info is None:
+                if format_info is None or not format_enabled(format_info):
                     continue
                 found.append(_make_geofile(path, root, format_info))
                 report(path)
@@ -243,7 +243,7 @@ def scan_folder(
             if not path.is_file():
                 continue
             format_info = FORMATS.get(path.suffix.lower())
-            if format_info is None:
+            if format_info is None or not format_enabled(format_info):
                 continue
             found.append(_make_geofile(path, root, format_info))
             report(path)

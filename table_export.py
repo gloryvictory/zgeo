@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable, Optional, Sequence
 
 from qgis.PyQt.QtCore import QStandardPaths, Qt
 from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox, QTableWidget
@@ -16,11 +16,11 @@ def export_table_with_dialog(
     table: QTableWidget,
     default_filename: str,
     sheet_name: str,
-) -> None:
+) -> Optional[Path]:
     """Предложить сохранить таблицу и записать её в .xlsx."""
 
     if table.rowCount() == 0:
-        return
+        return None
 
     headers = [
         table.horizontalHeaderItem(column).text()
@@ -28,7 +28,7 @@ def export_table_with_dialog(
         else ""
         for column in range(table.columnCount())
     ]
-    export_rows_with_dialog(
+    return export_rows_with_dialog(
         parent,
         headers,
         _table_rows(table),
@@ -43,12 +43,12 @@ def export_rows_with_dialog(
     rows: Iterable[Sequence[CellValue]],
     default_filename: str,
     sheet_name: str,
-) -> None:
+) -> Optional[Path]:
     """Предложить сохранить произвольный набор строк в .xlsx."""
 
     rows = list(rows)
     if not rows:
-        return
+        return None
 
     documents = QStandardPaths.writableLocation(
         QStandardPaths.StandardLocation.DocumentsLocation
@@ -61,7 +61,7 @@ def export_rows_with_dialog(
         "Excel (*.xlsx)",
     )
     if not selected:
-        return
+        return None
 
     path = Path(selected)
     if path.suffix.lower() != ".xlsx":
@@ -75,13 +75,14 @@ def export_rows_with_dialog(
             "ZGeo",
             "Не удалось экспортировать таблицу:\n{}".format(error),
         )
-        return
+        return None
 
     QMessageBox.information(
         parent,
         "ZGeo",
         "Таблица экспортирована:\n{}".format(path),
     )
+    return path
 
 
 def _table_rows(table: QTableWidget) -> list:

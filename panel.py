@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from qgis.PyQt.QtCore import QFileInfo, QSettings, QSize, Qt, QThreadPool
 from qgis.PyQt.QtGui import QFont, QIcon, QPalette
 from qgis.PyQt.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QCheckBox,
     QDockWidget,
     QFileDialog,
     QFileIconProvider,
@@ -25,6 +26,7 @@ from qgis.PyQt.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QStackedWidget,
+    QStatusBar,
     QStyle,
     QTableWidget,
     QTableWidgetItem,
@@ -41,13 +43,24 @@ from .explorer import reveal_files
 from .file_info import inspect_geofile
 from .formatting import format_size
 from .info_dialog import FileInfoDialog
+from .refine_task import RefineTask
 from .scan_task import ScanTask
-from .scanner import OTHER, RASTER, TABLE, VECTOR, GeoFile
+from .scanner import (
+    DEFAULT_DISABLED_FORMATS,
+    OTHER,
+    RASTER,
+    TABLE,
+    VECTOR,
+    FormatGroup,
+    GeoFile,
+    get_format_groups,
+)
 from .stats import build_size_distribution, build_type_distribution
 from .table_export import (
     export_rows_with_dialog,
     export_table_with_dialog,
 )
+from .version import get_plugin_version
 
 CATEGORY_LABELS = {
     VECTOR: "Векторные данные",
@@ -57,6 +70,7 @@ CATEGORY_LABELS = {
 }
 
 LAST_FOLDER_KEY = "zgeo/last_folder"
+DISABLED_FORMATS_KEY = "zgeo/disabled_formats"
 ICON_PATH = Path(__file__).with_name("icon.svg")
 SIZE_CHART_COLOR = "#0F766E"
 TYPE_CHART_COLORS = (
@@ -82,8 +96,12 @@ class ZGeoPanel(QDockWidget):
         self._file_by_path: Dict[str, GeoFile] = {}
         self._entries: List[Tuple[QTreeWidgetItem, str]] = []
         self._scan_task: Optional[ScanTask] = None
+        self._refine_task: Optional[RefineTask] = None
         self._busy = False
+        self._refining = False
         self._settings = QSettings()
+        self._format_checkboxes: Dict[str, QCheckBox] = {}
+        self._disabled_formats = self._load_disabled_formats()
         self._icon_provider = QFileIconProvider()
         self._icon_cache: Dict[str, QIcon] = {}
 
@@ -191,15 +209,43 @@ class ZGeoPanel(QDockWidget):
         self.tabs.setDocumentMode(True)
         self.tabs.addTab(self._build_files_page(), "Файлы")
         self.tabs.addTab(self._build_stats_page(), "Статистика")
+        self.tabs.addTab(self._build_settings_page(), "Настройки")
         self.tabs.setTabToolTip(
             0, "Найденные пространственные файлы"
         )
         self.tabs.setTabToolTip(
             1, "Диаграммы по размеру и типу файлов"
         )
+        self.tabs.setTabToolTip(
+            2, "Форматы файлов, которые нужно искать"
+        )
         layout.addWidget(self.tabs, 1)
+        layout.addWidget(self._build_status_bar())
 
         self.setWidget(root)
+
+    def _build_status_bar(self) -> QStatusBar:
+        bar = QStatusBar()
+        self.status_bar = bar
+        bar.setObjectName("zgeoStatusBar")
+        bar.setSizeGripEnabled(False)
+        bar.setContentsMargins(0, 0, 0, 0)
+
+        self.status_message_label = QLabel("Готово")
+        self.status_message_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        self._set_font(self.status_message_label, -1)
+        bar.addWidget(self.status_message_label, 1)
+
+        self.selection_label = QLabel("Выбрано: 0 из 0")
+        self.selection_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.selection_label.setMinimumWidth(150)
+        self._set_font(self.selection_label, -1)
+        bar.addPermanentWidget(self.selection_label)
+        return bar
 
     def _build_files_page(self) -> QWidget:
         page = QWidget()
@@ -214,7 +260,7 @@ class ZGeoPanel(QDockWidget):
         self.filter_edit = QLineEdit()
         self.filter_edit.setPlaceholderText("Фильтр по имени, формату или пути")
         self.filter_edit.setClearButtonEnabled(True)
-        self.filter_edit.textChanged.connect(self._apply_filter)
+        self.filter_edit.textChanged.connect(self._on_filter_changed)
         layout.addWidget(self.filter_edit)
 
         self.stack = QStackedWidget()
@@ -286,6 +332,15 @@ class ZGeoPanel(QDockWidget):
         buttons.addWidget(self.export_list_button)
 
         buttons.addStretch(1)
+
+        self.refine_button = QPushButton("Уточнить")
+        self.refine_button.setToolTip(
+            "Пересчитать полный объем с учетом сопутствующих файлов"
+        )
+        self.refine_button.setMinimumHeight(30)
+        self.refine_button.clicked.connect(self._refine_sizes)
+        buttons.addWidget(self.refine_button)
+
         layout.addLayout(buttons)
         return container
 
@@ -300,6 +355,115 @@ class ZGeoPanel(QDockWidget):
         self.stats_stack.addWidget(self.stats_content_widget)
         layout.addWidget(self.stats_stack, 1)
         return page
+
+    def _build_settings_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 8, 0, 0)
+        layout.setSpacing(8)
+
+        hint = QLabel(
+            "Отметьте форматы, которые должны попадать в каталог. "
+            "Изменения применяются при следующем сканировании."
+        )
+        hint.setWordWrap(True)
+        self._set_font(hint, -1)
+        self._set_muted(hint)
+        layout.addWidget(hint)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(10)
+
+        groups = get_format_groups()
+        for category, category_label in CATEGORY_LABELS.items():
+            category_groups = [
+                group for group in groups
+                if group.category == category
+            ]
+            if not category_groups:
+                continue
+
+            group_box = QGroupBox(category_label)
+            group_layout = QVBoxLayout(group_box)
+            group_layout.setSpacing(5)
+
+            for group in category_groups:
+                checkbox = QCheckBox(
+                    self._format_checkbox_text(group)
+                )
+                checkbox.setChecked(
+                    group.name not in self._disabled_formats
+                )
+                checkbox.setToolTip(
+                    "Расширения: {}".format(
+                        ", ".join(group.extensions)
+                    )
+                )
+                checkbox.toggled.connect(
+                    lambda checked, name=group.name: (
+                        self._on_format_toggled(name, checked)
+                    )
+                )
+                self._format_checkboxes[group.name] = checkbox
+                group_layout.addWidget(checkbox)
+
+            content_layout.addWidget(group_box)
+
+        content_layout.addStretch(1)
+        scroll.setWidget(content)
+        layout.addWidget(scroll, 1)
+        return page
+
+    @staticmethod
+    def _format_checkbox_text(group: FormatGroup) -> str:
+        return "{} ({})".format(
+            group.name, ", ".join(group.extensions)
+        )
+
+    def _load_disabled_formats(self) -> Set[str]:
+        value = self._settings.value(DISABLED_FORMATS_KEY, None)
+        if value is None:
+            return set(DEFAULT_DISABLED_FORMATS)
+        if isinstance(value, (list, tuple)):
+            return {
+                str(item) for item in value if str(item).strip()
+            }
+        return {
+            line.strip()
+            for line in str(value).splitlines()
+            if line.strip()
+        }
+
+    def _save_disabled_formats(self) -> None:
+        self._settings.setValue(
+            DISABLED_FORMATS_KEY,
+            "\n".join(sorted(self._disabled_formats)),
+        )
+        self._settings.sync()
+
+    def _on_format_toggled(self, name: str, checked: bool) -> None:
+        if checked:
+            self._disabled_formats.discard(name)
+        else:
+            self._disabled_formats.add(name)
+        self._save_disabled_formats()
+        self._set_status(
+            "Настройки сохранены. Изменения применятся при следующем "
+            "сканировании."
+        )
+
+    def _enabled_format_names(self) -> Set[str]:
+        return {
+            group.name
+            for group in get_format_groups()
+            if group.name not in self._disabled_formats
+        }
 
     def _build_brand(self) -> QHBoxLayout:
         brand = QHBoxLayout()
@@ -327,6 +491,22 @@ class ZGeoPanel(QDockWidget):
         titles.addWidget(subtitle)
 
         brand.addLayout(titles, 1)
+
+        version = get_plugin_version()
+        self.version_label = QLabel("Версия {}".format(version))
+        self.version_label.setToolTip(
+            "Версия плагина ZGeo: {}".format(version)
+        )
+        self.version_label.setAlignment(
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight
+        )
+        self._set_font(self.version_label, -1)
+        self._set_muted(self.version_label)
+        brand.addWidget(
+            self.version_label,
+            0,
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight,
+        )
         return brand
 
     def _build_empty_page(self) -> QWidget:
@@ -655,6 +835,7 @@ class ZGeoPanel(QDockWidget):
         else:
             start_folder = str(Path.home())
 
+        self._set_status("Выбор папки…")
         selected = QFileDialog.getExistingDirectory(
             self,
             "Выбрать папку с геоданными",
@@ -663,6 +844,8 @@ class ZGeoPanel(QDockWidget):
         )
         if selected:
             self.set_folder(Path(selected))
+        else:
+            self._set_status("Выбор папки отменён")
 
     def set_folder(self, folder: Path) -> None:
         folder = Path(folder)
@@ -690,7 +873,7 @@ class ZGeoPanel(QDockWidget):
         self.refresh()
 
     def refresh(self) -> None:
-        if self._folder is None or self._busy:
+        if self._folder is None or self._busy or self._refining:
             return
 
         if not self._folder.is_dir():
@@ -710,10 +893,14 @@ class ZGeoPanel(QDockWidget):
                 "Каталог был перемещён или удалён. Выберите другую папку.",
             )
             self._update_controls()
+            self._set_status("Папка недоступна")
             return
 
         self._set_busy(True)
-        task = ScanTask(self._folder)
+        task = ScanTask(
+            self._folder,
+            enabled_formats=self._enabled_format_names(),
+        )
         self._scan_task = task
         task.signals.progress.connect(self._on_scan_progress)
         task.signals.finished.connect(self._on_scan_finished)
@@ -726,6 +913,9 @@ class ZGeoPanel(QDockWidget):
         self.scan_file_label.setText(path.name or current_path)
         self.scan_file_label.setToolTip(current_path)
         self.scan_found_label.setText(str(found_count))
+        self._set_status(
+            "Сканирование… найдено: {}".format(found_count)
+        )
 
     def _on_scan_finished(
         self, files: object, error: object, cancelled: bool
@@ -750,6 +940,9 @@ class ZGeoPanel(QDockWidget):
             self._set_empty("Не удалось прочитать папку", str(error))
             self._clear_statistics("Нет данных", str(error))
             self._set_busy(False)
+            self._set_status(
+                "Не удалось прочитать папку: {}".format(error)
+            )
             return
 
         result = list(files) if files is not None else []
@@ -764,6 +957,13 @@ class ZGeoPanel(QDockWidget):
 
         if cancelled:
             self._show_cancelled_scan(result)
+            self._set_status(
+                "Сканирование прервано. Найдено: {}".format(len(result))
+            )
+        else:
+            self._set_status(
+                "Сканирование завершено. Найдено: {}".format(len(result))
+            )
 
     def _show_cancelled_scan(self, files: List[GeoFile]) -> None:
         if files:
@@ -797,21 +997,34 @@ class ZGeoPanel(QDockWidget):
         task.cancel()
         self.scan_cancel_button.setEnabled(False)
         self.scan_cancel_button.setText("Прерывание…")
+        self._set_status("Прерывание сканирования…")
 
     def shutdown(self) -> None:
-        """Остановить фоновое сканирование перед удалением панели."""
+        """Остановить фоновые задачи перед удалением панели."""
 
         task = self._scan_task
         self._scan_task = None
-        if task is None:
-            return
+        if task is not None:
+            try:
+                task.signals.progress.disconnect(self._on_scan_progress)
+                task.signals.finished.disconnect(self._on_scan_finished)
+            except (TypeError, RuntimeError):
+                pass
+            task.cancel()
 
-        try:
-            task.signals.progress.disconnect(self._on_scan_progress)
-            task.signals.finished.disconnect(self._on_scan_finished)
-        except (TypeError, RuntimeError):
-            pass
-        task.cancel()
+        refine_task = self._refine_task
+        self._refine_task = None
+        if refine_task is not None:
+            try:
+                refine_task.signals.progress.disconnect(
+                    self._on_refine_progress
+                )
+                refine_task.signals.finished.disconnect(
+                    self._on_refine_finished
+                )
+            except (TypeError, RuntimeError):
+                pass
+            refine_task.cancel()
 
     def closeEvent(self, event) -> None:
         self._cancel_scan()
@@ -926,23 +1139,35 @@ class ZGeoPanel(QDockWidget):
             label, format_size(total_size)
         )
 
+    def _set_status(self, message: str) -> None:
+        self.status_message_label.setText(message)
+        self.status_message_label.setToolTip(message)
+
+    def _update_selection_status(self) -> None:
+        total = 0 if self._busy else len(self._entries)
+        selected = 0 if self._busy else len(self._selected_files())
+        self.selection_label.setText(
+            "Выбрано: {} из {}".format(selected, total)
+        )
+
     def _update_file_actions(self) -> None:
         selected = self._selected_files()
-        self.info_button.setEnabled(
-            len(selected) == 1 and not self._busy
-        )
-        self.explorer_button.setEnabled(
-            bool(selected) and not self._busy
-        )
+        enabled = not self._busy and not self._refining
+        self.info_button.setEnabled(len(selected) == 1 and enabled)
+        self.explorer_button.setEnabled(bool(selected) and enabled)
         self.export_list_button.setEnabled(
-            self._has_visible_files() and not self._busy
+            self._has_visible_files() and enabled
         )
+        self.refine_button.setEnabled(bool(self._files) and enabled)
+        self._update_selection_status()
 
     def _show_file_info(self) -> None:
         selected = self._selected_files()
         if len(selected) != 1:
             return
 
+        file_name = selected[0].path.name
+        self._set_status("Получение информации: {}".format(file_name))
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         QApplication.processEvents()
         error_message = None
@@ -954,6 +1179,9 @@ class ZGeoPanel(QDockWidget):
             QApplication.restoreOverrideCursor()
 
         if error_message is not None:
+            self._set_status(
+                "Не удалось получить информацию: {}".format(file_name)
+            )
             QMessageBox.critical(
                 self,
                 "ZGeo",
@@ -963,6 +1191,7 @@ class ZGeoPanel(QDockWidget):
             )
             return
 
+        self._set_status("Информация: {}".format(file_name))
         FileInfoDialog(file_info, self).exec()
 
     def _open_in_explorer(self) -> None:
@@ -970,10 +1199,14 @@ class ZGeoPanel(QDockWidget):
         if not selected:
             return
 
+        self._set_status(
+            "Открываю проводник: {}".format(len(selected))
+        )
         errors = reveal_files(
             geo_file.path for geo_file in selected
         )
         if errors:
+            self._set_status("Не удалось открыть проводник")
             QMessageBox.warning(
                 self,
                 "ZGeo",
@@ -981,6 +1214,11 @@ class ZGeoPanel(QDockWidget):
                     "\n".join(errors)
                 ),
             )
+            return
+
+        self._set_status(
+            "Проводник открыт: {}".format(len(selected))
+        )
 
     def _export_file_list(self) -> None:
         files = self._visible_files()
@@ -996,13 +1234,108 @@ class ZGeoPanel(QDockWidget):
             for geo_file in files
         ]
         folder_name = self._folder.name if self._folder else "zgeo"
-        export_rows_with_dialog(
+        self._set_status("Экспорт списка в Excel…")
+        exported = export_rows_with_dialog(
             self,
             ["Файл", "Формат", "Размер"],
             rows,
             "{}_файлы.xlsx".format(folder_name or "zgeo"),
             "Файлы",
         )
+        if exported is not None:
+            self._set_status(
+                "Список экспортирован: {}".format(exported.name)
+            )
+        else:
+            self._set_status("Экспорт списка отменён")
+
+    # ------------------------------------------------------------------
+    # Уточнение полного объема
+    # ------------------------------------------------------------------
+
+    def _refine_sizes(self) -> None:
+        if self._busy or self._refining or not self._files:
+            return
+
+        self._refining = True
+        self.refine_button.setText("Уточнение…")
+        self._set_status(
+            "Уточнение объемов: 0 из {}…".format(len(self._files))
+        )
+        self._update_controls()
+
+        task = RefineTask(self._files)
+        self._refine_task = task
+        task.signals.progress.connect(self._on_refine_progress)
+        task.signals.finished.connect(self._on_refine_finished)
+        QThreadPool.globalInstance().start(task)
+
+    def _on_refine_progress(
+        self, current: int, total: int, current_path: str
+    ) -> None:
+        path = Path(current_path)
+        self._set_status(
+            "Уточнение объемов: {} из {} · {}".format(
+                current, total, path.name or current_path
+            )
+        )
+
+    def _on_refine_finished(
+        self, files: object, error: object, cancelled: bool
+    ) -> None:
+        task = self._refine_task
+        self._refine_task = None
+        if task is not None:
+            try:
+                task.signals.progress.disconnect(self._on_refine_progress)
+                task.signals.finished.disconnect(self._on_refine_finished)
+            except (TypeError, RuntimeError):
+                pass
+
+        self._refining = False
+        self.refine_button.setText("Уточнить")
+
+        if error is not None:
+            self._set_status(
+                "Не удалось уточнить объемы: {}".format(error)
+            )
+            self._update_controls()
+            QMessageBox.warning(
+                self,
+                "ZGeo",
+                "Не удалось уточнить объемы:\n{}".format(error),
+            )
+            return
+
+        if cancelled:
+            self._set_status("Уточнение объемов прервано")
+            self._update_controls()
+            return
+
+        refined = list(files) if files is not None else []
+        self._files = refined
+        self._file_by_path = {
+            str(geo_file.path): geo_file for geo_file in refined
+        }
+        self._update_item_sizes(refined)
+        self._apply_filter()
+        self._update_statistics(refined)
+        self._update_controls()
+        self._set_status(
+            "Объемы уточнены. Обработано файлов: {}".format(len(refined))
+        )
+
+    def _update_item_sizes(self, files: List[GeoFile]) -> None:
+        by_path = {str(geo_file.path): geo_file for geo_file in files}
+        for item, _search_text in self._entries:
+            path = item.data(0, Qt.ItemDataRole.UserRole)
+            geo_file = by_path.get(str(path))
+            if geo_file is None:
+                continue
+            item.setText(2, format_size(geo_file.size))
+            item.setToolTip(
+                2, "Полный объем набора: {} Б".format(geo_file.size)
+            )
 
     # ------------------------------------------------------------------
     # Статистика
@@ -1110,12 +1443,19 @@ class ZGeoPanel(QDockWidget):
 
     def _export_format_table(self) -> None:
         folder_name = self._folder.name if self._folder else "zgeo"
-        export_table_with_dialog(
+        self._set_status("Экспорт статистики в Excel…")
+        exported = export_table_with_dialog(
             self,
             self.format_table,
             "{}_форматы.xlsx".format(folder_name or "zgeo"),
             "Форматы",
         )
+        if exported is not None:
+            self._set_status(
+                "Статистика экспортирована: {}".format(exported.name)
+            )
+        else:
+            self._set_status("Экспорт статистики отменён")
 
     def _clear_statistics(self, title: str, hint: str) -> None:
         self.stats_summary_label.setText("Файлов: 0 · 0 Б")
@@ -1134,6 +1474,23 @@ class ZGeoPanel(QDockWidget):
     # ------------------------------------------------------------------
     # Фильтрация и состояния интерфейса
     # ------------------------------------------------------------------
+
+    def _on_filter_changed(self, _text: str) -> None:
+        self._apply_filter()
+        query = self.filter_edit.text().strip()
+        if not self._entries:
+            return
+        visible = sum(
+            1 for item, _search_text in self._entries if not item.isHidden()
+        )
+        if query:
+            self._set_status(
+                "Фильтр: показано {} из {}".format(
+                    visible, len(self._entries)
+                )
+            )
+        else:
+            self._set_status("Фильтр очищен")
 
     def _apply_filter(self) -> None:
         if self._folder is None:
@@ -1191,6 +1548,7 @@ class ZGeoPanel(QDockWidget):
         self._busy = busy
         if busy:
             self.summary_label.setText("Сканирование…")
+            self._set_status("Сканирование папки…")
             self.scan_file_label.setText("—")
             self.scan_file_label.setToolTip("")
             self.scan_found_label.setText("0")
@@ -1210,9 +1568,12 @@ class ZGeoPanel(QDockWidget):
             QApplication.processEvents()
 
     def _update_controls(self) -> None:
-        self.choose_button.setEnabled(not self._busy)
-        self.refresh_button.setEnabled(self._folder is not None and not self._busy)
-        self.filter_edit.setEnabled(bool(self._files) and not self._busy)
+        enabled = not self._busy and not self._refining
+        self.choose_button.setEnabled(enabled)
+        self.refresh_button.setEnabled(
+            self._folder is not None and enabled
+        )
+        self.filter_edit.setEnabled(bool(self._files) and enabled)
         self._update_file_actions()
 
     def _set_empty(self, title: str, hint: str) -> None:
