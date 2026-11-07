@@ -4,7 +4,7 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree
 
-from zgeo.excel_export import write_xlsx
+from zgeo.excel_export import write_xlsx, write_xlsx_sheets
 
 MAIN_NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 
@@ -69,6 +69,58 @@ class ExcelExportTests(unittest.TestCase):
                     "Тест <&>",
                 )
                 self.assertEqual(len(third_row), 2)
+
+    def test_writes_multiple_worksheets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "table.xlsx"
+            write_xlsx_sheets(
+                path,
+                [
+                    ("Файлы", ["Файл"], [["roads.shp"]]),
+                    (
+                        "Статистика",
+                        ["Формат", "Кол-во", "Полный объем"],
+                        [
+                            ["ESRI Shapefile", 2, "2.2 КБ"],
+                            ["", "", ""],
+                            ["Итого", 2, "2.2 КБ"],
+                        ],
+                    ),
+                ],
+            )
+
+            with zipfile.ZipFile(path) as archive:
+                names = set(archive.namelist())
+                self.assertIn("xl/worksheets/sheet2.xml", names)
+
+                workbook = ElementTree.fromstring(
+                    archive.read("xl/workbook.xml")
+                )
+                sheet_names = [
+                    sheet.get("name")
+                    for sheet in workbook.findall(
+                        ".//{}sheet".format(MAIN_NS)
+                    )
+                ]
+                self.assertEqual(sheet_names, ["Файлы", "Статистика"])
+
+                rels = archive.read(
+                    "xl/_rels/workbook.xml.rels"
+                ).decode("utf-8")
+                self.assertIn("worksheets/sheet2.xml", rels)
+                self.assertIn('Id="rId3"', rels)
+
+                sheet = ElementTree.fromstring(
+                    archive.read("xl/worksheets/sheet2.xml")
+                )
+                rows = sheet.findall(".//{}row".format(MAIN_NS))
+                self.assertEqual(len(rows), 4)
+                self.assertEqual(
+                    rows[-1].findall("{}c".format(MAIN_NS))[0].findtext(
+                        ".//{}t".format(MAIN_NS)
+                    ),
+                    "Итого",
+                )
 
     def test_sanitizes_sheet_name(self):
         with tempfile.TemporaryDirectory() as temporary:

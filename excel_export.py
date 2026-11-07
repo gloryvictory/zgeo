@@ -5,10 +5,11 @@ from __future__ import annotations
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, List, Sequence, Union
+from typing import Iterable, List, Sequence, Tuple, Union
 from xml.sax.saxutils import escape
 
 CellValue = Union[str, int, float, None]
+SheetSpec = Tuple[str, Sequence[str], Iterable[Sequence[CellValue]]]
 
 _INVALID_SHEET_CHARS = set('[]:*?/\\')
 
@@ -19,7 +20,16 @@ def write_xlsx(
     headers: Sequence[str],
     rows: Iterable[Sequence[CellValue]],
 ) -> None:
-    """Записать одну таблицу в файл .xlsx.
+    """Записать одну таблицу в файл .xlsx."""
+
+    write_xlsx_sheets(path, [(sheet_name, headers, rows)])
+
+
+def write_xlsx_sheets(
+    path: Path,
+    sheets: Iterable[SheetSpec],
+) -> None:
+    """Записать несколько таблиц в отдельные листы файла .xlsx.
 
     Формат собирается стандартными средствами Python: используется
     минимальный набор XML-частей и inline-строк, поэтому openpyxl или
@@ -27,29 +37,55 @@ def write_xlsx(
     """
 
     path = Path(path)
-    rows = [list(row) for row in rows]
-    safe_sheet_name = _safe_sheet_name(sheet_name)
-    headers = [str(header) for header in headers]
-    column_widths = _column_widths(headers, rows)
-
+    normalized = _normalize_sheets(sheets)
     parts = {
-        "[Content_Types].xml": _content_types_xml(),
+        "[Content_Types].xml": _content_types_xml(len(normalized)),
         "_rels/.rels": _root_rels_xml(),
         "docProps/core.xml": _core_properties_xml(),
         "docProps/app.xml": _app_properties_xml(),
-        "xl/workbook.xml": _workbook_xml(safe_sheet_name),
-        "xl/_rels/workbook.xml.rels": _workbook_rels_xml(),
-        "xl/styles.xml": _styles_xml(),
-        "xl/worksheets/sheet1.xml": _worksheet_xml(
-            headers, rows, column_widths
+        "xl/workbook.xml": _workbook_xml(
+            [name for name, _headers, _rows in normalized]
         ),
+        "xl/_rels/workbook.xml.rels": _workbook_rels_xml(len(normalized)),
+        "xl/styles.xml": _styles_xml(),
     }
+    for index, (name, headers, rows) in enumerate(normalized, start=1):
+        column_widths = _column_widths(headers, rows)
+        parts["xl/worksheets/sheet{}.xml".format(index)] = _worksheet_xml(
+            headers, rows, column_widths
+        )
 
     with zipfile.ZipFile(
         path, "w", compression=zipfile.ZIP_DEFLATED
     ) as archive:
         for name, content in parts.items():
             archive.writestr(name, content.encode("utf-8"))
+
+
+def _normalize_sheets(
+    sheets: Iterable[SheetSpec],
+) -> List[Tuple[str, List[str], List[List[CellValue]]]]:
+    normalized: List[Tuple[str, List[str], List[List[CellValue]]]] = []
+    used_names = set()
+    for sheet_name, headers, rows in sheets:
+        safe_name = _safe_sheet_name(sheet_name)
+        base_name = safe_name
+        counter = 2
+        while safe_name.casefold() in used_names:
+            suffix = " ({})".format(counter)
+            safe_name = base_name[: 31 - len(suffix)] + suffix
+            counter += 1
+        used_names.add(safe_name.casefold())
+        normalized.append(
+            (
+                safe_name,
+                [str(header) for header in headers],
+                [list(row) for row in rows],
+            )
+        )
+    if not normalized:
+        normalized.append(("Данные", [], []))
+    return normalized
 
 
 def _worksheet_xml(
@@ -168,7 +204,14 @@ def _safe_sheet_name(name: str) -> str:
     return (cleaned or "Данные")[:31]
 
 
-def _content_types_xml() -> str:
+def _content_types_xml(sheet_count: int = 1) -> str:
+    worksheet_overrides = "".join(
+        '<Override PartName="/xl/worksheets/sheet{}.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'.format(
+            index
+        )
+        for index in range(1, max(1, sheet_count) + 1)
+    )
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
@@ -176,8 +219,7 @@ def _content_types_xml() -> str:
         '<Default Extension="xml" ContentType="application/xml"/>'
         '<Override PartName="/xl/workbook.xml" '
         'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
-        '<Override PartName="/xl/worksheets/sheet1.xml" '
-        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        "{}"
         '<Override PartName="/xl/styles.xml" '
         'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
         '<Override PartName="/docProps/core.xml" '
@@ -185,7 +227,7 @@ def _content_types_xml() -> str:
         '<Override PartName="/docProps/app.xml" '
         'ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>'
         "</Types>"
-    )
+    ).format(worksheet_overrides)
 
 
 def _root_rels_xml() -> str:
@@ -205,30 +247,40 @@ def _root_rels_xml() -> str:
     )
 
 
-def _workbook_xml(sheet_name: str) -> str:
+def _workbook_xml(sheet_names: Sequence[str]) -> str:
+    sheets = "".join(
+        '<sheet name="{name}" sheetId="{sheet_id}" r:id="rId{sheet_id}"/>'.format(
+            name=escape(name, {'"': "&quot;"}),
+            sheet_id=index,
+        )
+        for index, name in enumerate(sheet_names, start=1)
+    )
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
         'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-        "<sheets>"
-        '<sheet name="{name}" sheetId="1" r:id="rId1"/>'
-        "</sheets>"
+        "<sheets>{}</sheets>"
         "</workbook>"
-    ).format(name=escape(sheet_name, {'"': "&quot;"}))
+    ).format(sheets)
 
 
-def _workbook_rels_xml() -> str:
+def _workbook_rels_xml(sheet_count: int = 1) -> str:
+    sheet_rels = "".join(
+        '<Relationship Id="rId{index}" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+        'Target="worksheets/sheet{index}.xml"/>'.format(index=index)
+        for index in range(1, max(1, sheet_count) + 1)
+    )
+    styles_id = max(1, sheet_count) + 1
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-        '<Relationship Id="rId1" '
-        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
-        'Target="worksheets/sheet1.xml"/>'
-        '<Relationship Id="rId2" '
+        "{sheet_rels}"
+        '<Relationship Id="rId{styles_id}" '
         'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" '
         'Target="styles.xml"/>'
         "</Relationships>"
-    )
+    ).format(sheet_rels=sheet_rels, styles_id=styles_id)
 
 
 def _styles_xml() -> str:

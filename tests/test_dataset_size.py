@@ -4,7 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from zgeo.dataset_size import measure_geo_file, refine_geo_files
+from zgeo.dataset_size import (
+    measure_geo_file,
+    measure_geo_file_cached,
+    refine_geo_files,
+)
 from zgeo.scanner import VECTOR, FormatInfo, GeoFile
 
 
@@ -111,6 +115,18 @@ class DatasetSizeTests(unittest.TestCase):
         detail = measure_geo_file(self.geo_file(path))
 
         self.assertEqual(detail.total_size, 10)
+
+    def test_cached_measure_uses_directory_index(self) -> None:
+        path = self.write("roads.shp", b"a" * 10)
+        self.write("roads.dbf", b"b" * 20)
+
+        cache = {}
+        first = measure_geo_file_cached(self.geo_file(path), cache)
+        second = measure_geo_file_cached(self.geo_file(path), cache)
+
+        self.assertEqual(first.total_size, 30)
+        self.assertEqual(second.total_size, 30)
+        self.assertIn(str(path.parent), cache)
 
     def test_refine_returns_updated_copies_and_reports_progress(self) -> None:
         shape = self.write("roads.shp", b"a" * 10)

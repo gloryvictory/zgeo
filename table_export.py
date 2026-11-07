@@ -8,7 +8,8 @@ from typing import Iterable, Optional, Sequence
 from qgis.PyQt.QtCore import QStandardPaths, Qt
 from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox, QTableWidget
 
-from .excel_export import CellValue, write_xlsx
+from .excel_export import CellValue, SheetSpec, write_xlsx_sheets
+from .explorer import reveal_files
 
 
 def export_table_with_dialog(
@@ -16,6 +17,7 @@ def export_table_with_dialog(
     table: QTableWidget,
     default_filename: str,
     sheet_name: str,
+    summary_rows: Optional[Iterable[Sequence[CellValue]]] = None,
 ) -> Optional[Path]:
     """Предложить сохранить таблицу и записать её в .xlsx."""
 
@@ -28,10 +30,13 @@ def export_table_with_dialog(
         else ""
         for column in range(table.columnCount())
     ]
+    rows = _table_rows(table)
+    if summary_rows:
+        rows.extend([list(row) for row in summary_rows])
     return export_rows_with_dialog(
         parent,
         headers,
-        _table_rows(table),
+        rows,
         default_filename,
         sheet_name,
     )
@@ -43,8 +48,12 @@ def export_rows_with_dialog(
     rows: Iterable[Sequence[CellValue]],
     default_filename: str,
     sheet_name: str,
+    extra_sheets: Optional[Iterable[SheetSpec]] = None,
 ) -> Optional[Path]:
-    """Предложить сохранить произвольный набор строк в .xlsx."""
+    """Предложить сохранить строки в .xlsx и открыть проводник.
+
+    Дополнительные таблицы записываются отдельными листами книги.
+    """
 
     rows = list(rows)
     if not rows:
@@ -67,8 +76,12 @@ def export_rows_with_dialog(
     if path.suffix.lower() != ".xlsx":
         path = path.with_suffix(".xlsx")
 
+    sheets: list = [(sheet_name, headers, rows)]
+    if extra_sheets:
+        sheets.extend(list(extra_sheets))
+
     try:
-        write_xlsx(path, sheet_name, headers, rows)
+        write_xlsx_sheets(path, sheets)
     except Exception as error:
         QMessageBox.critical(
             parent,
@@ -77,11 +90,16 @@ def export_rows_with_dialog(
         )
         return None
 
-    QMessageBox.information(
-        parent,
-        "ZGeo",
-        "Таблица экспортирована:\n{}".format(path),
-    )
+    errors = reveal_files([path])
+    if errors:
+        QMessageBox.warning(
+            parent,
+            "ZGeo",
+            "Таблица экспортирована:\n{}\n\n"
+            "Не удалось открыть проводник:\n{}".format(
+                path, "\n".join(errors)
+            ),
+        )
     return path
 
 

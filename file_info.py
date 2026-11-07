@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from qgis.core import (
     Qgis,
@@ -66,6 +66,14 @@ class FileInfo:
     notes: Tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class LayerSummary:
+    """Краткие сведения для таблицы списка файлов."""
+
+    crs: str
+    element_count: Optional[int]
+
+
 def inspect_geofile(geo_file: GeoFile) -> FileInfo:
     """Открыть файл через провайдеры QGIS и собрать сведения о слоях."""
 
@@ -93,6 +101,83 @@ def inspect_geofile(geo_file: GeoFile) -> FileInfo:
         raster_layers=tuple(raster_layers),
         notes=tuple(notes),
     )
+
+
+def inspect_layer_summary(geo_file: GeoFile) -> LayerSummary:
+    """Получить систему координат и число элементов без чтения полей."""
+
+    try:
+        vector_summaries = _vector_layer_summaries(geo_file)
+    except Exception:
+        vector_summaries = []
+
+    if vector_summaries:
+        return LayerSummary(
+            crs=_summarize_crs(
+                [crs for crs, _count in vector_summaries]
+            ),
+            element_count=_summarize_count(
+                [count for _crs, count in vector_summaries]
+            ),
+        )
+
+    try:
+        if not _should_inspect_raster(geo_file, []):
+            return LayerSummary("—", None)
+        raster_layers = _inspect_raster_layers(geo_file)
+    except Exception:
+        raster_layers = []
+
+    if not raster_layers:
+        return LayerSummary("—", None)
+
+    return LayerSummary(
+        crs=_summarize_crs([layer.crs for layer in raster_layers]),
+        element_count=None,
+    )
+
+
+def _vector_layer_summaries(
+    geo_file: GeoFile,
+) -> List[Tuple[str, int]]:
+    path = geo_file.path
+    summaries: List[Tuple[str, int]] = []
+    seen_uris = set()
+
+    for details in _query_sublayers("ogr", path):
+        if details.type() != _VECTOR_LAYER_TYPE:
+            continue
+        provider = details.providerKey() or "ogr"
+        layer = QgsVectorLayer(details.uri(), details.name(), provider)
+        if not layer.isValid():
+            continue
+        uri = layer.source()
+        if uri in seen_uris:
+            continue
+        seen_uris.add(uri)
+        summaries.append((_crs_text(layer), layer.featureCount()))
+
+    if not summaries and geo_file.category in (VECTOR, TABLE, OTHER):
+        layer = QgsVectorLayer(str(path), path.stem, "ogr")
+        if layer.isValid():
+            summaries.append((_crs_text(layer), layer.featureCount()))
+
+    return summaries
+
+
+def _summarize_crs(values: List[str]) -> str:
+    unique = {value for value in values if value}
+    if not unique:
+        return "—"
+    if len(unique) == 1:
+        return next(iter(unique))
+    return "Разные"
+
+
+def _summarize_count(values: List[int]) -> Optional[int]:
+    if not values or any(value < 0 for value in values):
+        return None
+    return sum(values)
 
 
 def _inspect_vector_layers(geo_file: GeoFile) -> List[VectorLayerInfo]:

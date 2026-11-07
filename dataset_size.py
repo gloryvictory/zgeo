@@ -196,6 +196,21 @@ def measure_geo_file(
     )
 
 
+def measure_geo_file_cached(
+    geo_file: GeoFile,
+    cache: Dict[str, DirectoryIndex],
+) -> DatasetSize:
+    """Посчитать размер набора, переиспользуя индекс каталога."""
+
+    directory = geo_file.path.parent
+    directory_key = str(directory)
+    directory_index = cache.get(directory_key)
+    if directory_index is None:
+        directory_index = _read_directory_index(directory)
+        cache[directory_key] = directory_index
+    return measure_geo_file(geo_file, directory_index)
+
+
 def refine_geo_files(
     files: Iterable[GeoFile],
     progress_callback: Optional[ProgressCallback] = None,
