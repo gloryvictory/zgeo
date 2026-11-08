@@ -14,6 +14,7 @@ from qgis.core import (
     QgsWkbTypes,
 )
 
+from .attribute_check import has_non_latin_characters
 from .scanner import OTHER, RASTER, TABLE, VECTOR, GeoFile
 
 _LAYER_TYPE = getattr(Qgis, "LayerType", None)
@@ -72,6 +73,18 @@ class LayerSummary:
 
     crs: str
     element_count: Optional[int]
+
+
+@dataclass(frozen=True)
+class AttributeCheck:
+    """Результат проверки имён полей векторных слоёв файла."""
+
+    field_names: Tuple[str, ...]
+    non_latin_names: Tuple[str, ...]
+
+    @property
+    def has_issues(self) -> bool:
+        return bool(self.non_latin_names)
 
 
 def inspect_geofile(geo_file: GeoFile) -> FileInfo:
@@ -135,6 +148,56 @@ def inspect_layer_summary(geo_file: GeoFile) -> LayerSummary:
         crs=_summarize_crs([layer.crs for layer in raster_layers]),
         element_count=None,
     )
+
+
+def inspect_attribute_names(geo_file: GeoFile) -> AttributeCheck:
+    """Проверить имена полей всех векторных слоёв файла."""
+
+    field_names = _vector_field_names(geo_file)
+    non_latin_names = tuple(
+        name
+        for name in field_names
+        if has_non_latin_characters(name)
+    )
+    return AttributeCheck(
+        field_names=field_names,
+        non_latin_names=non_latin_names,
+    )
+
+
+def _vector_field_names(geo_file: GeoFile) -> Tuple[str, ...]:
+    path = geo_file.path
+    names: List[str] = []
+    seen_names = set()
+    seen_uris = set()
+
+    for details in _query_sublayers("ogr", path):
+        if details.type() != _VECTOR_LAYER_TYPE:
+            continue
+        provider = details.providerKey() or "ogr"
+        layer = QgsVectorLayer(details.uri(), details.name(), provider)
+        if not layer.isValid():
+            continue
+        uri = layer.source()
+        if uri in seen_uris:
+            continue
+        seen_uris.add(uri)
+        for field in layer.fields():
+            name = field.name()
+            if name and name not in seen_names:
+                seen_names.add(name)
+                names.append(name)
+
+    if not names and geo_file.category in (VECTOR, TABLE, OTHER):
+        layer = QgsVectorLayer(str(path), path.stem, "ogr")
+        if layer.isValid():
+            for field in layer.fields():
+                name = field.name()
+                if name and name not in seen_names:
+                    seen_names.add(name)
+                    names.append(name)
+
+    return tuple(names)
 
 
 def _vector_layer_summaries(
