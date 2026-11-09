@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .i18n import tr
+
 METADATA_PATH = Path(__file__).with_name("metadata.txt")
 
 
@@ -13,7 +15,7 @@ def get_plugin_version() -> str:
     try:
         content = METADATA_PATH.read_text(encoding="utf-8")
     except OSError:
-        return "неизвестна"
+        return tr("неизвестна")
 
     for line in content.splitlines():
         key, separator, value = line.partition("=")
@@ -21,4 +23,4 @@ def get_plugin_version() -> str:
             version = value.strip()
             if version:
                 return version
-    return "неизвестна"
+    return tr("неизвестна")

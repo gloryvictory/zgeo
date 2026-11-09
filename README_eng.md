@@ -4,43 +4,44 @@
 
 A QGIS plugin for quickly browsing the contents of a spatial data folder.
 
-Plugin version: **1.15.0**
+Plugin version: **1.16.0**
 
-The plugin adds a dedicated **“ZGeo”** toolbar to QGIS with a **“ZGeo-Каталог”** (ZGeo Catalog) button that opens a floating panel. The panel provides:
+The plugin adds a dedicated **“ZGeo”** toolbar to QGIS with a **“ZGeo Catalog”** button that opens a floating panel. The panel provides:
 
 - the plugin version is shown at the top;
-- the **“Выбрать папку”** button opens the system folder picker;
+- the **“EN” / “RU”** button in the top-right corner switches the interface between English and Russian without restarting QGIS; the selected language is saved;
+- the **“Select folder”** button opens the system folder picker;
 - the selected folder name and full path are shown at the top of the panel;
 - all supported spatial files are found recursively, including subfolders;
-- while scanning, the current file name and the number of supported spatial files found are shown, and the **“Прервать”** button stops the scan;
+- while scanning, the current file name and the number of supported spatial files found are shown, and the **“Cancel”** button stops the scan;
 - results are displayed as a list: relative path, format, coordinate reference system, feature count and file size;
 - after scanning, the CRS, feature count and full dataset size are read automatically; progress is shown in the status bar;
 - the number of files and their total size are shown above the list; when filtering, the total size is calculated for visible files only;
 - the full dataset size includes sidecar files (SHP + DBF + SHX + PRJ + CPG and others, MIF + MID, TAB + DAT/MAP/ID/IND);
-- the status bar is at the bottom of the window: the current operation is shown on the left, and **“Выбрано: N из M”** is shown on the right;
+- the status bar is at the bottom of the window: the current operation is shown on the left, and **“Selected: N of M”** is shown on the right;
 - the list can be filtered by name, format, path or attribute issues;
-- the **“Настройки”** tab lets you select the formats to scan; the **“Выбрать все”**, **“Сбросить все”**, **“Только вектор”** and **“Только растр”** buttons are available at the top; **Excel** is disabled by default;
-- the **“Файлы”** tab has the **“Информация”**, **“Открыть в проводнике”**, **“Экспорт в Excel”** and **“Проверить атрибуты”** buttons at the bottom;
-- **“Проверить атрибуты”** checks the field names of vector files and adds a **“Проблемы с атрибутами”** column with the values **“Да”**, **“Нет”** or **“—”**;
-- after the attribute check, the **“Проблемных файлов: N”** line is shown and the **“Только проблемные”** filter becomes available;
+- the **“Settings”** tab lets you select the formats to scan; the **“Select all”**, **“Clear all”**, **“Vector only”** and **“Raster only”** buttons are available at the top; **Excel** is disabled by default;
+- the **“Files”** tab has the **“Information”**, **“Open in Explorer”**, **“Export to Excel”** and **“Check attributes”** buttons at the bottom;
+- **“Check attributes”** checks the field names of vector files and adds an **“Attribute issues”** column with the values **“Yes”**, **“No”** or **“—”**;
+- after the attribute check, the **“Problem files: N”** line is shown and the **“Only problem files”** filter becomes available;
 - reading characteristics and the attribute check can be interrupted with the cancel button;
 - for a selected file, the panel shows the CRS, feature count, geometry, extent and an attribute field table with names, aliases, types, lengths, precision and comments;
-- **“Открыть в проводнике”** opens Windows Explorer with the file selected; files from different folders open in separate Explorer windows;
-- the **“Статистика”** tab shows charts by file size and type, followed by a statistics table by format; after reading characteristics, full dataset sizes are used;
-- the file list, statistics table and attribute field table can be exported to Excel; when exporting the list, format statistics are added as a separate worksheet, totals are added to the list and statistics, and Explorer opens with the selected file after saving; if the **“Проблемы с атрибутами”** column has been added, it is included in the export as well;
+- **“Open in Explorer”** opens Windows Explorer with the file selected; files from different folders open in separate Explorer windows;
+- the **“Statistics”** tab shows charts by file size and type, followed by a statistics table by format; after reading characteristics, full dataset sizes are used;
+- the file list, statistics table and attribute field table can be exported to Excel; when exporting the list, format statistics are added as a separate worksheet, totals are added to the list and statistics, and Explorer opens with the selected file after saving; if the **“Attribute issues”** column has been added, it is included in the export as well;
 - the refresh button rescans the current folder.
 
 QGIS 3.16 and newer are supported, including QGIS 4 / Qt 6.
 
-> The plugin interface is currently in Russian. UI labels in this document are quoted exactly as they appear in the interface.
+> The interface is available in Russian and English. Use the **“EN” / “RU”** button in the top-right corner of the panel to switch languages. Documentation is available in both languages.
 
 ## Screenshots
 
 ### Files tab
 
-Attribute check results, the problematic file counter and the **“Только проблемные”** filter.
+Attribute check results, the problematic file counter and the **“Only problem files”** filter.
 
-<img src="img/screen_1.png" alt="Files tab with the Only problematic filter" width="720">
+<img src="img/screen_1.png" alt="Files tab with the Only problem files filter" width="720">
 
 ### Statistics tab
 
@@ -64,7 +65,7 @@ Build the archive:
 powershell -ExecutionPolicy Bypass -File .\scripts\build_zip.ps1
 ```
 
-The ready file will be created at `dist\zgeo-1.15.0.zip`. In QGIS, open:
+The ready file will be created at `dist\zgeo-1.16.0.zip`. In QGIS, open:
 
 **Plugins → Manage and Install Plugins → Install from ZIP**
 
@@ -85,40 +86,45 @@ After updating the plugin, close QGIS completely and start it again. If the **�
 
 ## Usage
 
-1. Click **“ZGeo-Каталог”** on the **“ZGeo”** toolbar (or choose **Plugins → ZGeo → ZGeo-Каталог**).
-2. In the floating panel, click **“Выбрать папку”**.
-3. Select a folder with geodata.
-4. During scanning, the current file name and the number of supported files found are shown. The scan can be stopped with **“Прервать”**.
-5. When scanning finishes, the folder name appears at the top and the found files are shown in the list. The CRS, feature count and full dataset size are read automatically; progress is visible in the status bar, and the cancel button can interrupt reading. If needed, enter part of a file name or format in the filter field.
-6. Open the **“Настройки”** tab to choose the formats to scan. **Excel** is disabled by default; after changing the settings, rescan the folder with the refresh button.
-7. Click **“Проверить атрибуты”** to check vector field names and add the **“Проблемы с атрибутами”** column. After the check, the **“Проблемных файлов: N”** line appears and the **“Только проблемные”** filter becomes available.
-8. Select a file and click **“Информация”** at the bottom of the list.
-9. Click **“Открыть в проводнике”** to show the file in Windows Explorer.
-10. Click **“Экспорт в Excel”** to export the found files with a total row and a separate statistics worksheet. After saving, Explorer opens with the selected `.xlsx`.
-11. Open the **“Статистика”** tab to view the charts.
+1. Click **“ZGeo Catalog”** on the **“ZGeo”** toolbar (or choose **Plugins → ZGeo → ZGeo Catalog**).
+2. If needed, switch the language with the **“EN” / “RU”** button in the top-right corner of the panel.
+3. In the floating panel, click **“Select folder”**.
+4. Select a folder with geodata.
+5. During scanning, the current file name and the number of supported files found are shown. The scan can be stopped with **“Cancel”**.
+6. When scanning finishes, the folder name appears at the top and the found files are shown in the list. The CRS, feature count and full dataset size are read automatically; progress is visible in the status bar, and the cancel button can interrupt reading. If needed, enter part of a file name or format in the filter field.
+7. Open the **“Settings”** tab to choose the formats to scan. **Excel** is disabled by default; after changing the settings, rescan the folder with the refresh button.
+8. Click **“Check attributes”** to check vector field names and add the **“Attribute issues”** column. After the check, the **“Problem files: N”** line appears and the **“Only problem files”** filter becomes available.
+9. Select a file and click **“Information”** at the bottom of the list.
+10. Click **“Open in Explorer”** to show the file in Windows Explorer.
+11. Click **“Export to Excel”** to export the found files with a total row and a separate statistics worksheet. After saving, Explorer opens with the selected `.xlsx`.
+12. Open the **“Statistics”** tab to view the charts.
 
 The last selected folder is remembered and used as the starting folder next time.
 
 ## Status bar
 
-The status bar is at the bottom of the window. The current operation is shown on the left: scanning, reading characteristics and sizes, attribute check, retrieving information, opening Explorer, Excel export, cancellation messages and errors. The number of selected rows is always shown on the right: **“Выбрано: N из M”**. The counter is updated when files are selected and when the list is filtered.
+The status bar is at the bottom of the window. The current operation is shown on the left: scanning, reading characteristics and sizes, attribute check, retrieving information, opening Explorer, Excel export, cancellation messages and errors. The number of selected rows is always shown on the right: **“Selected: N of M”**. The counter is updated when files are selected and when the list is filtered.
+
+## Interface language
+
+The **“EN” / “RU”** button in the top-right corner of the panel switches all labels, tooltips, status bar messages, table headers, dialogs and Excel worksheet names. The selected language is saved in QGIS settings and applied on the next launch. You can switch languages during scanning, reading characteristics or the attribute check — the current operation is not interrupted.
 
 ## Scanning
 
-Scanning runs in a background thread, so the QGIS interface remains responsive. While scanning, the panel shows the current file name and the number of files matching the supported spatial formats. Unsupported files do not increment the **“Найдено”** counter. **“Прервать”** stops the scan; already found files remain in the list, and statistics are built from the partial result.
+Scanning runs in a background thread, so the QGIS interface remains responsive. While scanning, the panel shows the current file name and the number of files matching the supported spatial formats. Unsupported files do not increment the **“Found”** counter. **“Cancel”** stops the scan; already found files remain in the list, and statistics are built from the partial result.
 
-After the list appears, the panel reads the CRS and feature count one file at a time through QGIS providers. The values appear in the **“Система координат”** and **“Элементов”** columns; the current file and overall progress are shown in the status bar. A cancel button appears next to the buttons at the bottom and interrupts long reads; values already read are kept. For raster files, the feature count is not calculated and **“—”** is shown. If a dataset has multiple layers, feature counts are summed, and if their CRSs differ, **“Разные”** is shown in the column.
+After the list appears, the panel reads the CRS and feature count one file at a time through QGIS providers. The values appear in the **“CRS”** and **“Features”** columns; the current file and overall progress are shown in the status bar. A cancel button appears next to the buttons at the bottom and interrupts long reads; values already read are kept. For raster files, the feature count is not calculated and **“—”** is shown. If a dataset has multiple layers, feature counts are summed, and if their CRSs differ, **“Mixed”** is shown in the column.
 
 ## Format settings
 
-The **“Настройки”** tab lists all supported formats with checkboxes, grouped by category. Checked formats are included in the next scan. Settings are saved between QGIS sessions.
+The **“Settings”** tab lists all supported formats with checkboxes, grouped by category. Checked formats are included in the next scan. Settings are saved between QGIS sessions.
 
 The following quick-selection buttons are available at the top of the tab:
 
-- **“Выбрать все”** — select all formats, including Excel;
-- **“Сбросить все”** — clear all selections;
-- **“Только вектор”** — keep only vector formats selected;
-- **“Только растр”** — keep only raster formats selected.
+- **“Select all”** — select all formats, including Excel;
+- **“Clear all”** — clear all selections;
+- **“Vector only”** — keep only vector formats selected;
+- **“Raster only”** — keep only raster formats selected.
 
 After a button is clicked, the settings are saved immediately. Changes, like manual checkbox changes, are applied on the next scan.
 
@@ -126,7 +132,7 @@ After a button is clicked, the settings are saved immediately. Changes, like man
 
 ## File information
 
-The **“Информация”** button is available when exactly one file is selected in the list. For vector data, the dialog shows:
+The **“Information”** button is available when exactly one file is selected in the list. For vector data, the dialog shows:
 
 - file name, format, size and full path;
 - layer name and coordinate reference system;
@@ -135,29 +141,29 @@ The **“Информация”** button is available when exactly one file is 
 
 For GeoPackage and other multi-layer containers, a layer selector appears at the top of the dialog. For raster files, the CRS, raster dimensions, band count, pixel size and extent are shown.
 
-Below the attribute field table is the **“Экспорт в Excel”** button. It saves the current layer fields to an `.xlsx` file and opens Explorer with the file selected.
+Below the attribute field table is the **“Export to Excel”** button. It saves the current layer fields to an `.xlsx` file and opens Explorer with the file selected.
 
 ## Attribute check
 
-The **“Проверить атрибуты”** button at the bottom of the **“Файлы”** tab iterates over vector files and checks field names. If a field name contains non-Latin characters (for example, Cyrillic), the new **“Проблемы с атрибутами”** column is set to **“Да”**. If the fields contain only Latin characters, digits and common separators, **“Нет”** is shown. For raster files and files without vector fields, **“—”** is shown.
+The **“Check attributes”** button at the bottom of the **“Files”** tab iterates over vector files and checks field names. If a field name contains non-Latin characters (for example, Cyrillic), the new **“Attribute issues”** column is set to **“Yes”**. If the fields contain only Latin characters, digits and common separators, **“No”** is shown. For raster files and files without vector fields, **“—”** is shown.
 
 The column appears after the first check. Check progress is shown in the status bar. If the column has already been added, it is also included in the file list export.
 
-After the check finishes, the **“Проблемных файлов: N”** line is shown above the list, and the **“Только проблемные”** checkbox becomes available below the search field. It leaves only files with the **“Да”** value in the table and can be combined with the text filter. If the check was interrupted, the results already obtained are kept, and the counter tooltip shows how many files were processed.
+After the check finishes, the **“Problem files: N”** line is shown above the list, and the **“Only problem files”** checkbox becomes available below the search field. It leaves only files with the **“Yes”** value in the table and can be combined with the text filter. If the check was interrupted, the results already obtained are kept, and the counter tooltip shows how many files were processed.
 
-The check can be interrupted with the cancel button next to **“Проверить атрибуты”**. After cancellation, reading characteristics resumes automatically.
+The check can be interrupted with the cancel button next to **“Check attributes”**. After cancellation, reading characteristics resumes automatically.
 
 ## File list export
 
-The **“Экспорт в Excel”** button at the bottom of the **“Файлы”** tab saves the current list to `.xlsx`. The file contains the **“Файл”**, **“Формат”**, **“Система координат”**, **“Элементов”** and **“Размер”** columns. If the **“Проблемы с атрибутами”** column has been added, it is exported as well. If a filter is enabled, only visible rows are exported to the **“Файлы”** worksheet.
+The **“Export to Excel”** button at the bottom of the **“Files”** tab saves the current list to `.xlsx`. The file contains the **“File”**, **“Format”**, **“CRS”**, **“Features”** and **“Size”** columns. If the **“Attribute issues”** column has been added, it is exported as well. If a filter is enabled, only visible rows are exported to the **“Files”** worksheet.
 
-A blank row and a total are added at the end of the table: **“Итого файлов: N”**, the total feature count and the total size. If the feature count for some files has not been read yet or is undefined, the total cell shows **“—”**.
+A blank row and a total are added at the end of the table: **“Total files: N”**, the total feature count and the total size. If the feature count for some files has not been read yet or is undefined, the total cell shows **“—”**.
 
-A separate **“Статистика”** worksheet is created in the same workbook with the **“Формат”**, **“Кол-во”** and **“Полный объем”** columns. It is built from all found files, like the table on the **“Статистика”** tab, and ends with an **“Итого”** row containing the total file count and size. After a successful save, Windows Explorer opens with the selected `.xlsx` file.
+A separate **“Statistics”** worksheet is created in the same workbook with the **“Format”**, **“Count”** and **“Full size”** columns. It is built from all found files, like the table on the **“Statistics”** tab, and ends with an **“Total”** row containing the total file count and size. After a successful save, Windows Explorer opens with the selected `.xlsx` file.
 
 ## Full dataset size
 
-The full size of each dataset is calculated automatically together with the CRS and feature count. A separate **“Уточнить”** button is not required. The following sidecar files are included:
+The full size of each dataset is calculated automatically together with the CRS and feature count. A separate **“Refine”** button is not required. The following sidecar files are included:
 
 - Shapefile: `.shp`, `.dbf`, `.shx`, `.prj`, `.cpg`, `.qix`, `.sbn`, `.sbx`, `.fbn`, `.fbx`, `.ain`, `.aih`, `.atx`, `.ixs`, `.mxs`, `.fix`, `.shp.xml`;
 - MapInfo MIF: `.mif` + `.mid`;
@@ -165,23 +171,23 @@ The full size of each dataset is calculated automatically together with the CRS 
 - CSV: `.csvt`, `.prj`;
 - rasters: world files `.tfw`/`.wld`, `.prj`, `.aux.xml` and `.ovr` (for supported raster formats).
 
-During processing, the status bar shows the number of processed files and the current file name. The size in the table is updated as reading progresses. When finished, the total size in the summary and the **“Статистика”** tab are updated. Row selection and the active filter are preserved.
+During processing, the status bar shows the number of processed files and the current file name. The size in the table is updated as reading progresses. When finished, the total size in the summary and the **“Statistics”** tab are updated. Row selection and the active filter are preserved.
 
 ## Opening in Explorer
 
-The **“Открыть в проводнике”** button is available for one or more selected files. Windows Explorer opens with the file selected. If the selected files are in different folders, a separate Explorer window opens for each folder. If several files in the same folder are selected, the window opens with the first one.
+The **“Open in Explorer”** button is available for one or more selected files. Windows Explorer opens with the file selected. If the selected files are in different folders, a separate Explorer window opens for each folder. If several files in the same folder are selected, the window opens with the first one.
 
 ## Statistics
 
-After each scan, two charts and a table are updated on the **“Статистика”** tab:
+After each scan, two charts and a table are updated on the **“Statistics”** tab:
 
-- **“По размеру”** — the number of files in the ranges up to 1 MB, 1–10 MB, 10–100 MB, 100 MB–1 GB and 1 GB or more. The total size of files in the range is shown on the right.
-- **“По типу”** — the number of files by format. The total size is shown on the right; when there are many formats, rare ones are combined into **“Другие форматы”**.
-- **“Статистика по форматам”** — a complete table with the **“Формат”**, **“Кол-во”** and **“Полный объем”** columns. Unlike the chart, the table shows each format separately.
+- **“By size”** — the number of files in the ranges up to 1 MB, 1–10 MB, 10–100 MB, 100 MB–1 GB and 1 GB or more. The total size of files in the range is shown on the right.
+- **“By type”** — the number of files by format. The total size is shown on the right; when there are many formats, rare ones are combined into **“Other formats”**.
+- **“Statistics by format”** — a complete table with the **“Format”**, **“Count”** and **“Full size”** columns. Unlike the chart, the table shows each format separately.
 
 The charts and table are built from all found files and do not depend on the list filter. After automatic reading of characteristics, statistics use full dataset sizes including sidecar files.
 
-Below the format table is the **“Экспорт в Excel”** button. The `.xlsx` file contains the **“Формат”**, **“Кол-во”** and **“Полный объем”** columns, and an **“Итого”** row with the total file count and size is added at the end. After saving, Explorer opens with the file selected.
+Below the format table is the **“Export to Excel”** button. The `.xlsx` file contains the **“Format”**, **“Count”** and **“Full size”** columns, and an **“Total”** row with the total file count and size is added at the end. After saving, Explorer opens with the file selected.
 
 ## Supported formats
 
@@ -204,6 +210,7 @@ zgeo/
 ├── metadata.txt         # QGIS plugin metadata
 ├── plugin.py            # toolbar button and panel lifecycle
 ├── panel.py             # floating panel, file list and statistics tab
+├── i18n.py              # translation dictionary and language switching
 ├── scanner.py           # scanning, formats and format groups
 ├── scan_task.py         # background scanning with progress and cancellation
 ├── dataset_size.py      # full dataset size and sidecar files
@@ -230,7 +237,8 @@ zgeo/
     ├── test_explorer.py       # grouping files by folder
     ├── test_formatting.py     # size formatting
     ├── test_attribute_check.py # field name check
-    └── test_excel_export.py   # XLSX generation
+    ├── test_excel_export.py   # XLSX generation
+    └── test_i18n.py           # translations and language switching
 ```
 
 ## Development
@@ -245,7 +253,7 @@ python -m unittest discover -s tests -t .. -v
 Syntax check:
 
 ```powershell
-python -m py_compile __init__.py plugin.py panel.py scanner.py scan_task.py dataset_size.py stats.py charts.py attribute_check.py file_info.py info_dialog.py explorer.py formatting.py excel_export.py table_export.py version.py
+python -m py_compile __init__.py plugin.py panel.py i18n.py scanner.py scan_task.py dataset_size.py stats.py charts.py attribute_check.py file_info.py info_dialog.py explorer.py formatting.py excel_export.py table_export.py version.py
 ```
 
 Scanning runs in a background thread. For very large directories on network drives, the list may fill gradually, but the interface remains responsive and the scan can be interrupted.

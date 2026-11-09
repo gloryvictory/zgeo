@@ -14,6 +14,7 @@ from qgis.PyQt.QtCore import (
     Qt,
     QThreadPool,
     QTimer,
+    pyqtSignal,
 )
 from qgis.PyQt.QtGui import QFont, QIcon, QPalette
 from qgis.PyQt.QtWidgets import (
@@ -58,6 +59,15 @@ from .file_info import (
     inspect_layer_summary,
 )
 from .formatting import format_size
+from .i18n import (
+    LANGUAGE_EN,
+    LANGUAGE_KEY,
+    LANGUAGE_RU,
+    category_label,
+    get_language,
+    set_language,
+    tr,
+)
 from .info_dialog import FileInfoDialog
 from .scan_task import ScanTask
 from .scanner import (
@@ -76,13 +86,6 @@ from .table_export import (
     export_table_with_dialog,
 )
 from .version import get_plugin_version
-
-CATEGORY_LABELS = {
-    VECTOR: "Векторные данные",
-    RASTER: "Растровые данные",
-    TABLE: "Таблица",
-    OTHER: "Прочие данные",
-}
 
 LAST_FOLDER_KEY = "zgeo/last_folder"
 DISABLED_FORMATS_KEY = "zgeo/disabled_formats"
@@ -110,9 +113,13 @@ TYPE_CHART_COLORS = (
 class ZGeoPanel(QDockWidget):
     """Каталог пространственных файлов, открываемый как плавающая панель."""
 
+    language_changed = pyqtSignal(str)
+
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
 
+        self._settings = QSettings()
+        set_language(self._settings.value(LANGUAGE_KEY, LANGUAGE_RU))
         self._folder: Optional[Path] = None
         self._files: List[GeoFile] = []
         self._file_by_path: Dict[str, GeoFile] = {}
@@ -123,8 +130,8 @@ class ZGeoPanel(QDockWidget):
         self._size_index_cache: Dict[str, DirectoryIndex] = {}
         self._scan_task: Optional[ScanTask] = None
         self._busy = False
-        self._settings = QSettings()
         self._format_checkboxes: Dict[str, QCheckBox] = {}
+        self._category_group_boxes: Dict[str, QGroupBox] = {}
         self._disabled_formats = self._load_disabled_formats()
         self._icon_provider = QFileIconProvider()
         self._icon_cache: Dict[str, QIcon] = {}
@@ -144,6 +151,19 @@ class ZGeoPanel(QDockWidget):
         self._attribute_total = 0
         self._attribute_processed = 0
         self._attribute_issue_count = 0
+        self._attribute_checks: Dict[str, AttributeCheck] = {}
+        self._attribute_unavailable: Set[str] = set()
+        self._attribute_interrupted = False
+        self._empty_title_source = "Геоданные не выбраны"
+        self._empty_hint_source = (
+            "Нажмите «Выбрать папку», чтобы найти шейпфайлы, GeoPackage "
+            "и другие пространственные данные."
+        )
+        self._stats_empty_title_source = "Статистика пуста"
+        self._stats_empty_hint_source = (
+            "Выберите папку и выполните сканирование. Здесь появятся "
+            "диаграммы по размеру и типу файлов."
+        )
         self._attribute_timer = QTimer(self)
         self._attribute_timer.setSingleShot(True)
         self._attribute_timer.setInterval(0)
@@ -152,7 +172,7 @@ class ZGeoPanel(QDockWidget):
         )
 
         self.setObjectName("ZGeoPanel")
-        self.setWindowTitle("ZGeo — геоданные")
+        self.setWindowTitle(tr("ZGeo — геоданные"))
         self.setWindowIcon(QIcon(str(ICON_PATH)))
         self.setAllowedAreas(
             Qt.DockWidgetArea.LeftDockWidgetArea
@@ -169,14 +189,12 @@ class ZGeoPanel(QDockWidget):
         self._build_ui()
         self._update_controls()
         self._set_empty(
-            "Геоданные не выбраны",
-            "Нажмите «Выбрать папку», чтобы найти шейпфайлы, GeoPackage "
-            "и другие пространственные данные.",
+            self._empty_title_source,
+            self._empty_hint_source,
         )
         self._set_stats_empty(
-            "Статистика пуста",
-            "Выберите папку и выполните сканирование. Здесь появятся "
-            "диаграммы по размеру и типу файлов.",
+            self._stats_empty_title_source,
+            self._stats_empty_hint_source,
         )
 
     # ------------------------------------------------------------------
@@ -193,12 +211,12 @@ class ZGeoPanel(QDockWidget):
         layout.addLayout(self._build_brand())
         layout.addSpacing(3)
 
-        caption = QLabel("ПАПКА")
-        self._set_font(caption, -1, bold=True)
-        self._set_muted(caption)
-        layout.addWidget(caption)
+        self.folder_caption_label = QLabel(tr("ПАПКА"))
+        self._set_font(self.folder_caption_label, -1, bold=True)
+        self._set_muted(self.folder_caption_label)
+        layout.addWidget(self.folder_caption_label)
 
-        self.folder_name_label = QLabel("Папка не выбрана")
+        self.folder_name_label = QLabel(tr("Папка не выбрана"))
         self.folder_name_label.setObjectName("zgeoFolderName")
         self.folder_name_label.setWordWrap(True)
         self.folder_name_label.setSizePolicy(
@@ -210,7 +228,7 @@ class ZGeoPanel(QDockWidget):
         self._set_font(self.folder_name_label, 3, bold=True)
         layout.addWidget(self.folder_name_label)
 
-        self.folder_path_label = QLabel("Выберите каталог на диске")
+        self.folder_path_label = QLabel(tr("Выберите каталог на диске"))
         self.folder_path_label.setWordWrap(True)
         self.folder_path_label.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
@@ -225,7 +243,7 @@ class ZGeoPanel(QDockWidget):
         buttons = QHBoxLayout()
         buttons.setSpacing(6)
 
-        self.choose_button = QPushButton("Выбрать папку")
+        self.choose_button = QPushButton(tr("Выбрать папку"))
         self.choose_button.setIcon(
             self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon)
         )
@@ -240,7 +258,7 @@ class ZGeoPanel(QDockWidget):
         self.refresh_button.setIconSize(QSize(18, 18))
         self.refresh_button.setAutoRaise(True)
         self.refresh_button.setFixedSize(32, 32)
-        self.refresh_button.setToolTip("Пересканировать папку")
+        self.refresh_button.setToolTip(tr("Пересканировать папку"))
         self.refresh_button.clicked.connect(self.refresh)
         buttons.addWidget(self.refresh_button)
 
@@ -253,17 +271,17 @@ class ZGeoPanel(QDockWidget):
 
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
-        self.tabs.addTab(self._build_files_page(), "Файлы")
-        self.tabs.addTab(self._build_stats_page(), "Статистика")
-        self.tabs.addTab(self._build_settings_page(), "Настройки")
+        self.tabs.addTab(self._build_files_page(), tr("Файлы"))
+        self.tabs.addTab(self._build_stats_page(), tr("Статистика"))
+        self.tabs.addTab(self._build_settings_page(), tr("Настройки"))
         self.tabs.setTabToolTip(
-            0, "Найденные пространственные файлы"
+            0, tr("Найденные пространственные файлы")
         )
         self.tabs.setTabToolTip(
-            1, "Диаграммы по размеру и типу файлов"
+            1, tr("Диаграммы по размеру и типу файлов")
         )
         self.tabs.setTabToolTip(
-            2, "Форматы файлов, которые нужно искать"
+            2, tr("Форматы файлов, которые нужно искать")
         )
         layout.addWidget(self.tabs, 1)
         layout.addWidget(self._build_status_bar())
@@ -277,14 +295,14 @@ class ZGeoPanel(QDockWidget):
         bar.setSizeGripEnabled(False)
         bar.setContentsMargins(0, 0, 0, 0)
 
-        self.status_message_label = QLabel("Готово")
+        self.status_message_label = QLabel(tr("Готово"))
         self.status_message_label.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
         )
         self._set_font(self.status_message_label, -1)
         bar.addWidget(self.status_message_label, 1)
 
-        self.selection_label = QLabel("Выбрано: 0 из 0")
+        self.selection_label = QLabel(tr("Выбрано: 0 из 0"))
         self.selection_label.setAlignment(
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         )
@@ -299,11 +317,11 @@ class ZGeoPanel(QDockWidget):
         layout.setContentsMargins(0, 8, 0, 0)
         layout.setSpacing(8)
 
-        self.summary_label = QLabel("Файлов: 0 · Общий объем: 0 Б")
+        self.summary_label = QLabel(tr("Файлов: 0 · Общий объем: 0 Б"))
         self._set_font(self.summary_label, 0, bold=True)
         layout.addWidget(self.summary_label)
 
-        self.problems_label = QLabel("Проблемных файлов: 0")
+        self.problems_label = QLabel(tr("Проблемных файлов: 0"))
         self._set_font(self.problems_label, -1)
         self.problems_label.setVisible(False)
         layout.addWidget(self.problems_label)
@@ -313,15 +331,19 @@ class ZGeoPanel(QDockWidget):
         filter_row.setSpacing(8)
 
         self.filter_edit = QLineEdit()
-        self.filter_edit.setPlaceholderText("Фильтр по имени, формату или пути")
+        self.filter_edit.setPlaceholderText(
+            tr("Фильтр по имени, формату или пути")
+        )
         self.filter_edit.setClearButtonEnabled(True)
         self.filter_edit.textChanged.connect(self._on_filter_changed)
         filter_row.addWidget(self.filter_edit, 1)
 
-        self.problems_only_checkbox = QCheckBox("Только проблемные")
+        self.problems_only_checkbox = QCheckBox(tr("Только проблемные"))
         self.problems_only_checkbox.setToolTip(
-            "Показывать только файлы, у которых проверка атрибутов "
-            "нашла проблемы"
+            tr(
+                "Показывать только файлы, у которых проверка атрибутов "
+                "нашла проблемы"
+            )
         )
         self.problems_only_checkbox.setEnabled(False)
         self.problems_only_checkbox.toggled.connect(
@@ -366,8 +388,8 @@ class ZGeoPanel(QDockWidget):
         self.info_button.setIconSize(QSize(18, 18))
         self.info_button.setAutoRaise(True)
         self.info_button.setFixedSize(30, 30)
-        self.info_button.setToolTip("Информация")
-        self.info_button.setAccessibleName("Информация")
+        self.info_button.setToolTip(tr("Информация"))
+        self.info_button.setAccessibleName(tr("Информация"))
         self.info_button.clicked.connect(self._show_file_info)
         buttons.addWidget(self.info_button)
 
@@ -380,8 +402,10 @@ class ZGeoPanel(QDockWidget):
         self.explorer_button.setIconSize(QSize(18, 18))
         self.explorer_button.setAutoRaise(True)
         self.explorer_button.setFixedSize(30, 30)
-        self.explorer_button.setToolTip("Открыть в проводнике")
-        self.explorer_button.setAccessibleName("Открыть в проводнике")
+        self.explorer_button.setToolTip(tr("Открыть в проводнике"))
+        self.explorer_button.setAccessibleName(
+            tr("Открыть в проводнике")
+        )
         self.explorer_button.clicked.connect(self._open_in_explorer)
         buttons.addWidget(self.explorer_button)
 
@@ -394,8 +418,10 @@ class ZGeoPanel(QDockWidget):
         self.export_list_button.setIconSize(QSize(18, 18))
         self.export_list_button.setAutoRaise(True)
         self.export_list_button.setFixedSize(30, 30)
-        self.export_list_button.setToolTip("Экспорт в Excel")
-        self.export_list_button.setAccessibleName("Экспорт в Excel")
+        self.export_list_button.setToolTip(tr("Экспорт в Excel"))
+        self.export_list_button.setAccessibleName(
+            tr("Экспорт в Excel")
+        )
         self.export_list_button.clicked.connect(self._export_file_list)
         buttons.addWidget(self.export_list_button)
 
@@ -409,10 +435,10 @@ class ZGeoPanel(QDockWidget):
         self.check_attributes_button.setAutoRaise(True)
         self.check_attributes_button.setFixedSize(30, 30)
         self.check_attributes_button.setToolTip(
-            ATTRIBUTE_CHECK_TOOLTIP
+            tr(ATTRIBUTE_CHECK_TOOLTIP)
         )
         self.check_attributes_button.setAccessibleName(
-            "Проверить атрибуты"
+            tr("Проверить атрибуты")
         )
         self.check_attributes_button.clicked.connect(
             self._start_attribute_check
@@ -428,8 +454,12 @@ class ZGeoPanel(QDockWidget):
         self.cancel_task_button.setIconSize(QSize(18, 18))
         self.cancel_task_button.setAutoRaise(True)
         self.cancel_task_button.setFixedSize(30, 30)
-        self.cancel_task_button.setToolTip("Прервать длительную операцию")
-        self.cancel_task_button.setAccessibleName("Прервать операцию")
+        self.cancel_task_button.setToolTip(
+            tr("Прервать длительную операцию")
+        )
+        self.cancel_task_button.setAccessibleName(
+            tr("Прервать операцию")
+        )
         self.cancel_task_button.setVisible(False)
         self.cancel_task_button.clicked.connect(
             self._cancel_long_operation
@@ -461,20 +491,20 @@ class ZGeoPanel(QDockWidget):
 
         quick_actions = QHBoxLayout()
         quick_actions.setSpacing(6)
-        self.select_all_button = QPushButton("Выбрать все")
-        self.select_all_button.setToolTip("Отметить все форматы")
+        self.select_all_button = QPushButton(tr("Выбрать все"))
+        self.select_all_button.setToolTip(tr("Отметить все форматы"))
         self.select_all_button.clicked.connect(self._select_all_formats)
-        self.clear_all_button = QPushButton("Сбросить все")
-        self.clear_all_button.setToolTip("Снять все отметки")
+        self.clear_all_button = QPushButton(tr("Сбросить все"))
+        self.clear_all_button.setToolTip(tr("Снять все отметки"))
         self.clear_all_button.clicked.connect(self._clear_all_formats)
-        self.only_vector_button = QPushButton("Только вектор")
+        self.only_vector_button = QPushButton(tr("Только вектор"))
         self.only_vector_button.setToolTip(
-            "Оставить только векторные форматы"
+            tr("Оставить только векторные форматы")
         )
         self.only_vector_button.clicked.connect(self._select_only_vector)
-        self.only_raster_button = QPushButton("Только растр")
+        self.only_raster_button = QPushButton(tr("Только растр"))
         self.only_raster_button.setToolTip(
-            "Оставить только растровые форматы"
+            tr("Оставить только растровые форматы")
         )
         self.only_raster_button.clicked.connect(self._select_only_raster)
         for button in (
@@ -487,14 +517,16 @@ class ZGeoPanel(QDockWidget):
             quick_actions.addWidget(button, 1)
         layout.addLayout(quick_actions)
 
-        hint = QLabel(
-            "Отметьте форматы, которые должны попадать в каталог. "
-            "Изменения применяются при следующем сканировании."
+        self.settings_hint_label = QLabel(
+            tr(
+                "Отметьте форматы, которые должны попадать в каталог. "
+                "Изменения применяются при следующем сканировании."
+            )
         )
-        hint.setWordWrap(True)
-        self._set_font(hint, -1)
-        self._set_muted(hint)
-        layout.addWidget(hint)
+        self.settings_hint_label.setWordWrap(True)
+        self._set_font(self.settings_hint_label, -1)
+        self._set_muted(self.settings_hint_label)
+        layout.addWidget(self.settings_hint_label)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -506,7 +538,7 @@ class ZGeoPanel(QDockWidget):
         content_layout.setSpacing(10)
 
         groups = get_format_groups()
-        for category, category_label in CATEGORY_LABELS.items():
+        for category in (VECTOR, RASTER, TABLE, OTHER):
             category_groups = [
                 group for group in groups
                 if group.category == category
@@ -514,7 +546,8 @@ class ZGeoPanel(QDockWidget):
             if not category_groups:
                 continue
 
-            group_box = QGroupBox(category_label)
+            group_box = QGroupBox(category_label(category))
+            self._category_group_boxes[category] = group_box
             group_layout = QVBoxLayout(group_box)
             group_layout.setSpacing(5)
 
@@ -526,8 +559,9 @@ class ZGeoPanel(QDockWidget):
                     group.name not in self._disabled_formats
                 )
                 checkbox.setToolTip(
-                    "Расширения: {}".format(
-                        ", ".join(group.extensions)
+                    tr(
+                        "Расширения: {}",
+                        ", ".join(group.extensions),
                     )
                 )
                 checkbox.toggled.connect(
@@ -579,36 +613,46 @@ class ZGeoPanel(QDockWidget):
             self._disabled_formats.add(name)
         self._save_disabled_formats()
         self._set_status(
-            "Настройки сохранены. Изменения применятся при следующем "
-            "сканировании."
+            tr(
+                "Настройки сохранены. Изменения применятся при следующем "
+                "сканировании."
+            )
         )
 
     def _select_all_formats(self) -> None:
         self._set_format_selection(
             None,
-            "Все форматы выбраны. Изменения применятся при следующем "
-            "сканировании.",
+            tr(
+                "Все форматы выбраны. Изменения применятся при следующем "
+                "сканировании."
+            ),
         )
 
     def _clear_all_formats(self) -> None:
         self._set_format_selection(
             set(),
-            "Все форматы сброшены. Изменения применятся при следующем "
-            "сканировании.",
+            tr(
+                "Все форматы сброшены. Изменения применятся при следующем "
+                "сканировании."
+            ),
         )
 
     def _select_only_vector(self) -> None:
         self._set_format_selection(
             {VECTOR},
-            "Выбраны только векторные форматы. Изменения применятся при "
-            "следующем сканировании.",
+            tr(
+                "Выбраны только векторные форматы. Изменения применятся при "
+                "следующем сканировании."
+            ),
         )
 
     def _select_only_raster(self) -> None:
         self._set_format_selection(
             {RASTER},
-            "Выбраны только растровые форматы. Изменения применятся при "
-            "следующем сканировании.",
+            tr(
+                "Выбраны только растровые форматы. Изменения применятся при "
+                "следующем сканировании."
+            ),
         )
 
     def _set_format_selection(
@@ -638,6 +682,50 @@ class ZGeoPanel(QDockWidget):
             if group.name not in self._disabled_formats
         }
 
+    @staticmethod
+    def _tree_headers(include_attributes: bool = False) -> List[str]:
+        headers = [
+            tr("Файл"),
+            tr("Формат"),
+            tr("Система координат"),
+            tr("Элементов"),
+            tr("Размер"),
+        ]
+        if include_attributes:
+            headers.append(tr("Проблемы с атрибутами"))
+        return headers
+
+    @staticmethod
+    def _format_table_headers() -> List[str]:
+        return [tr("Формат"), tr("Кол-во"), tr("Полный объем")]
+
+    @staticmethod
+    def _language_tooltip() -> str:
+        if get_language() == LANGUAGE_RU:
+            return tr("Переключить на английский")
+        return tr("Переключить на русский")
+
+    def _update_language_button(self) -> None:
+        if not hasattr(self, "language_button"):
+            return
+        self.language_button.setText(
+            "EN" if get_language() == LANGUAGE_RU else "RU"
+        )
+        self.language_button.setToolTip(self._language_tooltip())
+        self.language_button.setAccessibleName(tr("Переключить язык"))
+
+    def _toggle_language(self) -> None:
+        new_language = (
+            LANGUAGE_EN
+            if get_language() == LANGUAGE_RU
+            else LANGUAGE_RU
+        )
+        set_language(new_language)
+        self._settings.setValue(LANGUAGE_KEY, new_language)
+        self._settings.sync()
+        self._retranslate_ui()
+        self.language_changed.emit(new_language)
+
     def _build_brand(self) -> QHBoxLayout:
         brand = QHBoxLayout()
         brand.setSpacing(9)
@@ -655,20 +743,22 @@ class ZGeoPanel(QDockWidget):
         self._set_font(title, 5, bold=True)
         titles.addWidget(title)
 
-        subtitle = QLabel("Каталог пространственных данных")
-        subtitle.setSizePolicy(
+        self.brand_subtitle_label = QLabel(
+            tr("Каталог пространственных данных")
+        )
+        self.brand_subtitle_label.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
         )
-        self._set_font(subtitle, -1)
-        self._set_muted(subtitle)
-        titles.addWidget(subtitle)
+        self._set_font(self.brand_subtitle_label, -1)
+        self._set_muted(self.brand_subtitle_label)
+        titles.addWidget(self.brand_subtitle_label)
 
         brand.addLayout(titles, 1)
 
         version = get_plugin_version()
-        self.version_label = QLabel("Версия {}".format(version))
+        self.version_label = QLabel(tr("Версия {}", version))
         self.version_label.setToolTip(
-            "Версия плагина ZGeo: {}".format(version)
+            tr("Версия плагина ZGeo: {}", version)
         )
         self.version_label.setAlignment(
             Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight
@@ -677,6 +767,19 @@ class ZGeoPanel(QDockWidget):
         self._set_muted(self.version_label)
         brand.addWidget(
             self.version_label,
+            0,
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight,
+        )
+
+        self.language_button = QPushButton()
+        self.language_button.setObjectName("zgeoLanguageButton")
+        self.language_button.setFixedSize(44, 28)
+        self.language_button.setToolTip(self._language_tooltip())
+        self.language_button.setAccessibleName(tr("Переключить язык"))
+        self.language_button.clicked.connect(self._toggle_language)
+        self._update_language_button()
+        brand.addWidget(
+            self.language_button,
             0,
             Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight,
         )
@@ -727,19 +830,19 @@ class ZGeoPanel(QDockWidget):
         scan_icon.setPixmap(QIcon(str(ICON_PATH)).pixmap(52, 52))
         page_layout.addWidget(scan_icon)
 
-        scan_title = QLabel("Сканирование папки…")
-        scan_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._set_font(scan_title, 1, bold=True)
-        page_layout.addWidget(scan_title)
+        self.scan_title_label = QLabel(tr("Сканирование папки…"))
+        self.scan_title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._set_font(self.scan_title_label, 1, bold=True)
+        page_layout.addWidget(self.scan_title_label)
 
-        scan_hint = QLabel(
-            "Просматриваем файлы, включая вложенные папки."
+        self.scan_hint_label = QLabel(
+            tr("Просматриваем файлы, включая вложенные папки.")
         )
-        scan_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        scan_hint.setWordWrap(True)
-        self._set_font(scan_hint, -1)
-        self._set_muted(scan_hint)
-        page_layout.addWidget(scan_hint)
+        self.scan_hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.scan_hint_label.setWordWrap(True)
+        self._set_font(self.scan_hint_label, -1)
+        self._set_muted(self.scan_hint_label)
+        page_layout.addWidget(self.scan_hint_label)
 
         self.scan_progress = QProgressBar()
         self.scan_progress.setRange(0, 0)
@@ -747,10 +850,10 @@ class ZGeoPanel(QDockWidget):
         self.scan_progress.setFixedHeight(8)
         page_layout.addWidget(self.scan_progress)
 
-        file_caption = QLabel("Имя файла")
-        self._set_font(file_caption, -1, bold=True)
-        self._set_muted(file_caption)
-        page_layout.addWidget(file_caption)
+        self.scan_file_caption = QLabel(tr("Имя файла"))
+        self._set_font(self.scan_file_caption, -1, bold=True)
+        self._set_muted(self.scan_file_caption)
+        page_layout.addWidget(self.scan_file_caption)
 
         self.scan_file_label = QLabel("—")
         self.scan_file_label.setWordWrap(True)
@@ -763,16 +866,16 @@ class ZGeoPanel(QDockWidget):
         self._set_font(self.scan_file_label, 0, bold=True)
         page_layout.addWidget(self.scan_file_label)
 
-        found_caption = QLabel("Найдено")
-        self._set_font(found_caption, -1, bold=True)
-        self._set_muted(found_caption)
-        page_layout.addWidget(found_caption)
+        self.scan_found_caption = QLabel(tr("Найдено"))
+        self._set_font(self.scan_found_caption, -1, bold=True)
+        self._set_muted(self.scan_found_caption)
+        page_layout.addWidget(self.scan_found_caption)
 
         self.scan_found_label = QLabel("0")
         self._set_font(self.scan_found_label, 3, bold=True)
         page_layout.addWidget(self.scan_found_label)
 
-        self.scan_cancel_button = QPushButton("Прервать")
+        self.scan_cancel_button = QPushButton(tr("Прервать"))
         self.scan_cancel_button.setIcon(
             self.style().standardIcon(
                 QStyle.StandardPixmap.SP_DialogCancelButton
@@ -834,82 +937,91 @@ class ZGeoPanel(QDockWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
-        self.stats_summary_label = QLabel("Файлов: 0 · 0 Б")
+        self.stats_summary_label = QLabel(tr("Файлов: 0 · 0 Б"))
         self._set_font(self.stats_summary_label, 1, bold=True)
         layout.addWidget(self.stats_summary_label)
 
-        note = QLabel("Диаграммы построены по всем найденным файлам.")
-        note.setWordWrap(True)
-        note.setSizePolicy(
+        self.stats_note_label = QLabel(
+            tr("Диаграммы построены по всем найденным файлам.")
+        )
+        self.stats_note_label.setWordWrap(True)
+        self.stats_note_label.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
         )
-        self._set_font(note, -1)
-        self._set_muted(note)
-        layout.addWidget(note)
+        self._set_font(self.stats_note_label, -1)
+        self._set_muted(self.stats_note_label)
+        layout.addWidget(self.stats_note_label)
 
-        size_group = QGroupBox("По размеру")
-        size_layout = QVBoxLayout(size_group)
+        self.size_group = QGroupBox(tr("По размеру"))
+        size_layout = QVBoxLayout(self.size_group)
         size_layout.setContentsMargins(10, 8, 10, 10)
         size_layout.setSpacing(4)
 
-        size_note = QLabel(
-            "Количество файлов в диапазонах размера; справа — суммарный объём."
+        self.size_note_label = QLabel(
+            tr(
+                "Количество файлов в диапазонах размера; справа — "
+                "суммарный объём."
+            )
         )
-        size_note.setWordWrap(True)
-        size_note.setSizePolicy(
+        self.size_note_label.setWordWrap(True)
+        self.size_note_label.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
         )
-        self._set_font(size_note, -1)
-        self._set_muted(size_note)
-        size_layout.addWidget(size_note)
+        self._set_font(self.size_note_label, -1)
+        self._set_muted(self.size_note_label)
+        size_layout.addWidget(self.size_note_label)
 
         self.size_chart = BarChart()
+        self.size_chart.setAccessibleName(tr("Диаграмма по размеру"))
         size_layout.addWidget(self.size_chart)
-        layout.addWidget(size_group)
+        layout.addWidget(self.size_group)
 
-        type_group = QGroupBox("По типу")
-        type_layout = QVBoxLayout(type_group)
+        self.type_group = QGroupBox(tr("По типу"))
+        type_layout = QVBoxLayout(self.type_group)
         type_layout.setContentsMargins(10, 8, 10, 10)
         type_layout.setSpacing(4)
 
-        type_note = QLabel(
-            "Количество файлов по формату; справа — суммарный объём. "
-            "Показаны основные форматы, остальные объединены "
-            "в «Другие форматы»."
+        self.type_note_label = QLabel(
+            tr(
+                "Количество файлов по формату; справа — суммарный объём. "
+                "Показаны основные форматы, остальные объединены "
+                "в «Другие форматы»."
+            )
         )
-        type_note.setWordWrap(True)
-        type_note.setSizePolicy(
+        self.type_note_label.setWordWrap(True)
+        self.type_note_label.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
         )
-        self._set_font(type_note, -1)
-        self._set_muted(type_note)
-        type_layout.addWidget(type_note)
+        self._set_font(self.type_note_label, -1)
+        self._set_muted(self.type_note_label)
+        type_layout.addWidget(self.type_note_label)
 
         self.type_chart = BarChart()
+        self.type_chart.setAccessibleName(tr("Диаграмма по типу"))
         type_layout.addWidget(self.type_chart)
-        layout.addWidget(type_group)
+        layout.addWidget(self.type_group)
 
-        format_group = QGroupBox("Статистика по форматам")
-        format_layout = QVBoxLayout(format_group)
+        self.format_group = QGroupBox(tr("Статистика по форматам"))
+        format_layout = QVBoxLayout(self.format_group)
         format_layout.setContentsMargins(10, 8, 10, 10)
         format_layout.setSpacing(4)
 
-        format_note = QLabel(
-            "Полная статистика по каждому формату. "
-            "Объём учитывает сопутствующие файлы наборов данных."
+        self.format_note_label = QLabel(
+            tr(
+                "Полная статистика по каждому формату. "
+                "Объём учитывает сопутствующие файлы наборов данных."
+            )
         )
-        format_note.setWordWrap(True)
-        format_note.setSizePolicy(
+        self.format_note_label.setWordWrap(True)
+        self.format_note_label.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
         )
-        self._set_font(format_note, -1)
-        self._set_muted(format_note)
-        format_layout.addWidget(format_note)
+        self._set_font(self.format_note_label, -1)
+        self._set_muted(self.format_note_label)
+        format_layout.addWidget(self.format_note_label)
 
         self.format_table = QTableWidget(0, 3)
-        self.format_table.setHorizontalHeaderLabels(
-            ["Формат", "Кол-во", "Полный объем"]
-        )
+        self.format_table.setHorizontalHeaderLabels(self._format_table_headers())
         self.format_table.setEditTriggers(
             QAbstractItemView.EditTrigger.NoEditTriggers
         )
@@ -919,7 +1031,9 @@ class ZGeoPanel(QDockWidget):
         self.format_table.setAlternatingRowColors(True)
         self.format_table.setWordWrap(False)
         self.format_table.verticalHeader().setVisible(False)
-        self.format_table.setAccessibleName("Статистика по форматам")
+        self.format_table.setAccessibleName(
+            tr("Статистика по форматам")
+        )
         self.format_table.setMinimumHeight(110)
 
         format_header = self.format_table.horizontalHeader()
@@ -937,7 +1051,7 @@ class ZGeoPanel(QDockWidget):
 
         export_row = QHBoxLayout()
         export_row.addStretch(1)
-        self.export_formats_button = QPushButton("Экспорт в Excel")
+        self.export_formats_button = QPushButton(tr("Экспорт в Excel"))
         self.export_formats_button.setIcon(
             self.style().standardIcon(
                 QStyle.StandardPixmap.SP_DialogSaveButton
@@ -950,7 +1064,7 @@ class ZGeoPanel(QDockWidget):
         self.export_formats_button.setEnabled(False)
         export_row.addWidget(self.export_formats_button)
         format_layout.addLayout(export_row)
-        layout.addWidget(format_group)
+        layout.addWidget(self.format_group)
 
         self._fit_format_table_height()
 
@@ -968,15 +1082,7 @@ class ZGeoPanel(QDockWidget):
     def _build_tree(self) -> QTreeWidget:
         self.tree = QTreeWidget()
         self.tree.setColumnCount(5)
-        self.tree.setHeaderLabels(
-            [
-                "Файл",
-                "Формат",
-                "Система координат",
-                "Элементов",
-                "Размер",
-            ]
-        )
+        self.tree.setHeaderLabels(self._tree_headers())
         self.tree.setRootIsDecorated(False)
         self.tree.setIndentation(0)
         self.tree.setAlternatingRowColors(True)
@@ -992,7 +1098,9 @@ class ZGeoPanel(QDockWidget):
             QAbstractItemView.EditTrigger.NoEditTriggers
         )
         self.tree.setTextElideMode(Qt.TextElideMode.ElideMiddle)
-        self.tree.setAccessibleName("Найденные пространственные файлы")
+        self.tree.setAccessibleName(
+            tr("Найденные пространственные файлы")
+        )
 
         header = self.tree.header()
         header.setStretchLastSection(False)
@@ -1019,17 +1127,17 @@ class ZGeoPanel(QDockWidget):
         else:
             start_folder = str(Path.home())
 
-        self._set_status("Выбор папки…")
+        self._set_status(tr("Выбор папки…"))
         selected = QFileDialog.getExistingDirectory(
             self,
-            "Выбрать папку с геоданными",
+            tr("Выбрать папку с геоданными"),
             start_folder,
             QFileDialog.Option.ShowDirsOnly,
         )
         if selected:
             self.set_folder(Path(selected))
         else:
-            self._set_status("Выбор папки отменён")
+            self._set_status(tr("Выбор папки отменён"))
 
     def set_folder(self, folder: Path) -> None:
         folder = Path(folder)
@@ -1037,7 +1145,7 @@ class ZGeoPanel(QDockWidget):
             QMessageBox.warning(
                 self,
                 "ZGeo",
-                "Выбранная папка недоступна:\n{}".format(folder),
+                tr("Выбранная папка недоступна:\n{}", folder),
             )
             return
 
@@ -1069,7 +1177,7 @@ class ZGeoPanel(QDockWidget):
             self._file_by_path = {}
             self.tree.clear()
             self.summary_label.setText(
-                self._format_summary("Файлов: 0", 0)
+                self._format_summary(tr("Файлов: 0"), 0)
             )
             self._set_empty(
                 "Папка недоступна",
@@ -1080,7 +1188,7 @@ class ZGeoPanel(QDockWidget):
                 "Каталог был перемещён или удалён. Выберите другую папку.",
             )
             self._update_controls()
-            self._set_status("Папка недоступна")
+            self._set_status(tr("Папка недоступна"))
             return
 
         self._set_busy(True)
@@ -1100,9 +1208,7 @@ class ZGeoPanel(QDockWidget):
         self.scan_file_label.setText(path.name or current_path)
         self.scan_file_label.setToolTip(current_path)
         self.scan_found_label.setText(str(found_count))
-        self._set_status(
-            "Сканирование… найдено: {}".format(found_count)
-        )
+        self._set_status(tr("Сканирование… найдено: {}", found_count))
 
     def _on_scan_finished(
         self, files: object, error: object, cancelled: bool
@@ -1122,13 +1228,13 @@ class ZGeoPanel(QDockWidget):
             self._file_by_path = {}
             self.tree.clear()
             self.summary_label.setText(
-                self._format_summary("Файлов: 0", 0)
+                self._format_summary(tr("Файлов: 0"), 0)
             )
-            self._set_empty("Не удалось прочитать папку", str(error))
-            self._clear_statistics("Нет данных", str(error))
+            self._set_empty(tr("Не удалось прочитать папку"), str(error))
+            self._clear_statistics(tr("Нет данных"), str(error))
             self._set_busy(False)
             self._set_status(
-                "Не удалось прочитать папку: {}".format(error)
+                tr("Не удалось прочитать папку: {}", error)
             )
             return
 
@@ -1145,11 +1251,11 @@ class ZGeoPanel(QDockWidget):
         if cancelled:
             self._show_cancelled_scan(result)
             self._set_status(
-                "Сканирование прервано. Найдено: {}".format(len(result))
+                tr("Сканирование прервано. Найдено: {}", len(result))
             )
         else:
             self._set_status(
-                "Сканирование завершено. Найдено: {}".format(len(result))
+                tr("Сканирование завершено. Найдено: {}", len(result))
             )
 
     def _show_cancelled_scan(self, files: List[GeoFile]) -> None:
@@ -1157,14 +1263,14 @@ class ZGeoPanel(QDockWidget):
             total_size = sum(geo_file.size for geo_file in files)
             self.summary_label.setText(
                 self._format_summary(
-                    "Прервано · найдено: {}".format(len(files)),
+                    tr("Прервано · найдено: {}", len(files)),
                     total_size,
                 )
             )
             return
 
         self.summary_label.setText(
-            self._format_summary("Прервано · найдено: 0", 0)
+            self._format_summary(tr("Прервано · найдено: 0"), 0)
         )
         self._set_empty(
             "Сканирование прервано",
@@ -1183,8 +1289,8 @@ class ZGeoPanel(QDockWidget):
 
         task.cancel()
         self.scan_cancel_button.setEnabled(False)
-        self.scan_cancel_button.setText("Прерывание…")
-        self._set_status("Прерывание сканирования…")
+        self.scan_cancel_button.setText(tr("Прерывание…"))
+        self._set_status(tr("Прерывание сканирования…"))
 
     def shutdown(self) -> None:
         """Остановить фоновые задачи перед удалением панели."""
@@ -1229,15 +1335,9 @@ class ZGeoPanel(QDockWidget):
                 item = self._make_item(geo_file)
                 self.tree.addTopLevelItem(item)
                 self._item_by_path[str(geo_file.path)] = item
-                search_text = " ".join(
-                    (
-                        geo_file.relative_posix,
-                        geo_file.path.name,
-                        geo_file.format.name,
-                        CATEGORY_LABELS.get(geo_file.category, ""),
-                    )
-                ).casefold()
-                self._entries.append((item, search_text))
+                self._entries.append(
+                    (item, self._search_text_for(geo_file))
+                )
         finally:
             self.tree.setUpdatesEnabled(True)
 
@@ -1245,7 +1345,7 @@ class ZGeoPanel(QDockWidget):
 
         if not files:
             self.summary_label.setText(
-                self._format_summary("Файлов: 0", 0)
+                self._format_summary(tr("Файлов: 0"), 0)
             )
             self._set_empty(
                 "Файлы не найдены",
@@ -1256,6 +1356,16 @@ class ZGeoPanel(QDockWidget):
 
         self._apply_filter()
         self._start_details(files)
+
+    def _search_text_for(self, geo_file: GeoFile) -> str:
+        return " ".join(
+            (
+                geo_file.relative_posix,
+                geo_file.path.name,
+                geo_file.format.name,
+                category_label(geo_file.category),
+            )
+        ).casefold()
 
     def _make_item(self, geo_file: GeoFile) -> QTreeWidgetItem:
         values = [
@@ -1275,11 +1385,11 @@ class ZGeoPanel(QDockWidget):
         item.setToolTip(0, str(geo_file.path))
         item.setToolTip(
             1,
-            CATEGORY_LABELS.get(geo_file.category, geo_file.format.name),
+            category_label(geo_file.category),
         )
-        item.setToolTip(2, "Система координат читается…")
-        item.setToolTip(3, "Количество элементов читается…")
-        item.setToolTip(4, "{} Б".format(geo_file.size))
+        item.setToolTip(2, tr("Система координат читается…"))
+        item.setToolTip(3, tr("Количество элементов читается…"))
+        item.setToolTip(4, tr("{} Б", geo_file.size))
         item.setTextAlignment(
             3,
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
@@ -1296,7 +1406,9 @@ class ZGeoPanel(QDockWidget):
             )
             item.setToolTip(
                 5,
-                "Атрибуты не проверены. Нажмите «Проверить атрибуты».",
+                tr(
+                    "Атрибуты не проверены. Нажмите «Проверить атрибуты»."
+                ),
             )
         return item
 
@@ -1341,9 +1453,7 @@ class ZGeoPanel(QDockWidget):
 
     @staticmethod
     def _format_summary(label: str, total_size: int) -> str:
-        return "{} · Общий объем: {}".format(
-            label, format_size(total_size)
-        )
+        return tr("{} · Общий объем: {}", label, format_size(total_size))
 
     def _set_status(self, message: str) -> None:
         self.status_message_label.setText(message)
@@ -1353,7 +1463,7 @@ class ZGeoPanel(QDockWidget):
         total = 0 if self._busy else len(self._entries)
         selected = 0 if self._busy else len(self._selected_files())
         self.selection_label.setText(
-            "Выбрано: {} из {}".format(selected, total)
+            tr("Выбрано: {} из {}", selected, total)
         )
 
     def _update_file_actions(self) -> None:
@@ -1375,7 +1485,7 @@ class ZGeoPanel(QDockWidget):
             return
 
         file_name = selected[0].path.name
-        self._set_status("Получение информации: {}".format(file_name))
+        self._set_status(tr("Получение информации: {}", file_name))
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         QApplication.processEvents()
         error_message = None
@@ -1388,18 +1498,19 @@ class ZGeoPanel(QDockWidget):
 
         if error_message is not None:
             self._set_status(
-                "Не удалось получить информацию: {}".format(file_name)
+                tr("Не удалось получить информацию: {}", file_name)
             )
             QMessageBox.critical(
                 self,
                 "ZGeo",
-                "Не удалось получить информацию о файле:\n{}".format(
-                    error_message
+                tr(
+                    "Не удалось получить информацию о файле:\n{}",
+                    error_message,
                 ),
             )
             return
 
-        self._set_status("Информация: {}".format(file_name))
+        self._set_status(tr("Информация: {}", file_name))
         FileInfoDialog(file_info, self).exec()
 
     def _open_in_explorer(self) -> None:
@@ -1408,24 +1519,25 @@ class ZGeoPanel(QDockWidget):
             return
 
         self._set_status(
-            "Открываю проводник: {}".format(len(selected))
+            tr("Открываю проводник: {}", len(selected))
         )
         errors = reveal_files(
             geo_file.path for geo_file in selected
         )
         if errors:
-            self._set_status("Не удалось открыть проводник")
+            self._set_status(tr("Не удалось открыть проводник"))
             QMessageBox.warning(
                 self,
                 "ZGeo",
-                "Не удалось открыть проводник:\n\n{}".format(
-                    "\n".join(errors)
+                tr(
+                    "Не удалось открыть проводник:\n\n{}",
+                    "\n".join(errors),
                 ),
             )
             return
 
         self._set_status(
-            "Проводник открыт: {}".format(len(selected))
+            tr("Проводник открыт: {}", len(selected))
         )
 
     def _statistics_sheet_data(self):
@@ -1440,11 +1552,11 @@ class ZGeoPanel(QDockWidget):
             total_size = sum(geo_file.size for geo_file in self._files)
             rows.append(["", "", ""])
             rows.append(
-                ["Итого", len(self._files), format_size(total_size)]
+                [tr("Итого"), len(self._files), format_size(total_size)]
             )
         return (
-            "Статистика",
-            ["Формат", "Кол-во", "Полный объем"],
+            tr("Статистика"),
+            self._format_table_headers(),
             rows,
         )
 
@@ -1454,15 +1566,7 @@ class ZGeoPanel(QDockWidget):
             return
 
         include_attributes = self._has_attribute_column()
-        headers = [
-            "Файл",
-            "Формат",
-            "Система координат",
-            "Элементов",
-            "Размер",
-        ]
-        if include_attributes:
-            headers.append("Проблемы с атрибутами")
+        headers = self._tree_headers(include_attributes)
 
         rows = []
         for geo_file in files:
@@ -1490,7 +1594,7 @@ class ZGeoPanel(QDockWidget):
                 count for count in element_counts if count is not None
             )
         total_row = [
-            "Итого файлов: {}".format(len(files)),
+            tr("Итого файлов: {}", len(files)),
             "",
             "",
             total_elements,
@@ -1502,21 +1606,21 @@ class ZGeoPanel(QDockWidget):
         rows.append(total_row)
 
         folder_name = self._folder.name if self._folder else "zgeo"
-        self._set_status("Экспорт списка в Excel…")
+        self._set_status(tr("Экспорт списка в Excel…"))
         exported = export_rows_with_dialog(
             self,
             headers,
             rows,
-            "{}_файлы.xlsx".format(folder_name or "zgeo"),
-            "Файлы",
+            tr("{}_файлы.xlsx", folder_name or "zgeo"),
+            tr("Файлы"),
             extra_sheets=[self._statistics_sheet_data()],
         )
         if exported is not None:
             self._set_status(
-                "Список экспортирован: {}".format(exported.name)
+                tr("Список экспортирован: {}", exported.name)
             )
         else:
-            self._set_status("Экспорт списка отменён")
+            self._set_status(tr("Экспорт списка отменён"))
 
     # ------------------------------------------------------------------
     # Система координат, количество элементов и полный объем
@@ -1532,8 +1636,9 @@ class ZGeoPanel(QDockWidget):
         self._details_processed = 0
         self._size_index_cache = {}
         self._set_status(
-            "Чтение характеристик и объемов: 0 из {}".format(
-                self._details_total
+            tr(
+                "Чтение характеристик и объемов: 0 из {}",
+                self._details_total,
             )
         )
         self._details_timer.start(0)
@@ -1556,8 +1661,10 @@ class ZGeoPanel(QDockWidget):
         self._cancel_details()
         self._update_controls()
         self._set_status(
-            "Чтение характеристик прервано: {} из {}".format(
-                processed, total
+            tr(
+                "Чтение характеристик прервано: {} из {}",
+                processed,
+                total,
             )
         )
 
@@ -1583,8 +1690,9 @@ class ZGeoPanel(QDockWidget):
                 self._update_statistics(self._files)
                 self._update_controls()
                 self._set_status(
-                    "Характеристики и объемы прочитаны. Файлов: {}".format(
-                        self._details_total
+                    tr(
+                        "Характеристики и объемы прочитаны. Файлов: {}",
+                        self._details_total,
                     )
                 )
             return
@@ -1624,7 +1732,8 @@ class ZGeoPanel(QDockWidget):
 
         if self._details_queue:
             self._set_status(
-                "Чтение характеристик и объемов: {} из {} · {}".format(
+                tr(
+                    "Чтение характеристик и объемов: {} из {} · {}",
                     self._details_processed,
                     self._details_total,
                     geo_file.path.name,
@@ -1636,8 +1745,9 @@ class ZGeoPanel(QDockWidget):
             self._update_statistics(self._files)
             self._update_controls()
             self._set_status(
-                "Характеристики и объемы прочитаны. Файлов: {}".format(
-                    self._details_total
+                tr(
+                    "Характеристики и объемы прочитаны. Файлов: {}",
+                    self._details_total,
                 )
             )
 
@@ -1646,17 +1756,17 @@ class ZGeoPanel(QDockWidget):
         item: QTreeWidgetItem, summary: LayerSummary
     ) -> None:
         item.setText(2, summary.crs)
-        item.setToolTip(2, "Система координат: {}".format(summary.crs))
+        item.setToolTip(2, tr("Система координат: {}", summary.crs))
 
         if summary.element_count is None:
             count_text = "—"
-            count_tooltip = "Количество элементов не определено"
+            count_tooltip = tr("Количество элементов не определено")
         else:
             count_text = "{:,}".format(summary.element_count).replace(
                 ",", " "
             )
-            count_tooltip = "Количество элементов: {}".format(
-                summary.element_count
+            count_tooltip = tr(
+                "Количество элементов: {}", summary.element_count
             )
         item.setText(3, count_text)
         item.setToolTip(3, count_tooltip)
@@ -1664,7 +1774,7 @@ class ZGeoPanel(QDockWidget):
     @staticmethod
     def _update_item_size(item: QTreeWidgetItem, size: int) -> None:
         item.setText(4, format_size(size))
-        item.setToolTip(4, "Полный объем набора: {} Б".format(size))
+        item.setToolTip(4, tr("Полный объем набора: {} Б", size))
 
     # ------------------------------------------------------------------
     # Проверка атрибутивных полей
@@ -1678,16 +1788,7 @@ class ZGeoPanel(QDockWidget):
             return
 
         self.tree.setColumnCount(6)
-        self.tree.setHeaderLabels(
-            [
-                "Файл",
-                "Формат",
-                "Система координат",
-                "Элементов",
-                "Размер",
-                "Проблемы с атрибутами",
-            ]
-        )
+        self.tree.setHeaderLabels(self._tree_headers(True))
         header = self.tree.header()
         header.setSectionResizeMode(
             5, QHeaderView.ResizeMode.ResizeToContents
@@ -1696,20 +1797,26 @@ class ZGeoPanel(QDockWidget):
         if header_item is not None:
             header_item.setToolTip(
                 5,
-                "Да — в именах полей есть нелатинские символы; "
-                "Нет — проблем не найдено; — — векторных полей нет.",
+                tr(
+                    "Да — в именах полей есть нелатинские символы; "
+                    "Нет — проблем не найдено; — — векторных полей нет."
+                ),
             )
         for item, _search_text in self._entries:
             self._set_attribute_cell(
-                item, "…", "Проверка атрибутов…"
+                item, "…", tr("Проверка атрибутов…")
             )
 
     @staticmethod
     def _set_attribute_cell(
-        item: QTreeWidgetItem, text: str, tooltip: str
+        item: QTreeWidgetItem,
+        text: str,
+        tooltip: str,
+        issue: Optional[bool] = None,
     ) -> None:
         item.setText(5, text)
         item.setToolTip(5, tooltip)
+        item.setData(5, Qt.ItemDataRole.UserRole, issue)
         item.setTextAlignment(
             5,
             Qt.AlignmentFlag.AlignCenter
@@ -1725,15 +1832,18 @@ class ZGeoPanel(QDockWidget):
             return
 
         self._attribute_checked = False
+        self._attribute_interrupted = False
+        self._attribute_checks.clear()
+        self._attribute_unavailable.clear()
         self._set_problems_filter_available(False)
-        self.problems_label.setText("Проблемных файлов: 0")
-        self.problems_label.setToolTip("Идёт проверка атрибутов…")
+        self.problems_label.setText(tr("Проблемных файлов: 0"))
+        self.problems_label.setToolTip(tr("Идёт проверка атрибутов…"))
         self.problems_label.setVisible(True)
 
         self._ensure_attribute_column()
         for item, _search_text in self._entries:
             self._set_attribute_cell(
-                item, "…", "Проверка атрибутов…"
+                item, "…", tr("Проверка атрибутов…")
             )
 
         candidates = [
@@ -1747,10 +1857,14 @@ class ZGeoPanel(QDockWidget):
                 continue
             item = self._item_by_path.get(str(geo_file.path))
             if item is not None:
+                self._attribute_unavailable.add(
+                    str(geo_file.path)
+                )
                 self._set_attribute_cell(
                     item,
                     "—",
-                    "Векторные атрибутивные поля не найдены.",
+                    tr("Векторные атрибутивные поля не найдены."),
+                    False,
                 )
 
         if not candidates:
@@ -1760,7 +1874,7 @@ class ZGeoPanel(QDockWidget):
             self._set_problems_filter_available(True)
             self._apply_filter()
             self._set_status(
-                "Нет векторных файлов для проверки атрибутов"
+                tr("Нет векторных файлов для проверки атрибутов")
             )
             self._update_file_actions()
             self._update_cancel_button()
@@ -1772,14 +1886,14 @@ class ZGeoPanel(QDockWidget):
         self._attribute_issue_count = 0
         self._attribute_running = True
         self.check_attributes_button.setToolTip(
-            "Проверка атрибутов выполняется…"
+            tr("Проверка атрибутов выполняется…")
         )
         self._pause_details()
         self._apply_filter()
         self._update_file_actions()
         self._update_cancel_button()
         self._set_status(
-            "Проверка атрибутов: 0 из {}".format(self._attribute_total)
+            tr("Проверка атрибутов: 0 из {}", self._attribute_total)
         )
         self._attribute_timer.start(0)
 
@@ -1796,7 +1910,9 @@ class ZGeoPanel(QDockWidget):
         except Exception:
             check = AttributeCheck((), ())
 
-        item = self._item_by_path.get(str(geo_file.path))
+        path_key = str(geo_file.path)
+        self._attribute_checks[path_key] = check
+        item = self._item_by_path.get(path_key)
         if item is not None:
             self._update_item_attributes(item, check)
 
@@ -1806,7 +1922,8 @@ class ZGeoPanel(QDockWidget):
 
         if self._attribute_queue:
             self._set_status(
-                "Проверка атрибутов: {} из {} · {}".format(
+                tr(
+                    "Проверка атрибутов: {} из {} · {}",
                     self._attribute_processed,
                     self._attribute_total,
                     geo_file.path.name,
@@ -1821,33 +1938,39 @@ class ZGeoPanel(QDockWidget):
         item: QTreeWidgetItem, check: AttributeCheck
     ) -> None:
         if check.non_latin_names:
-            item.setText(5, "Да")
+            item.setText(5, tr("Да"))
             item.setToolTip(
                 5,
-                "Нелатинские имена полей:\n{}".format(
-                    "\n".join(check.non_latin_names)
+                tr(
+                    "Нелатинские имена полей:\n{}",
+                    "\n".join(check.non_latin_names),
                 ),
             )
+            item.setData(5, Qt.ItemDataRole.UserRole, True)
         elif check.field_names:
-            item.setText(5, "Нет")
-            item.setToolTip(5, "Проблем с именами полей не найдено.")
-        else:
-            item.setText(5, "—")
+            item.setText(5, tr("Нет"))
             item.setToolTip(
-                5, "Векторные атрибутивные поля не найдены."
+                5, tr("Проблем с именами полей не найдено.")
             )
+            item.setData(5, Qt.ItemDataRole.UserRole, False)
+        else:
+            item.setText(5, tr("—"))
+            item.setToolTip(
+                5, tr("Векторные атрибутивные поля не найдены.")
+            )
+            item.setData(5, Qt.ItemDataRole.UserRole, False)
 
     def _finish_attribute_check(self) -> None:
         total = self._attribute_total
         issues = self._attribute_issue_count
         self._attribute_running = False
         self._attribute_checked = True
+        self._attribute_interrupted = False
         self._attribute_queue.clear()
         self.check_attributes_button.setToolTip(
-            ATTRIBUTE_CHECK_TOOLTIP
+            tr(ATTRIBUTE_CHECK_TOOLTIP)
         )
         self._update_problems_summary()
-        self.problems_label.setToolTip("")
         self._set_problems_filter_available(True)
         self._update_file_actions()
         self._resume_details()
@@ -1856,14 +1979,17 @@ class ZGeoPanel(QDockWidget):
 
         if issues:
             self._set_status(
-                "Атрибуты проверены: файлов {} · с проблемами {}".format(
-                    total, issues
+                tr(
+                    "Атрибуты проверены: файлов {} · с проблемами {}",
+                    total,
+                    issues,
                 )
             )
         else:
             self._set_status(
-                "Атрибуты проверены: проблем не найдено. Файлов: {}".format(
-                    total
+                tr(
+                    "Атрибуты проверены: проблем не найдено. Файлов: {}",
+                    total,
                 )
             )
 
@@ -1878,24 +2004,24 @@ class ZGeoPanel(QDockWidget):
         self._attribute_queue.clear()
         self._attribute_running = False
         self._attribute_checked = processed > 0
+        self._attribute_interrupted = self._attribute_checked
         self.check_attributes_button.setToolTip(
-            ATTRIBUTE_CHECK_TOOLTIP
+            tr(ATTRIBUTE_CHECK_TOOLTIP)
         )
         self._update_problems_summary()
-        if self._attribute_checked:
-            self.problems_label.setToolTip(
-                "Проверка прервана: обработано {} из {} файлов".format(
-                    processed, total
-                )
-            )
         self._set_problems_filter_available(self._attribute_checked)
         self._resume_details()
         self._update_file_actions()
         self._update_cancel_button()
         self._apply_filter()
         self._set_status(
-            "Проверка атрибутов прервана: обработано {} из {} · "
-            "проблем {}".format(processed, total, issues)
+            tr(
+                "Проверка атрибутов прервана: обработано {} из {} · "
+                "проблем {}",
+                processed,
+                total,
+                issues,
+            )
         )
 
     def _cancel_attribute_check(self) -> None:
@@ -1906,10 +2032,13 @@ class ZGeoPanel(QDockWidget):
         self._attribute_processed = 0
         self._attribute_issue_count = 0
         self._attribute_checked = False
+        self._attribute_interrupted = False
+        self._attribute_checks.clear()
+        self._attribute_unavailable.clear()
         self._reset_problems_filter()
         if hasattr(self, "check_attributes_button"):
             self.check_attributes_button.setToolTip(
-                ATTRIBUTE_CHECK_TOOLTIP
+                tr(ATTRIBUTE_CHECK_TOOLTIP)
             )
         self._update_cancel_button()
 
@@ -1927,7 +2056,7 @@ class ZGeoPanel(QDockWidget):
         if not hasattr(self, "problems_label"):
             return
         self._set_problems_filter_available(False)
-        self.problems_label.setText("Проблемных файлов: 0")
+        self.problems_label.setText(tr("Проблемных файлов: 0"))
         self.problems_label.setToolTip("")
         self.problems_label.setVisible(False)
 
@@ -1935,8 +2064,21 @@ class ZGeoPanel(QDockWidget):
         if not hasattr(self, "problems_label"):
             return
         self.problems_label.setText(
-            "Проблемных файлов: {}".format(self._attribute_issue_count)
+            tr("Проблемных файлов: {}", self._attribute_issue_count)
         )
+        if (
+            self._attribute_interrupted
+            and self._attribute_processed < self._attribute_total
+        ):
+            self.problems_label.setToolTip(
+                tr(
+                    "Проверка прервана: обработано {} из {} файлов",
+                    self._attribute_processed,
+                    self._attribute_total,
+                )
+            )
+        else:
+            self.problems_label.setToolTip("")
         self.problems_label.setVisible(
             self._attribute_checked or self._attribute_running
         )
@@ -1954,9 +2096,9 @@ class ZGeoPanel(QDockWidget):
         if not active:
             return
         if self._attribute_running:
-            tooltip = "Прервать проверку атрибутов"
+            tooltip = tr("Прервать проверку атрибутов")
         else:
-            tooltip = "Прервать чтение характеристик"
+            tooltip = tr("Прервать чтение характеристик")
         self.cancel_task_button.setToolTip(tooltip)
 
     def _cancel_long_operation(self) -> None:
@@ -1980,8 +2122,10 @@ class ZGeoPanel(QDockWidget):
         total_size = sum(geo_file.size for geo_file in files)
         total_count = len(files)
         self.stats_summary_label.setText(
-            "Файлов: {} · {}".format(
-                total_count, format_size(total_size)
+            tr(
+                "Файлов: {} · {}",
+                total_count,
+                format_size(total_size),
             )
         )
 
@@ -1996,7 +2140,8 @@ class ZGeoPanel(QDockWidget):
                         bucket.count, format_size(bucket.total_size)
                     ),
                     color=SIZE_CHART_COLOR,
-                    tooltip="{}: {} файлов ({:.0f}%), {}".format(
+                    tooltip=tr(
+                        "{}: {} файлов ({:.0f}%), {}",
                         bucket.label,
                         bucket.count,
                         percent,
@@ -2011,7 +2156,8 @@ class ZGeoPanel(QDockWidget):
             build_type_distribution(files, limit=8)
         ):
             percent = 100.0 * type_stat.count / total_count
-            tooltip = "{}: {} файлов ({:.0f}%), {}".format(
+            tooltip = tr(
+                "{}: {} файлов ({:.0f}%), {}",
                 type_stat.name,
                 type_stat.count,
                 percent,
@@ -2040,7 +2186,7 @@ class ZGeoPanel(QDockWidget):
             format_item.setToolTip(
                 "{} · {}".format(
                     type_stat.name,
-                    CATEGORY_LABELS.get(type_stat.category, ""),
+                    category_label(type_stat.category),
                 ).rstrip(" ·")
             )
 
@@ -2050,7 +2196,9 @@ class ZGeoPanel(QDockWidget):
             count_item.setTextAlignment(
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
             )
-            count_item.setToolTip("Файлов: {}".format(type_stat.count))
+            count_item.setToolTip(
+                tr("Файлов: {}", type_stat.count)
+            )
             count_item.setData(
                 Qt.ItemDataRole.UserRole, type_stat.count
             )
@@ -2059,7 +2207,9 @@ class ZGeoPanel(QDockWidget):
             size_item.setTextAlignment(
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
             )
-            size_item.setToolTip("{} Б".format(type_stat.total_size))
+            size_item.setToolTip(
+                tr("{} Б", type_stat.total_size)
+            )
 
             self.format_table.setItem(row, 0, format_item)
             self.format_table.setItem(row, 1, count_item)
@@ -2077,25 +2227,25 @@ class ZGeoPanel(QDockWidget):
         )
         summary_rows = [
             ["", "", ""],
-            ["Итого", total_count, format_size(total_size)],
+            [tr("Итого"), total_count, format_size(total_size)],
         ]
-        self._set_status("Экспорт статистики в Excel…")
+        self._set_status(tr("Экспорт статистики в Excel…"))
         exported = export_table_with_dialog(
             self,
             self.format_table,
-            "{}_форматы.xlsx".format(folder_name or "zgeo"),
-            "Форматы",
+            tr("{}_форматы.xlsx", folder_name or "zgeo"),
+            tr("Форматы"),
             summary_rows=summary_rows,
         )
         if exported is not None:
             self._set_status(
-                "Статистика экспортирована: {}".format(exported.name)
+                tr("Статистика экспортирована: {}", exported.name)
             )
         else:
-            self._set_status("Экспорт статистики отменён")
+            self._set_status(tr("Экспорт статистики отменён"))
 
     def _clear_statistics(self, title: str, hint: str) -> None:
-        self.stats_summary_label.setText("Файлов: 0 · 0 Б")
+        self.stats_summary_label.setText(tr("Файлов: 0 · 0 Б"))
         self.size_chart.set_rows([])
         self.type_chart.set_rows([])
         self.format_table.setRowCount(0)
@@ -2104,8 +2254,10 @@ class ZGeoPanel(QDockWidget):
         self._set_stats_empty(title, hint)
 
     def _set_stats_empty(self, title: str, hint: str) -> None:
-        self.stats_empty_title_label.setText(title)
-        self.stats_empty_hint_label.setText(hint)
+        self._stats_empty_title_source = title
+        self._stats_empty_hint_source = hint
+        self.stats_empty_title_label.setText(tr(title))
+        self.stats_empty_hint_label.setText(tr(hint))
         self.stats_stack.setCurrentWidget(self.stats_stack.widget(0))
 
     # ------------------------------------------------------------------
@@ -2129,18 +2281,22 @@ class ZGeoPanel(QDockWidget):
         query = self.filter_edit.text().strip()
         if query:
             self._set_status(
-                "Фильтр: показано {} из {}".format(
-                    visible, len(self._entries)
+                tr(
+                    "Фильтр: показано {} из {}",
+                    visible,
+                    len(self._entries),
                 )
             )
         elif self.problems_only_checkbox.isChecked():
             self._set_status(
-                "Фильтр «Только проблемные»: показано {} из {}".format(
-                    visible, len(self._entries)
+                tr(
+                    "Фильтр «Только проблемные»: показано {} из {}",
+                    visible,
+                    len(self._entries),
                 )
             )
         else:
-            self._set_status("Фильтр очищен")
+            self._set_status(tr("Фильтр очищен"))
 
     def _apply_filter(self) -> None:
         if self._folder is None:
@@ -2154,7 +2310,9 @@ class ZGeoPanel(QDockWidget):
         for item, search_text in self._entries:
             hidden = bool(query) and query not in search_text
             if not hidden and problems_only:
-                hidden = item.text(5) != "Да"
+                hidden = (
+                    item.data(5, Qt.ItemDataRole.UserRole) is not True
+                )
             item.setHidden(hidden)
             if not hidden:
                 visible += 1
@@ -2165,7 +2323,7 @@ class ZGeoPanel(QDockWidget):
 
         if not self._entries:
             self.summary_label.setText(
-                self._format_summary("Файлов: 0", 0)
+                self._format_summary(tr("Файлов: 0"), 0)
             )
             self.stack.setCurrentWidget(self.stack.widget(0))
             return
@@ -2182,8 +2340,10 @@ class ZGeoPanel(QDockWidget):
         if query or problems_only:
             self.summary_label.setText(
                 self._format_summary(
-                    "Показано: {} из {}".format(
-                        visible, len(self._entries)
+                    tr(
+                        "Показано: {} из {}",
+                        visible,
+                        len(self._entries),
                     ),
                     visible_size,
                 )
@@ -2191,7 +2351,7 @@ class ZGeoPanel(QDockWidget):
         else:
             self.summary_label.setText(
                 self._format_summary(
-                    "Файлов: {}".format(len(self._entries)),
+                    tr("Файлов: {}", len(self._entries)),
                     visible_size,
                 )
             )
@@ -2201,13 +2361,13 @@ class ZGeoPanel(QDockWidget):
     def _set_busy(self, busy: bool) -> None:
         self._busy = busy
         if busy:
-            self.summary_label.setText("Сканирование…")
-            self._set_status("Сканирование папки…")
+            self.summary_label.setText(tr("Сканирование…"))
+            self._set_status(tr("Сканирование папки…"))
             self.scan_file_label.setText("—")
             self.scan_file_label.setToolTip("")
             self.scan_found_label.setText("0")
             self.scan_progress.setRange(0, 0)
-            self.scan_cancel_button.setText("Прервать")
+            self.scan_cancel_button.setText(tr("Прервать"))
             self.scan_cancel_button.setEnabled(True)
             self.stack.setCurrentWidget(self.scan_page)
             self._set_stats_empty(
@@ -2216,7 +2376,7 @@ class ZGeoPanel(QDockWidget):
             )
         else:
             self.scan_cancel_button.setEnabled(False)
-            self.scan_cancel_button.setText("Прервать")
+            self.scan_cancel_button.setText(tr("Прервать"))
         self._update_controls()
         if busy:
             QApplication.processEvents()
@@ -2235,9 +2395,333 @@ class ZGeoPanel(QDockWidget):
         self._update_file_actions()
         self._update_cancel_button()
 
+    def _retranslate_ui(self) -> None:
+        """Обновить все подписи интерфейса без пересоздания панели."""
+
+        self.setWindowTitle(tr("ZGeo — геоданные"))
+        self._update_language_button()
+
+        self.brand_subtitle_label.setText(
+            tr("Каталог пространственных данных")
+        )
+        version = get_plugin_version()
+        self.version_label.setText(tr("Версия {}", version))
+        self.version_label.setToolTip(
+            tr("Версия плагина ZGeo: {}", version)
+        )
+        self.folder_caption_label.setText(tr("ПАПКА"))
+        if self._folder is None:
+            self.folder_name_label.setText(tr("Папка не выбрана"))
+            self.folder_path_label.setText(
+                tr("Выберите каталог на диске")
+            )
+        self.choose_button.setText(tr("Выбрать папку"))
+        self.refresh_button.setToolTip(tr("Пересканировать папку"))
+
+        self.tabs.setTabText(0, tr("Файлы"))
+        self.tabs.setTabText(1, tr("Статистика"))
+        self.tabs.setTabText(2, tr("Настройки"))
+        self.tabs.setTabToolTip(
+            0, tr("Найденные пространственные файлы")
+        )
+        self.tabs.setTabToolTip(
+            1, tr("Диаграммы по размеру и типу файлов")
+        )
+        self.tabs.setTabToolTip(
+            2, tr("Форматы файлов, которые нужно искать")
+        )
+
+        self.filter_edit.setPlaceholderText(
+            tr("Фильтр по имени, формату или пути")
+        )
+        self.problems_only_checkbox.setText(tr("Только проблемные"))
+        self.problems_only_checkbox.setToolTip(
+            tr(
+                "Показывать только файлы, у которых проверка атрибутов "
+                "нашла проблемы"
+            )
+        )
+
+        self.info_button.setToolTip(tr("Информация"))
+        self.info_button.setAccessibleName(tr("Информация"))
+        self.explorer_button.setToolTip(tr("Открыть в проводнике"))
+        self.explorer_button.setAccessibleName(
+            tr("Открыть в проводнике")
+        )
+        self.export_list_button.setToolTip(tr("Экспорт в Excel"))
+        self.export_list_button.setAccessibleName(
+            tr("Экспорт в Excel")
+        )
+        self.check_attributes_button.setAccessibleName(
+            tr("Проверить атрибуты")
+        )
+        if not self._attribute_running:
+            self.check_attributes_button.setToolTip(
+                tr(ATTRIBUTE_CHECK_TOOLTIP)
+            )
+        else:
+            self.check_attributes_button.setToolTip(
+                tr("Проверка атрибутов выполняется…")
+            )
+        self.cancel_task_button.setToolTip(
+            tr("Прервать длительную операцию")
+        )
+        self.cancel_task_button.setAccessibleName(
+            tr("Прервать операцию")
+        )
+
+        self._retranslate_scan_page()
+        self._retranslate_stats_page()
+        self._retranslate_settings_page()
+        self._retranslate_tree()
+        self._retranslate_status()
+
+        if self._busy:
+            pass
+        elif self._files:
+            self._update_statistics(self._files)
+            self._apply_filter()
+        elif self._folder is not None:
+            self.summary_label.setText(
+                self._format_summary(tr("Файлов: 0"), 0)
+            )
+            self._clear_statistics(
+                "Файлы не найдены",
+                "После сканирования диаграммы появятся здесь.",
+            )
+        else:
+            self.summary_label.setText(
+                tr("Файлов: 0 · Общий объем: 0 Б")
+            )
+            self._set_stats_empty(
+                "Статистика пуста",
+                "Выберите папку и выполните сканирование. Здесь появятся "
+                "диаграммы по размеру и типу файлов.",
+            )
+
+        self._retranslate_empty_pages()
+        self._update_problems_summary()
+        self._update_selection_status()
+        self._update_file_actions()
+        self._update_cancel_button()
+
+    def _retranslate_scan_page(self) -> None:
+        self.scan_title_label.setText(tr("Сканирование папки…"))
+        self.scan_hint_label.setText(
+            tr("Просматриваем файлы, включая вложенные папки.")
+        )
+        self.scan_file_caption.setText(tr("Имя файла"))
+        self.scan_found_caption.setText(tr("Найдено"))
+        if self._busy and not self.scan_cancel_button.isEnabled():
+            self.scan_cancel_button.setText(tr("Прерывание…"))
+        else:
+            self.scan_cancel_button.setText(tr("Прервать"))
+
+    def _retranslate_stats_page(self) -> None:
+        self.stats_note_label.setText(
+            tr("Диаграммы построены по всем найденным файлам.")
+        )
+        self.size_group.setTitle(tr("По размеру"))
+        self.size_chart.setAccessibleName(tr("Диаграмма по размеру"))
+        self.size_note_label.setText(
+            tr(
+                "Количество файлов в диапазонах размера; справа — "
+                "суммарный объём."
+            )
+        )
+        self.type_group.setTitle(tr("По типу"))
+        self.type_chart.setAccessibleName(tr("Диаграмма по типу"))
+        self.type_note_label.setText(
+            tr(
+                "Количество файлов по формату; справа — суммарный объём. "
+                "Показаны основные форматы, остальные объединены "
+                "в «Другие форматы»."
+            )
+        )
+        self.format_group.setTitle(tr("Статистика по форматам"))
+        self.format_note_label.setText(
+            tr(
+                "Полная статистика по каждому формату. "
+                "Объём учитывает сопутствующие файлы наборов данных."
+            )
+        )
+        self.format_table.setHorizontalHeaderLabels(
+            self._format_table_headers()
+        )
+        self.format_table.setAccessibleName(
+            tr("Статистика по форматам")
+        )
+        self.export_formats_button.setText(tr("Экспорт в Excel"))
+
+    def _retranslate_settings_page(self) -> None:
+        self.select_all_button.setText(tr("Выбрать все"))
+        self.select_all_button.setToolTip(tr("Отметить все форматы"))
+        self.clear_all_button.setText(tr("Сбросить все"))
+        self.clear_all_button.setToolTip(tr("Снять все отметки"))
+        self.only_vector_button.setText(tr("Только вектор"))
+        self.only_vector_button.setToolTip(
+            tr("Оставить только векторные форматы")
+        )
+        self.only_raster_button.setText(tr("Только растр"))
+        self.only_raster_button.setToolTip(
+            tr("Оставить только растровые форматы")
+        )
+        self.settings_hint_label.setText(
+            tr(
+                "Отметьте форматы, которые должны попадать в каталог. "
+                "Изменения применяются при следующем сканировании."
+            )
+        )
+        for category, group_box in self._category_group_boxes.items():
+            group_box.setTitle(category_label(category))
+        for group in get_format_groups():
+            checkbox = self._format_checkboxes.get(group.name)
+            if checkbox is None:
+                continue
+            checkbox.setText(self._format_checkbox_text(group))
+            checkbox.setToolTip(
+                tr("Расширения: {}", ", ".join(group.extensions))
+            )
+
+    def _retranslate_tree(self) -> None:
+        include_attributes = self._has_attribute_column()
+        self.tree.setHeaderLabels(
+            self._tree_headers(include_attributes)
+        )
+        self.tree.setAccessibleName(
+            tr("Найденные пространственные файлы")
+        )
+        if include_attributes:
+            header_item = self.tree.headerItem()
+            if header_item is not None:
+                header_item.setToolTip(
+                    5,
+                    tr(
+                        "Да — в именах полей есть нелатинские символы; "
+                        "Нет — проблем не найдено; — — векторных полей нет."
+                    ),
+                )
+
+        new_entries = []
+        for item, _search_text in self._entries:
+            path_key = item.data(0, Qt.ItemDataRole.UserRole)
+            geo_file = self._file_by_path.get(str(path_key))
+            if geo_file is None:
+                continue
+            item.setToolTip(1, category_label(geo_file.category))
+
+            crs_text = item.text(2)
+            if crs_text in ("Разные", "Mixed"):
+                crs_text = tr("Разные")
+            elif crs_text in ("Не определена", "Undefined"):
+                crs_text = tr("Не определена")
+            item.setText(2, crs_text)
+            if crs_text == "…":
+                item.setToolTip(
+                    2, tr("Система координат читается…")
+                )
+            else:
+                item.setToolTip(
+                    2, tr("Система координат: {}", crs_text)
+                )
+
+            count_text = item.text(3)
+            if count_text == "…":
+                item.setToolTip(
+                    3, tr("Количество элементов читается…")
+                )
+            elif count_text == "—":
+                item.setToolTip(
+                    3, tr("Количество элементов не определено")
+                )
+            else:
+                item.setToolTip(
+                    3,
+                    tr("Количество элементов: {}", count_text),
+                )
+
+            item.setText(4, format_size(geo_file.size))
+            item.setToolTip(
+                4, tr("Полный объем набора: {} Б", geo_file.size)
+            )
+            if include_attributes:
+                path_text = str(geo_file.path)
+                if path_text in self._attribute_checks:
+                    self._update_item_attributes(
+                        item, self._attribute_checks[path_text]
+                    )
+                elif path_text in self._attribute_unavailable:
+                    self._set_attribute_cell(
+                        item,
+                        "—",
+                        tr("Векторные атрибутивные поля не найдены."),
+                        False,
+                    )
+                elif self._attribute_running or self._attribute_checked:
+                    self._set_attribute_cell(
+                        item,
+                        "…",
+                        tr("Проверка атрибутов…"),
+                    )
+                else:
+                    self._set_attribute_cell(
+                        item,
+                        "—",
+                        tr(
+                            "Атрибуты не проверены. Нажмите «Проверить "
+                            "атрибуты»."
+                        ),
+                        False,
+                    )
+            new_entries.append(
+                (item, self._search_text_for(geo_file))
+            )
+        self._entries = new_entries
+
+    def _retranslate_status(self) -> None:
+        if self._busy:
+            self._set_status(
+                tr(
+                    "Сканирование… найдено: {}",
+                    self.scan_found_label.text(),
+                )
+            )
+        elif self._attribute_running:
+            self._set_status(
+                tr(
+                    "Проверка атрибутов: {} из {}",
+                    self._attribute_processed,
+                    self._attribute_total,
+                )
+            )
+        elif self._details_queue or self._details_timer.isActive():
+            self._set_status(
+                tr(
+                    "Чтение характеристик и объемов: {} из {}",
+                    self._details_processed,
+                    self._details_total,
+                )
+            )
+        else:
+            self._set_status(tr("Готово"))
+
+    def _retranslate_empty_pages(self) -> None:
+        if self.stack.currentWidget() is self.stack.widget(0):
+            self._set_empty(
+                self._empty_title_source,
+                self._empty_hint_source,
+            )
+        if self.stats_stack.currentWidget() is self.stats_stack.widget(0):
+            self._set_stats_empty(
+                self._stats_empty_title_source,
+                self._stats_empty_hint_source,
+            )
+
     def _set_empty(self, title: str, hint: str) -> None:
-        self.empty_title_label.setText(title)
-        self.empty_hint_label.setText(hint)
+        self._empty_title_source = title
+        self._empty_hint_source = hint
+        self.empty_title_label.setText(tr(title))
+        self.empty_hint_label.setText(tr(hint))
         self.stack.setCurrentWidget(self.stack.widget(0))
 
     def _set_muted(self, widget: QWidget) -> None:

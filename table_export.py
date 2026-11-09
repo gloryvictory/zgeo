@@ -10,6 +10,7 @@ from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox, QTableWidget
 
 from .excel_export import CellValue, SheetSpec, write_xlsx_sheets
 from .explorer import reveal_files
+from .i18n import tr
 
 
 def export_table_with_dialog(
@@ -65,7 +66,7 @@ def export_rows_with_dialog(
     start_dir = Path(documents) if documents else Path.home()
     selected, _filter = QFileDialog.getSaveFileName(
         parent,
-        "Экспорт в Excel",
+        tr("Экспорт в Excel"),
         str(start_dir / default_filename),
         "Excel (*.xlsx)",
     )
@@ -86,7 +87,7 @@ def export_rows_with_dialog(
         QMessageBox.critical(
             parent,
             "ZGeo",
-            "Не удалось экспортировать таблицу:\n{}".format(error),
+            tr("Не удалось экспортировать таблицу:\n{}", error),
         )
         return None
 
@@ -95,9 +96,11 @@ def export_rows_with_dialog(
         QMessageBox.warning(
             parent,
             "ZGeo",
-            "Таблица экспортирована:\n{}\n\n"
-            "Не удалось открыть проводник:\n{}".format(
-                path, "\n".join(errors)
+            tr(
+                "Таблица экспортирована:\n{}\n\n"
+                "Не удалось открыть проводник:\n{}",
+                path,
+                "\n".join(errors),
             ),
         )
     return path

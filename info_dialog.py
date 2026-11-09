@@ -29,6 +29,7 @@ from qgis.PyQt.QtWidgets import (
 
 from .file_info import FieldInfo, FileInfo, RasterLayerInfo, VectorLayerInfo
 from .formatting import format_size
+from .i18n import tr
 from .table_export import export_table_with_dialog
 
 ICON_PATH = Path(__file__).with_name("icon.svg")
@@ -43,7 +44,7 @@ class FileInfoDialog(QDialog):
         super().__init__(parent)
         self._info = file_info
 
-        self.setWindowTitle("Информация — {}".format(file_info.path.name))
+        self.setWindowTitle(tr("Информация — {}", file_info.path.name))
         self.setWindowIcon(QIcon(str(ICON_PATH)))
         self.resize(860, 660)
         self.setMinimumSize(680, 480)
@@ -93,7 +94,7 @@ class FileInfoDialog(QDialog):
         if pages:
             if len(pages) > 1:
                 layer_row = QHBoxLayout()
-                layer_caption = QLabel("Слой:")
+                layer_caption = QLabel(tr("Слой:"))
                 self._set_font(layer_caption, 0, bold=True)
                 layer_row.addWidget(layer_caption)
 
@@ -111,9 +112,11 @@ class FileInfoDialog(QDialog):
                 combo.currentIndexChanged.connect(stack.setCurrentIndex)
         else:
             message = QLabel(
-                "Не удалось получить пространственные сведения. "
-                "Файл может быть повреждён или его формат "
-                "не поддерживается установленными провайдерами QGIS."
+                tr(
+                    "Не удалось получить пространственные сведения. "
+                    "Файл может быть повреждён или его формат "
+                    "не поддерживается установленными провайдерами QGIS."
+                )
             )
             message.setWordWrap(True)
             message.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -144,11 +147,11 @@ class FileInfoDialog(QDialog):
 
         for layer in self._info.vector_layers:
             pages.append(self._build_vector_page(layer))
-            labels.append("Вектор · {}".format(layer.name))
+            labels.append(tr("Вектор · {}", layer.name))
 
         for layer in self._info.raster_layers:
             pages.append(self._build_raster_page(layer))
-            labels.append("Растр · {}".format(layer.name))
+            labels.append(tr("Растр · {}", layer.name))
 
         return pages, labels
 
@@ -163,24 +166,28 @@ class FileInfoDialog(QDialog):
         grid.setHorizontalSpacing(14)
         grid.setVerticalSpacing(4)
         row = 0
-        row = self._add_info_row(grid, row, "Слой", layer.name)
+        row = self._add_info_row(grid, row, tr("Слой"), layer.name)
         row = self._add_info_row(
-            grid, row, "Система координат", layer.crs
+            grid, row, tr("Система координат"), layer.crs
         )
         row = self._add_info_row(
             grid,
             row,
-            "Количество объектов",
+            tr("Количество объектов"),
             self._format_feature_count(layer.feature_count),
         )
-        row = self._add_info_row(grid, row, "Геометрия", layer.geometry)
-        row = self._add_info_row(grid, row, "Экстент", layer.extent)
-        row = self._add_info_row(grid, row, "Провайдер", layer.provider)
+        row = self._add_info_row(
+            grid, row, tr("Геометрия"), layer.geometry
+        )
+        row = self._add_info_row(grid, row, tr("Экстент"), layer.extent)
+        row = self._add_info_row(
+            grid, row, tr("Провайдер"), layer.provider
+        )
         grid.setColumnStretch(1, 1)
         layout.addLayout(grid)
 
         fields_caption = QLabel(
-            "Атрибутивные поля ({})".format(len(layer.fields))
+            tr("Атрибутивные поля ({})", len(layer.fields))
         )
         self._set_font(fields_caption, 0, bold=True)
         layout.addWidget(fields_caption)
@@ -191,7 +198,7 @@ class FileInfoDialog(QDialog):
 
             export_row = QHBoxLayout()
             export_row.addStretch(1)
-            export_button = QPushButton("Экспорт в Excel")
+            export_button = QPushButton(tr("Экспорт в Excel"))
             export_button.setIcon(
                 self.style().standardIcon(
                     QStyle.StandardPixmap.SP_DialogSaveButton
@@ -206,7 +213,7 @@ class FileInfoDialog(QDialog):
             export_row.addWidget(export_button)
             layout.addLayout(export_row)
         else:
-            empty = QLabel("Атрибутивные поля отсутствуют.")
+            empty = QLabel(tr("Атрибутивные поля отсутствуют."))
             empty.setWordWrap(True)
             self._set_muted(empty)
             layout.addWidget(empty, 1)
@@ -217,8 +224,8 @@ class FileInfoDialog(QDialog):
         export_table_with_dialog(
             self,
             table,
-            "{}_поля.xlsx".format(self._info.path.stem),
-            "Атрибутивные поля",
+            tr("{}_поля.xlsx", self._info.path.stem),
+            tr("Атрибутивные поля"),
         )
 
     def _build_raster_page(self, layer: RasterLayerInfo) -> QWidget:
@@ -231,24 +238,26 @@ class FileInfoDialog(QDialog):
         grid.setHorizontalSpacing(14)
         grid.setVerticalSpacing(4)
         row = 0
-        row = self._add_info_row(grid, row, "Слой", layer.name)
+        row = self._add_info_row(grid, row, tr("Слой"), layer.name)
         row = self._add_info_row(
-            grid, row, "Система координат", layer.crs
+            grid, row, tr("Система координат"), layer.crs
         )
         row = self._add_info_row(
             grid,
             row,
-            "Размер растра",
+            tr("Размер растра"),
             "{} × {} px".format(layer.width, layer.height),
         )
         row = self._add_info_row(
-            grid, row, "Количество каналов", str(layer.band_count)
+            grid, row, tr("Количество каналов"), str(layer.band_count)
         )
         row = self._add_info_row(
-            grid, row, "Размер пикселя", layer.pixel_size
+            grid, row, tr("Размер пикселя"), layer.pixel_size
         )
-        row = self._add_info_row(grid, row, "Экстент", layer.extent)
-        row = self._add_info_row(grid, row, "Провайдер", layer.provider)
+        row = self._add_info_row(grid, row, tr("Экстент"), layer.extent)
+        row = self._add_info_row(
+            grid, row, tr("Провайдер"), layer.provider
+        )
         grid.setColumnStretch(1, 1)
         layout.addLayout(grid)
         layout.addStretch(1)
@@ -257,7 +266,14 @@ class FileInfoDialog(QDialog):
     def _build_fields_table(self, fields: Tuple[FieldInfo, ...]) -> QTableWidget:
         table = QTableWidget(len(fields), 6)
         table.setHorizontalHeaderLabels(
-            ["Имя", "Алиас", "Тип", "Длина", "Точность", "Комментарий"]
+            [
+                tr("Имя"),
+                tr("Алиас"),
+                tr("Тип"),
+                tr("Длина"),
+                tr("Точность"),
+                tr("Комментарий"),
+            ]
         )
         table.setEditTriggers(
             QAbstractItemView.EditTrigger.NoEditTriggers
@@ -333,7 +349,7 @@ class FileInfoDialog(QDialog):
     @staticmethod
     def _format_feature_count(count: int) -> str:
         if count < 0:
-            return "Недоступно"
+            return tr("Недоступно")
         return "{:,}".format(count).replace(",", " ")
 
     @staticmethod

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 
+from .i18n import tr
 from .scanner import GeoFile
 
 MIB = 1024 * 1024
@@ -53,7 +54,11 @@ def build_size_distribution(files: Iterable[GeoFile]) -> List[SizeBucketStat]:
         sizes[bucket_index] += geo_file.size
 
     return [
-        SizeBucketStat(label=label, count=counts[index], total_size=sizes[index])
+        SizeBucketStat(
+            label=tr(label),
+            count=counts[index],
+            total_size=sizes[index],
+        )
         for index, (label, _minimum, _maximum) in enumerate(SIZE_BUCKETS)
     ]
 
@@ -95,7 +100,7 @@ def build_type_distribution(
         top = stats[:top_count]
         rest = stats[top_count:]
         other = TypeStat(
-            name="Другие форматы",
+            name=tr("Другие форматы"),
             count=sum(item.count for item in rest),
             total_size=sum(item.total_size for item in rest),
             category="other",

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from qgis.PyQt.QtCore import QTimer, Qt
+from qgis.PyQt.QtCore import QSettings, QTimer, Qt
 from qgis.PyQt.QtGui import QIcon
 
 try:
@@ -14,6 +14,7 @@ except ImportError:  # Qt 6 / PyQt 6
     from qgis.PyQt.QtGui import QAction
     from qgis.PyQt.QtWidgets import QToolBar
 
+from .i18n import LANGUAGE_KEY, set_language, tr
 from .panel import ZGeoPanel
 
 PLUGIN_DIR = Path(__file__).resolve().parent
@@ -26,6 +27,8 @@ class ZGeoPlugin:
 
     def __init__(self, iface) -> None:
         self.iface = iface
+        self._settings = QSettings()
+        set_language(self._settings.value(LANGUAGE_KEY, "ru"))
         self.action: Optional[QAction] = None
         self.toolbar: Optional[QToolBar] = None
         self.panel: Optional[ZGeoPanel] = None
@@ -36,15 +39,15 @@ class ZGeoPlugin:
         self._remove_stale_toolbar()
 
         self.action = QAction(
-            icon, "ZGeo-Каталог", self.iface.mainWindow()
+            icon, tr("ZGeo-Каталог"), self.iface.mainWindow()
         )
         self.action.setObjectName("ZGeoAction")
         self.action.setCheckable(True)
         self.action.setToolTip(
-            "ZGeo-Каталог — каталог пространственных данных"
+            tr("ZGeo-Каталог — каталог пространственных данных")
         )
         self.action.setStatusTip(
-            "Открыть плавающую панель ZGeo-Каталог"
+            tr("Открыть плавающую панель ZGeo-Каталог")
         )
         self.action.triggered.connect(self._toggle_panel)
 
@@ -66,12 +69,17 @@ class ZGeoPlugin:
 
     def unload(self) -> None:
         if self.panel is not None:
-            try:
-                self.panel.visibilityChanged.disconnect(
-                    self._on_panel_visibility_changed
-                )
-            except (TypeError, RuntimeError):
-                pass
+            for signal, slot in (
+                (
+                    self.panel.visibilityChanged,
+                    self._on_panel_visibility_changed,
+                ),
+                (self.panel.language_changed, self._on_language_changed),
+            ):
+                try:
+                    signal.disconnect(slot)
+                except (TypeError, RuntimeError):
+                    pass
 
             try:
                 self.iface.mainWindow().removeDockWidget(self.panel)
@@ -161,6 +169,9 @@ class ZGeoPlugin:
             self.panel.visibilityChanged.connect(
                 self._on_panel_visibility_changed
             )
+            self.panel.language_changed.connect(
+                self._on_language_changed
+            )
             self.panel.destroyed.connect(self._on_panel_destroyed)
             self.iface.mainWindow().addDockWidget(
                 Qt.DockWidgetArea.RightDockWidgetArea, self.panel
@@ -175,6 +186,17 @@ class ZGeoPlugin:
 
         if self.action is not None:
             self.action.setChecked(True)
+
+    def _on_language_changed(self, _language: str) -> None:
+        if self.action is None:
+            return
+        self.action.setText(tr("ZGeo-Каталог"))
+        self.action.setToolTip(
+            tr("ZGeo-Каталог — каталог пространственных данных")
+        )
+        self.action.setStatusTip(
+            tr("Открыть плавающую панель ZGeo-Каталог")
+        )
 
     def _on_panel_visibility_changed(self, visible: bool) -> None:
         if self.action is not None and self.action.isChecked() != visible:

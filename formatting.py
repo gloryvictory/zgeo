@@ -1,19 +1,22 @@
 """Общие функции форматирования значений для интерфейса."""
 
+from .i18n import tr
+
 
 def format_size(size: int) -> str:
     """Преобразовать размер в байтах в читаемую строку."""
 
-    units = ("Б", "КБ", "МБ", "ГБ", "ТБ")
+    byte_unit = tr("Б")
+    units = (byte_unit, tr("КБ"), tr("МБ"), tr("ГБ"), tr("ТБ"))
     value = float(size)
 
     for unit in units:
         if value < 1024 or unit == units[-1]:
-            if unit == "Б":
-                return "{} Б".format(int(value))
+            if unit == byte_unit:
+                return "{} {}".format(int(value), unit)
             if value >= 100:
                 return "{:.0f} {}".format(value, unit)
             return "{:.1f} {}".format(value, unit).replace(".0 ", " ")
         value /= 1024
 
-    return "{} Б".format(size)
+    return "{} {}".format(size, byte_unit)

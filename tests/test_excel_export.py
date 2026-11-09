@@ -5,6 +5,7 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 from zgeo.excel_export import write_xlsx, write_xlsx_sheets
+from zgeo.i18n import LANGUAGE_EN, LANGUAGE_RU, set_language
 
 MAIN_NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 
@@ -130,3 +131,33 @@ class ExcelExportTests(unittest.TestCase):
             with zipfile.ZipFile(path) as archive:
                 workbook = archive.read("xl/workbook.xml").decode("utf-8")
                 self.assertIn('name="Данные_2026_тест"', workbook)
+
+    def test_english_sheet_name_and_boolean_cells(self):
+        set_language(LANGUAGE_EN)
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                path = Path(temporary) / "table.xlsx"
+                write_xlsx(path, "", ["Value"], [[True], [False]])
+
+                with zipfile.ZipFile(path) as archive:
+                    workbook = archive.read(
+                        "xl/workbook.xml"
+                    ).decode("utf-8")
+                    self.assertIn('name="Data"', workbook)
+
+                    sheet = ElementTree.fromstring(
+                        archive.read("xl/worksheets/sheet1.xml")
+                    )
+                    rows = sheet.findall(
+                        ".//{}row".format(MAIN_NS)
+                    )
+                    self.assertEqual(
+                        rows[1].findtext(".//{}t".format(MAIN_NS)),
+                        "Yes",
+                    )
+                    self.assertEqual(
+                        rows[2].findtext(".//{}t".format(MAIN_NS)),
+                        "No",
+                    )
+        finally:
+            set_language(LANGUAGE_RU)

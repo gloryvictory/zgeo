@@ -13,6 +13,8 @@ from qgis.PyQt.QtCore import QRectF, QSize, Qt
 from qgis.PyQt.QtGui import QColor, QFont, QFontMetrics, QPainter, QPalette
 from qgis.PyQt.QtWidgets import QSizePolicy, QWidget
 
+from .i18n import tr
+
 ROW_HEIGHT = 40
 BAR_HEIGHT = 8
 
@@ -48,7 +50,7 @@ class BarChart(QWidget):
         self._max_value = max((row.value for row in self._rows), default=0.0)
         self._hover_row = -1
         self.setFixedHeight(max(1, len(self._rows) * ROW_HEIGHT))
-        self.setAccessibleName("Столбчатая диаграмма")
+        self.setAccessibleName(tr("Столбчатая диаграмма"))
         self.setAccessibleDescription(
             "; ".join(
                 "{}: {}".format(row.label, row.value_text)

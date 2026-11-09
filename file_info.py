@@ -15,6 +15,7 @@ from qgis.core import (
 )
 
 from .attribute_check import has_non_latin_characters
+from .i18n import tr
 from .scanner import OTHER, RASTER, TABLE, VECTOR, GeoFile
 
 _LAYER_TYPE = getattr(Qgis, "LayerType", None)
@@ -98,13 +99,13 @@ def inspect_geofile(geo_file: GeoFile) -> FileInfo:
     try:
         vector_layers.extend(_inspect_vector_layers(geo_file))
     except Exception as error:
-        notes.append("Векторные данные: {}".format(error))
+        notes.append(tr("Векторные данные: {}", error))
 
     if _should_inspect_raster(geo_file, vector_layers):
         try:
             raster_layers.extend(_inspect_raster_layers(geo_file))
         except Exception as error:
-            notes.append("Растровые данные: {}".format(error))
+            notes.append(tr("Растровые данные: {}", error))
 
     return FileInfo(
         path=path,
@@ -234,7 +235,7 @@ def _summarize_crs(values: List[str]) -> str:
         return "—"
     if len(unique) == 1:
         return next(iter(unique))
-    return "Разные"
+    return tr("Разные")
 
 
 def _summarize_count(values: List[int]) -> Optional[int]:
@@ -368,21 +369,23 @@ def _field_info(field) -> FieldInfo:
 def _crs_text(layer) -> str:
     crs = layer.crs()
     if crs is None or not crs.isValid():
-        return "Не определена"
+        return tr("Не определена")
     authid = crs.authid()
     description = crs.description()
     if authid and description:
         return "{} — {}".format(authid, description)
-    return authid or description or "Не определена"
+    return authid or description or tr("Не определена")
 
 
 def _geometry_text(layer: QgsVectorLayer) -> str:
     if not layer.isSpatial():
-        return "Без геометрии"
+        return tr("Без геометрии")
     try:
-        return QgsWkbTypes.displayString(layer.wkbType()) or "Не определена"
+        return QgsWkbTypes.displayString(layer.wkbType()) or tr(
+            "Не определена"
+        )
     except (TypeError, AttributeError):
-        return "Не определена"
+        return tr("Не определена")
 
 
 def _extent_text(extent) -> str:

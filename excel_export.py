@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Iterable, List, Sequence, Tuple, Union
 from xml.sax.saxutils import escape
 
+from .i18n import tr
+
 CellValue = Union[str, int, float, None]
 SheetSpec = Tuple[str, Sequence[str], Iterable[Sequence[CellValue]]]
 
@@ -84,7 +86,7 @@ def _normalize_sheets(
             )
         )
     if not normalized:
-        normalized.append(("Данные", [], []))
+        normalized.append((tr("Данные"), [], []))
     return normalized
 
 
@@ -155,7 +157,7 @@ def _cell_xml(
         return ""
 
     if isinstance(value, bool):
-        value = "Да" if value else "Нет"
+        value = tr("Да") if value else tr("Нет")
 
     if isinstance(value, (int, float)):
         return '<c r="{}"{}><v>{}</v></c>'.format(
@@ -201,7 +203,7 @@ def _safe_sheet_name(name: str) -> str:
     cleaned = "".join(
         "_" if char in _INVALID_SHEET_CHARS else char for char in name
     ).strip()
-    return (cleaned or "Данные")[:31]
+    return (cleaned or tr("Данные"))[:31]
 
 
 def _content_types_xml(sheet_count: int = 1) -> str:
