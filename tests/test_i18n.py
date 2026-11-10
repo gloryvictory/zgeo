@@ -42,6 +42,34 @@ class I18nTests(unittest.TestCase):
         self.assertEqual(normalize_language("ru"), LANGUAGE_RU)
         self.assertEqual(normalize_language(None), LANGUAGE_RU)
 
+    def test_check_dialog_strings_are_translated(self) -> None:
+        set_language(LANGUAGE_EN)
+        sources = (
+            "Проверки данных",
+            "Выберите проверки",
+            "Отметьте проверки, которые нужно выполнить для найденных файлов.",
+            "Проверка имён атрибутивных полей",
+            "Проверяет имена полей векторных файлов и добавляет колонку "
+            "«Проблемы с атрибутами». Если в имени поля есть нелатинские "
+            "символы, ставится «Да», иначе «Нет»; для растровых файлов — «—».",
+            "Уточнение характеристик и объёмов",
+            "Читает систему координат, количество элементов и полный объём "
+            "наборов данных с учётом сопутствующих файлов.",
+            "Выполнить",
+            "Отмена",
+        )
+        for source in sources:
+            translated = tr(source)
+            self.assertNotEqual(translated, source)
+            self.assertNotIn("Провер", translated)
+        self.assertEqual(
+            tr(
+                "Описание проверки: {}",
+                tr("Уточнение характеристик и объёмов"),
+            ),
+            "Check description: Refine characteristics and sizes",
+        )
+
     def test_category_labels(self) -> None:
         self.assertEqual(category_label("vector"), "Векторные данные")
         set_language(LANGUAGE_EN)

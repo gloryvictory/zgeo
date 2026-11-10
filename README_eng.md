@@ -4,7 +4,7 @@
 
 A QGIS plugin for quickly browsing the contents of a spatial data folder.
 
-Plugin version: **1.16.0**
+Plugin version: **1.17.0**
 
 The plugin adds a dedicated **“ZGeo”** toolbar to QGIS with a **“ZGeo Catalog”** button that opens a floating panel. The panel provides:
 
@@ -22,7 +22,8 @@ The plugin adds a dedicated **“ZGeo”** toolbar to QGIS with a **“ZGeo Cata
 - the list can be filtered by name, format, path or attribute issues;
 - the **“Settings”** tab lets you select the formats to scan; the **“Select all”**, **“Clear all”**, **“Vector only”** and **“Raster only”** buttons are available at the top; **Excel** is disabled by default;
 - the **“Files”** tab has the **“Information”**, **“Open in Explorer”**, **“Export to Excel”** and **“Check attributes”** buttons at the bottom;
-- **“Check attributes”** checks the field names of vector files and adds an **“Attribute issues”** column with the values **“Yes”**, **“No”** or **“—”**;
+- **“Check attributes”** opens the **“Data checks”** window with a list of checks: **“Attribute field name check”** and **“Refine characteristics and sizes”**; checks are enabled with checkboxes, and an **“i”** button to the right of each check shows its description on hover;
+- the attribute field name check adds an **“Attribute issues”** column with the values **“Yes”**, **“No”** or **“—”**;
 - after the attribute check, the **“Problem files: N”** line is shown and the **“Only problem files”** filter becomes available;
 - reading characteristics and the attribute check can be interrupted with the cancel button;
 - for a selected file, the panel shows the CRS, feature count, geometry, extent and an attribute field table with names, aliases, types, lengths, precision and comments;
@@ -65,7 +66,7 @@ Build the archive:
 powershell -ExecutionPolicy Bypass -File .\scripts\build_zip.ps1
 ```
 
-The ready file will be created at `dist\zgeo-1.16.0.zip`. In QGIS, open:
+The ready file will be created at `dist\zgeo-1.17.0.zip`. In QGIS, open:
 
 **Plugins → Manage and Install Plugins → Install from ZIP**
 
@@ -93,7 +94,7 @@ After updating the plugin, close QGIS completely and start it again. If the **�
 5. During scanning, the current file name and the number of supported files found are shown. The scan can be stopped with **“Cancel”**.
 6. When scanning finishes, the folder name appears at the top and the found files are shown in the list. The CRS, feature count and full dataset size are read automatically; progress is visible in the status bar, and the cancel button can interrupt reading. If needed, enter part of a file name or format in the filter field.
 7. Open the **“Settings”** tab to choose the formats to scan. **Excel** is disabled by default; after changing the settings, rescan the folder with the refresh button.
-8. Click **“Check attributes”** to check vector field names and add the **“Attribute issues”** column. After the check, the **“Problem files: N”** line appears and the **“Only problem files”** filter becomes available.
+8. Click **“Check attributes”** and select the required checks in the **“Data checks”** window: **“Attribute field name check”** and/or **“Refine characteristics and sizes”**. The description of each check is shown when you hover over the **“i”** button. After the attribute check, the **“Problem files: N”** line appears and the **“Only problem files”** filter becomes available.
 9. Select a file and click **“Information”** at the bottom of the list.
 10. Click **“Open in Explorer”** to show the file in Windows Explorer.
 11. Click **“Export to Excel”** to export the found files with a total row and a separate statistics worksheet. After saving, Explorer opens with the selected `.xlsx`.
@@ -143,15 +144,17 @@ For GeoPackage and other multi-layer containers, a layer selector appears at the
 
 Below the attribute field table is the **“Export to Excel”** button. It saves the current layer fields to an `.xlsx` file and opens Explorer with the file selected.
 
-## Attribute check
+## Data checks
 
-The **“Check attributes”** button at the bottom of the **“Files”** tab iterates over vector files and checks field names. If a field name contains non-Latin characters (for example, Cyrillic), the new **“Attribute issues”** column is set to **“Yes”**. If the fields contain only Latin characters, digits and common separators, **“No”** is shown. For raster files and files without vector fields, **“—”** is shown.
+The **“Check attributes”** button at the bottom of the **“Files”** tab opens the **“Data checks”** window. You can enable the attribute field name check, refinement of characteristics and sizes, or both checks at once. To the right of each check is an **“i”** button; hover over it to see the check description.
+
+The attribute field name check iterates over vector files. If a field name contains non-Latin characters (for example, Cyrillic), the new **“Attribute issues”** column is set to **“Yes”**. If the fields contain only Latin characters, digits and common separators, **“No”** is shown. For raster files and files without vector fields, **“—”** is shown.
 
 The column appears after the first check. Check progress is shown in the status bar. If the column has already been added, it is also included in the file list export.
 
 After the check finishes, the **“Problem files: N”** line is shown above the list, and the **“Only problem files”** checkbox becomes available below the search field. It leaves only files with the **“Yes”** value in the table and can be combined with the text filter. If the check was interrupted, the results already obtained are kept, and the counter tooltip shows how many files were processed.
 
-The check can be interrupted with the cancel button next to **“Check attributes”**. After cancellation, reading characteristics resumes automatically.
+The check can be interrupted with the cancel button next to **“Check attributes”**. After cancellation, reading characteristics resumes automatically. Refinement of characteristics and sizes can be run separately by clearing the attribute field name check checkbox.
 
 ## File list export
 
@@ -163,7 +166,7 @@ A separate **“Statistics”** worksheet is created in the same workbook with t
 
 ## Full dataset size
 
-The full size of each dataset is calculated automatically together with the CRS and feature count. A separate **“Refine”** button is not required. The following sidecar files are included:
+The full size of each dataset is calculated automatically together with the CRS and feature count. Refinement is also available as a separate **“Refine characteristics and sizes”** check in the **“Data checks”** window. The following sidecar files are included:
 
 - Shapefile: `.shp`, `.dbf`, `.shx`, `.prj`, `.cpg`, `.qix`, `.sbn`, `.sbx`, `.fbn`, `.fbx`, `.ain`, `.aih`, `.atx`, `.ixs`, `.mxs`, `.fix`, `.shp.xml`;
 - MapInfo MIF: `.mif` + `.mid`;
@@ -219,6 +222,7 @@ zgeo/
 ├── attribute_check.py   # field name check for non-Latin characters
 ├── file_info.py         # file, CRS and feature information
 ├── info_dialog.py       # Information dialog
+├── check_dialog.py      # check selection window and descriptions
 ├── explorer.py          # opening files in Explorer
 ├── formatting.py        # size formatting
 ├── excel_export.py      # writing tables to .xlsx without external dependencies
@@ -253,7 +257,7 @@ python -m unittest discover -s tests -t .. -v
 Syntax check:
 
 ```powershell
-python -m py_compile __init__.py plugin.py panel.py i18n.py scanner.py scan_task.py dataset_size.py stats.py charts.py attribute_check.py file_info.py info_dialog.py explorer.py formatting.py excel_export.py table_export.py version.py
+python -m py_compile __init__.py plugin.py panel.py i18n.py scanner.py scan_task.py dataset_size.py stats.py charts.py attribute_check.py file_info.py info_dialog.py check_dialog.py explorer.py formatting.py excel_export.py table_export.py version.py
 ```
 
 Scanning runs in a background thread. For very large directories on network drives, the list may fill gradually, but the interface remains responsive and the scan can be interrupted.

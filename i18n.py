@@ -44,6 +44,8 @@ EN_TRANSLATIONS = {
     "Данные": "Data",
     "Да": "Yes",
     "Нет": "No",
+    "Выполнить": "Run",
+    "Отмена": "Cancel",
     "—": "—",
     "…": "…",
     "Б": "B",
@@ -200,6 +202,23 @@ EN_TRANSLATIONS = {
         "Cyrillic) — “Yes”; if there are no problems — “No”; for raster "
         "files — “—”."
     ),
+    "Проверки данных": "Data checks",
+    "Выберите проверки": "Select checks",
+    "Отметьте проверки, которые нужно выполнить для найденных файлов.": (
+        "Select the checks to run on the found files."
+    ),
+    "Проверка имён атрибутивных полей": "Attribute field name check",
+    "Проверяет имена полей векторных файлов и добавляет колонку «Проблемы с атрибутами». Если в имени поля есть нелатинские символы, ставится «Да», иначе «Нет»; для растровых файлов — «—».": (
+        "Checks vector field names and adds the “Attribute issues” column. "
+        "If a field name contains non-Latin characters, “Yes” is shown; "
+        "otherwise “No”; for raster files — “—”."
+    ),
+    "Уточнение характеристик и объёмов": "Refine characteristics and sizes",
+    "Читает систему координат, количество элементов и полный объём наборов данных с учётом сопутствующих файлов.": (
+        "Reads the CRS, feature count and full dataset size, including "
+        "sidecar files."
+    ),
+    "Описание проверки: {}": "Check description: {}",
     "Проблемы с атрибутами": "Attribute issues",
     "Да — в именах полей есть нелатинские символы; Нет — проблем не найдено; — — векторных полей нет.": (
         "Yes — field names contain non-Latin characters; No — no problems "

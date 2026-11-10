@@ -21,6 +21,7 @@ from qgis.PyQt.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QCheckBox,
+    QDialog,
     QDockWidget,
     QFileDialog,
     QFileIconProvider,
@@ -49,6 +50,11 @@ from qgis.PyQt.QtWidgets import (
 )
 
 from .charts import BarChart, BarDatum
+from .check_dialog import (
+    CHECK_ATTRIBUTE_NAMES,
+    CHECK_REFINE_DATA,
+    ChecksDialog,
+)
 from .dataset_size import DirectoryIndex, measure_geo_file_cached
 from .explorer import reveal_files
 from .file_info import (
@@ -259,6 +265,7 @@ class ZGeoPanel(QDockWidget):
         self.refresh_button.setAutoRaise(True)
         self.refresh_button.setFixedSize(32, 32)
         self.refresh_button.setToolTip(tr("Пересканировать папку"))
+        self.refresh_button.setAccessibleName(tr("Пересканировать папку"))
         self.refresh_button.clicked.connect(self.refresh)
         buttons.addWidget(self.refresh_button)
 
@@ -332,6 +339,9 @@ class ZGeoPanel(QDockWidget):
 
         self.filter_edit = QLineEdit()
         self.filter_edit.setPlaceholderText(
+            tr("Фильтр по имени, формату или пути")
+        )
+        self.filter_edit.setAccessibleName(
             tr("Фильтр по имени, формату или пути")
         )
         self.filter_edit.setClearButtonEnabled(True)
@@ -441,7 +451,7 @@ class ZGeoPanel(QDockWidget):
             tr("Проверить атрибуты")
         )
         self.check_attributes_button.clicked.connect(
-            self._start_attribute_check
+            self._show_checks_dialog
         )
         buttons.addWidget(self.check_attributes_button)
 
@@ -1230,8 +1240,8 @@ class ZGeoPanel(QDockWidget):
             self.summary_label.setText(
                 self._format_summary(tr("Файлов: 0"), 0)
             )
-            self._set_empty(tr("Не удалось прочитать папку"), str(error))
-            self._clear_statistics(tr("Нет данных"), str(error))
+            self._set_empty("Не удалось прочитать папку", str(error))
+            self._clear_statistics("Нет данных", str(error))
             self._set_busy(False)
             self._set_status(
                 tr("Не удалось прочитать папку: {}", error)
@@ -1827,6 +1837,34 @@ class ZGeoPanel(QDockWidget):
     def _can_check_attributes(geo_file: GeoFile) -> bool:
         return geo_file.category in (VECTOR, TABLE, OTHER)
 
+    def _show_checks_dialog(self) -> None:
+        """Открыть окно выбора проверок для найденных файлов."""
+
+        if not self._files:
+            return
+
+        dialog = ChecksDialog(self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        self._run_checks(dialog.selected_checks())
+
+    def _run_checks(self, checks: List[str]) -> None:
+        """Выполнить выбранные проверки."""
+
+        if not checks:
+            return
+
+        if CHECK_REFINE_DATA in checks:
+            details_are_running = bool(self._details_queue) or (
+                self._details_timer.isActive()
+            )
+            if not details_are_running:
+                self._start_details(self._files)
+
+        if CHECK_ATTRIBUTE_NAMES in checks:
+            self._start_attribute_check()
+
     def _start_attribute_check(self) -> None:
         if self._attribute_running or not self._files:
             return
@@ -2417,6 +2455,7 @@ class ZGeoPanel(QDockWidget):
             )
         self.choose_button.setText(tr("Выбрать папку"))
         self.refresh_button.setToolTip(tr("Пересканировать папку"))
+        self.refresh_button.setAccessibleName(tr("Пересканировать папку"))
 
         self.tabs.setTabText(0, tr("Файлы"))
         self.tabs.setTabText(1, tr("Статистика"))
@@ -2432,6 +2471,9 @@ class ZGeoPanel(QDockWidget):
         )
 
         self.filter_edit.setPlaceholderText(
+            tr("Фильтр по имени, формату или пути")
+        )
+        self.filter_edit.setAccessibleName(
             tr("Фильтр по имени, формату или пути")
         )
         self.problems_only_checkbox.setText(tr("Только проблемные"))
@@ -2477,7 +2519,7 @@ class ZGeoPanel(QDockWidget):
         self._retranslate_status()
 
         if self._busy:
-            pass
+            self.summary_label.setText(tr("Сканирование…"))
         elif self._files:
             self._update_statistics(self._files)
             self._apply_filter()
@@ -2706,16 +2748,14 @@ class ZGeoPanel(QDockWidget):
             self._set_status(tr("Готово"))
 
     def _retranslate_empty_pages(self) -> None:
-        if self.stack.currentWidget() is self.stack.widget(0):
-            self._set_empty(
-                self._empty_title_source,
-                self._empty_hint_source,
-            )
-        if self.stats_stack.currentWidget() is self.stats_stack.widget(0):
-            self._set_stats_empty(
-                self._stats_empty_title_source,
-                self._stats_empty_hint_source,
-            )
+        self.empty_title_label.setText(tr(self._empty_title_source))
+        self.empty_hint_label.setText(tr(self._empty_hint_source))
+        self.stats_empty_title_label.setText(
+            tr(self._stats_empty_title_source)
+        )
+        self.stats_empty_hint_label.setText(
+            tr(self._stats_empty_hint_source)
+        )
 
     def _set_empty(self, title: str, hint: str) -> None:
         self._empty_title_source = title

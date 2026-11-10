@@ -42,6 +42,7 @@ class BarChart(QWidget):
         self._hover_row = -1
         self.setMouseTracking(True)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setAccessibleName(tr("Столбчатая диаграмма"))
         if rows is not None:
             self.set_rows(rows)
 
@@ -49,8 +50,8 @@ class BarChart(QWidget):
         self._rows = list(rows)
         self._max_value = max((row.value for row in self._rows), default=0.0)
         self._hover_row = -1
+        self.setToolTip("")
         self.setFixedHeight(max(1, len(self._rows) * ROW_HEIGHT))
-        self.setAccessibleName(tr("Столбчатая диаграмма"))
         self.setAccessibleDescription(
             "; ".join(
                 "{}: {}".format(row.label, row.value_text)
