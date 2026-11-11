@@ -4,7 +4,7 @@
 
 A QGIS plugin for quickly browsing the contents of a spatial data folder.
 
-Plugin version: **1.17.0**
+Plugin version: **1.22.0**
 
 The plugin adds a dedicated **“ZGeo”** toolbar to QGIS with a **“ZGeo Catalog”** button that opens a floating panel. The panel provides:
 
@@ -15,21 +15,22 @@ The plugin adds a dedicated **“ZGeo”** toolbar to QGIS with a **“ZGeo Cata
 - all supported spatial files are found recursively, including subfolders;
 - while scanning, the current file name and the number of supported spatial files found are shown, and the **“Cancel”** button stops the scan;
 - results are displayed as a list: relative path, format, coordinate reference system, feature count and file size;
-- after scanning, the CRS, feature count and full dataset size are read automatically; progress is shown in the status bar;
+- after scanning, the CRS, feature count and full dataset size are not read automatically; use the **“Checks”** window to refine them, with progress shown in the status bar;
 - the number of files and their total size are shown above the list; when filtering, the total size is calculated for visible files only;
 - the full dataset size includes sidecar files (SHP + DBF + SHX + PRJ + CPG and others, MIF + MID, TAB + DAT/MAP/ID/IND);
-- the status bar is at the bottom of the window: the current operation is shown on the left, and **“Selected: N of M”** is shown on the right;
+- the status bar is at the bottom of the window: the current operation is shown on the left, and **“Selected: N of M”** is shown on the right; during scanning and checks, a full-width progress bar with the current and total file counts is shown below the status bar;
 - the list can be filtered by name, format, path or attribute issues;
 - the **“Settings”** tab lets you select the formats to scan; the **“Select all”**, **“Clear all”**, **“Vector only”** and **“Raster only”** buttons are available at the top; **Excel** is disabled by default;
-- the **“Files”** tab has the **“Information”**, **“Open in Explorer”**, **“Export to Excel”** and **“Check attributes”** buttons at the bottom;
-- **“Check attributes”** opens the **“Data checks”** window with a list of checks: **“Attribute field name check”** and **“Refine characteristics and sizes”**; checks are enabled with checkboxes, and an **“i”** button to the right of each check shows its description on hover;
-- the attribute field name check adds an **“Attribute issues”** column with the values **“Yes”**, **“No”** or **“—”**;
-- after the attribute check, the **“Problem files: N”** line is shown and the **“Only problem files”** filter becomes available;
-- reading characteristics and the attribute check can be interrupted with the cancel button;
+- the **“Files”** tab has the **“Information”**, **“Open in Explorer”**, **“Export to Excel”** and **“Checks”** buttons at the bottom;
+- **“Checks”** opens the **“Checks”** window with a list of checks: **“Refine size”** (first), **“Refine CRS”**, **“Refine feature count”**, **“Check JSON for GeoJSON format”**, **“Attribute field name check”**, **“Shapefile field name check”**, **“Truncated field name duplicates check”**, **“DBF encoding and .cpg check”**, **“Dataset completeness check”**, **“CRS check”** and **“Empty layers check”**; checks are enabled with checkboxes, and an **“i”** button to the right of each check shows its description on hover; by default, **“Refine size”**, **“Refine CRS”**, **“Refine feature count”**, the JSON check and the attribute field name check are selected;
+- the JSON check appears when the list contains `.json` or `.geojson` files; it validates the document by its `type` field and excludes files that are not GeoJSON;
+- problems found are shown in the **“Issues”** column with the values **“Yes”**, **“No”** or **“—”**; details are available in the cell tooltip;
+- after the checks, the **“Problem files: N”** line is shown and the **“Only problem files”** filter becomes available;
+- data refinement, the JSON check and problem checks can be interrupted with the cancel button;
 - for a selected file, the panel shows the CRS, feature count, geometry, extent and an attribute field table with names, aliases, types, lengths, precision and comments;
 - **“Open in Explorer”** opens Windows Explorer with the file selected; files from different folders open in separate Explorer windows;
-- the **“Statistics”** tab shows charts by file size and type, followed by a statistics table by format; after reading characteristics, full dataset sizes are used;
-- the file list, statistics table and attribute field table can be exported to Excel; when exporting the list, format statistics are added as a separate worksheet, totals are added to the list and statistics, and Explorer opens with the selected file after saving; if the **“Attribute issues”** column has been added, it is included in the export as well;
+- the **“Statistics”** tab shows charts by file size and type, followed by a statistics table by format; after size refinement, full dataset sizes are used;
+- the file list, statistics table and attribute field table can be exported to Excel; when exporting the list, format statistics are added as a separate worksheet, totals are added to the list and statistics, and Explorer opens with the selected file after saving; if the **“Issues”** column has been added, it is included in the export as well;
 - the refresh button rescans the current folder.
 
 QGIS 3.16 and newer are supported, including QGIS 4 / Qt 6.
@@ -66,7 +67,7 @@ Build the archive:
 powershell -ExecutionPolicy Bypass -File .\scripts\build_zip.ps1
 ```
 
-The ready file will be created at `dist\zgeo-1.17.0.zip`. In QGIS, open:
+The ready file will be created at `dist\zgeo-1.18.0.zip`. In QGIS, open:
 
 **Plugins → Manage and Install Plugins → Install from ZIP**
 
@@ -92,9 +93,9 @@ After updating the plugin, close QGIS completely and start it again. If the **�
 3. In the floating panel, click **“Select folder”**.
 4. Select a folder with geodata.
 5. During scanning, the current file name and the number of supported files found are shown. The scan can be stopped with **“Cancel”**.
-6. When scanning finishes, the folder name appears at the top and the found files are shown in the list. The CRS, feature count and full dataset size are read automatically; progress is visible in the status bar, and the cancel button can interrupt reading. If needed, enter part of a file name or format in the filter field.
+6. When scanning finishes, the folder name appears at the top and the found files are shown in the list. The CRS and feature count show **“—”** until checks are run. If needed, enter part of a file name or format in the filter field.
 7. Open the **“Settings”** tab to choose the formats to scan. **Excel** is disabled by default; after changing the settings, rescan the folder with the refresh button.
-8. Click **“Check attributes”** and select the required checks in the **“Data checks”** window: **“Attribute field name check”** and/or **“Refine characteristics and sizes”**. The description of each check is shown when you hover over the **“i”** button. After the attribute check, the **“Problem files: N”** line appears and the **“Only problem files”** filter becomes available.
+8. Click **“Checks”** and select the required checks in the **“Checks”** window. Available checks include size, CRS and feature count refinement, the JSON check, the attribute field name check, and the checks for Shapefile field names, truncated duplicates, DBF encoding and `.cpg`, dataset completeness, CRS and empty layers. The description of each check is shown when you hover over the **“i”** button. If the list contains `.json` or `.geojson`, the JSON check excludes files that are not GeoJSON. After the checks, the **“Problem files: N”** line and the **“Issues”** column appear, and the **“Only problem files”** filter becomes available.
 9. Select a file and click **“Information”** at the bottom of the list.
 10. Click **“Open in Explorer”** to show the file in Windows Explorer.
 11. Click **“Export to Excel”** to export the found files with a total row and a separate statistics worksheet. After saving, Explorer opens with the selected `.xlsx`.
@@ -104,17 +105,19 @@ The last selected folder is remembered and used as the starting folder next time
 
 ## Status bar
 
-The status bar is at the bottom of the window. The current operation is shown on the left: scanning, reading characteristics and sizes, attribute check, retrieving information, opening Explorer, Excel export, cancellation messages and errors. The number of selected rows is always shown on the right: **“Selected: N of M”**. The counter is updated when files are selected and when the list is filtered.
+The status bar is at the bottom of the window. The current operation is shown on the left: scanning, size, CRS or feature count refinement, JSON check, problem checks, retrieving information, opening Explorer, Excel export, cancellation messages and errors. The number of selected rows is always shown on the right: **“Selected: N of M”**. The counter is updated when files are selected and when the list is filtered.
+
+During scanning and long-running checks, a full-width progress bar appears below the status bar: while scanning it shows indeterminate progress, and during checks it shows how many files have been processed out of the total. The progress bar is hidden when the operation finishes.
 
 ## Interface language
 
-The **“EN” / “RU”** button in the top-right corner of the panel switches all labels, tooltips, status bar messages, table headers, dialogs and Excel worksheet names. The selected language is saved in QGIS settings and applied on the next launch. You can switch languages during scanning, reading characteristics or the attribute check — the current operation is not interrupted.
+The **“EN” / “RU”** button in the top-right corner of the panel switches all labels, tooltips, status bar messages, table headers, dialogs and Excel worksheet names. The selected language is saved in QGIS settings and applied on the next launch. You can switch languages during scanning, data refinement or problem checks — the current operation is not interrupted.
 
 ## Scanning
 
 Scanning runs in a background thread, so the QGIS interface remains responsive. While scanning, the panel shows the current file name and the number of files matching the supported spatial formats. Unsupported files do not increment the **“Found”** counter. **“Cancel”** stops the scan; already found files remain in the list, and statistics are built from the partial result.
 
-After the list appears, the panel reads the CRS and feature count one file at a time through QGIS providers. The values appear in the **“CRS”** and **“Features”** columns; the current file and overall progress are shown in the status bar. A cancel button appears next to the buttons at the bottom and interrupts long reads; values already read are kept. For raster files, the feature count is not calculated and **“—”** is shown. If a dataset has multiple layers, feature counts are summed, and if their CRSs differ, **“Mixed”** is shown in the column.
+After the list appears, the **“CRS”** and **“Features”** columns contain **“—”**: values are not read automatically. Open the **“Checks”** window and select the required checks. The panel processes files one at a time through QGIS providers; the current file and overall progress are shown in the status bar. A cancel button appears next to the buttons at the bottom and interrupts the long operation; values already obtained are kept. For raster files, the feature count is not calculated and **“—”** is shown. If a dataset has multiple layers, feature counts are summed, and if their CRSs differ, **“Mixed”** is shown in the column.
 
 ## Format settings
 
@@ -144,29 +147,45 @@ For GeoPackage and other multi-layer containers, a layer selector appears at the
 
 Below the attribute field table is the **“Export to Excel”** button. It saves the current layer fields to an `.xlsx` file and opens Explorer with the file selected.
 
-## Data checks
+## Checks
 
-The **“Check attributes”** button at the bottom of the **“Files”** tab opens the **“Data checks”** window. You can enable the attribute field name check, refinement of characteristics and sizes, or both checks at once. To the right of each check is an **“i”** button; hover over it to see the check description.
+The **“Checks”** button at the bottom of the **“Files”** tab opens the **“Checks”** window. The following checks are available:
 
-The attribute field name check iterates over vector files. If a field name contains non-Latin characters (for example, Cyrillic), the new **“Attribute issues”** column is set to **“Yes”**. If the fields contain only Latin characters, digits and common separators, **“No”** is shown. For raster files and files without vector fields, **“—”** is shown.
+- **“Refine size”** — full size of each dataset, including sidecar files;
+- **“Refine CRS”** — reads the coordinate reference system of layers;
+- **“Refine feature count”** — counts features in layers;
+- **“Check JSON for GeoJSON format”** — validates `.json` and `.geojson` files by the `type` field; files that are not GeoJSON are excluded from the list;
+- **“Attribute field name check”** — non-Latin characters in field names;
+- **“Shapefile field name check”** — name length (10 characters max for DBF), spaces and invalid characters;
+- **“Truncated field name duplicates check”** — fields whose names collide after truncation to 10 characters;
+- **“DBF encoding and .cpg check”** — presence of the `.cpg` file and a known DBF encoding;
+- **“Dataset completeness check”** — required files: `.shp` + `.dbf` + `.shx`, `.mif` + `.mid`, `.tab` + `.dat/.map/.id`;
+- **“CRS check”** — missing, unknown or mixed coordinate reference systems;
+- **“Empty layers check”** — empty layers and files with zero features.
 
-The column appears after the first check. Check progress is shown in the status bar. If the column has already been added, it is also included in the file list export.
+Checks are enabled with checkboxes. To the right of each check is an **“i”** button; hover over it to see the check description. By default, **“Refine size”**, **“Refine CRS”**, **“Refine feature count”**, **“Check JSON for GeoJSON format”** and **“Attribute field name check”** are selected; the six problem checks are optional. **“Refine size”** covers all formats, including SHP and MIF/MID.
 
-After the check finishes, the **“Problem files: N”** line is shown above the list, and the **“Only problem files”** checkbox becomes available below the search field. It leaves only files with the **“Yes”** value in the table and can be combined with the text filter. If the check was interrupted, the results already obtained are kept, and the counter tooltip shows how many files were processed.
+The JSON check appears in the window only when the found files include `.json` or `.geojson`. It reads the document and validates its `type` field: `FeatureCollection`, `Feature`, `GeometryCollection` and the geometry types (`Point`, `MultiPoint`, `LineString`, `MultiLineString`, `Polygon`, `MultiPolygon`) are allowed. For collections, the `features` and `geometries` members are validated as well. If the document is not GeoJSON (for example, a plain JSON object without `type` or with an unknown `type`), the file is excluded from the list and the file count, total size and statistics are recalculated. The JSON check runs before size, CRS and feature count refinement, so the remaining checks work on the already filtered list.
 
-The check can be interrupted with the cancel button next to **“Check attributes”**. After cancellation, reading characteristics resumes automatically. Refinement of characteristics and sizes can be run separately by clearing the attribute field name check checkbox.
+Problem checks inspect the found files and collect all findings in the **“Issues”** column: **“Yes”** — problems found, **“No”** — no problems found, **“—”** — the check is not applicable to the file. The detailed list of problems is shown in the cell tooltip. The encoding check verifies the presence of `.cpg`, an empty file and whether the specified encoding is known. The completeness check looks for missing required dataset files. The CRS check flags files without a CRS, with an unknown CRS and files whose layers have different CRSs. The empty layers check flags layers without features and files with no features at all.
+
+The **“Issues”** column appears after the first problem check. Check progress is shown in the status bar and on the progress bar. If the column has already been added, it is also included in the file list export.
+
+After the checks finish, the **“Problem files: N”** line is shown above the list, and the **“Only problem files”** checkbox becomes available below the search field. It leaves only files with the **“Yes”** value in the table and can be combined with the text filter. If the check was interrupted, the results already obtained are kept, and the counter tooltip shows how many files were processed.
+
+Checks can be interrupted with the cancel button next to **“Checks”**. After cancellation, the results already obtained are kept, and files already identified as non-GeoJSON remain excluded.
 
 ## File list export
 
-The **“Export to Excel”** button at the bottom of the **“Files”** tab saves the current list to `.xlsx`. The file contains the **“File”**, **“Format”**, **“CRS”**, **“Features”** and **“Size”** columns. If the **“Attribute issues”** column has been added, it is exported as well. If a filter is enabled, only visible rows are exported to the **“Files”** worksheet.
+The **“Export to Excel”** button at the bottom of the **“Files”** tab saves the current list to `.xlsx`. The file contains the **“File”**, **“Format”**, **“CRS”**, **“Features”** and **“Size”** columns. If the **“Issues”** column has been added, it is exported as well. If a filter is enabled, only visible rows are exported to the **“Files”** worksheet.
 
-A blank row and a total are added at the end of the table: **“Total files: N”**, the total feature count and the total size. If the feature count for some files has not been read yet or is undefined, the total cell shows **“—”**.
+A blank row and a total are added at the end of the table: **“Total files: N”**, the total feature count and the total size. If the feature count for some files has not been refined yet or is undefined, the total cell shows **“—”**.
 
 A separate **“Statistics”** worksheet is created in the same workbook with the **“Format”**, **“Count”** and **“Full size”** columns. It is built from all found files, like the table on the **“Statistics”** tab, and ends with an **“Total”** row containing the total file count and size. After a successful save, Windows Explorer opens with the selected `.xlsx` file.
 
 ## Full dataset size
 
-The full size of each dataset is calculated automatically together with the CRS and feature count. Refinement is also available as a separate **“Refine characteristics and sizes”** check in the **“Data checks”** window. The following sidecar files are included:
+The full size of each dataset is refined by the **“Refine size”** check for all formats at once, including SHP and MIF/MID. The following sidecar files are included:
 
 - Shapefile: `.shp`, `.dbf`, `.shx`, `.prj`, `.cpg`, `.qix`, `.sbn`, `.sbx`, `.fbn`, `.fbx`, `.ain`, `.aih`, `.atx`, `.ixs`, `.mxs`, `.fix`, `.shp.xml`;
 - MapInfo MIF: `.mif` + `.mid`;
@@ -188,7 +207,7 @@ After each scan, two charts and a table are updated on the **“Statistics”** 
 - **“By type”** — the number of files by format. The total size is shown on the right; when there are many formats, rare ones are combined into **“Other formats”**.
 - **“Statistics by format”** — a complete table with the **“Format”**, **“Count”** and **“Full size”** columns. Unlike the chart, the table shows each format separately.
 
-The charts and table are built from all found files and do not depend on the list filter. After automatic reading of characteristics, statistics use full dataset sizes including sidecar files.
+The charts and table are built from all found files and do not depend on the list filter. After size refinement, statistics use full dataset sizes including sidecar files.
 
 Below the format table is the **“Export to Excel”** button. The `.xlsx` file contains the **“Format”**, **“Count”** and **“Full size”** columns, and an **“Total”** row with the total file count and size is added at the end. After saving, Explorer opens with the file selected.
 

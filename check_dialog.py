@@ -12,8 +12,10 @@ from qgis.PyQt.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
+    QFrame,
     QGridLayout,
     QLabel,
+    QScrollArea,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -23,8 +25,39 @@ from .i18n import tr
 
 ICON_PATH = Path(__file__).with_name("icon.svg")
 
+CHECK_SIZE = "refine_size"
+CHECK_CRS = "refine_crs"
+CHECK_ELEMENT_COUNT = "refine_element_count"
+CHECK_JSON_GEOJSON = "json_geojson"
 CHECK_ATTRIBUTE_NAMES = "attribute_names"
-CHECK_REFINE_DATA = "refine_data"
+CHECK_SHP_FIELD_NAMES = "shp_field_names"
+CHECK_TRUNCATED_DUPLICATES = "truncated_duplicates"
+CHECK_DBF_ENCODING = "dbf_encoding"
+CHECK_DATASET_COMPLETENESS = "dataset_completeness"
+CHECK_CRS_QUALITY = "crs_quality"
+CHECK_EMPTY_LAYERS = "empty_layers"
+
+PROBLEM_CHECKS = frozenset(
+    {
+        CHECK_ATTRIBUTE_NAMES,
+        CHECK_SHP_FIELD_NAMES,
+        CHECK_TRUNCATED_DUPLICATES,
+        CHECK_DBF_ENCODING,
+        CHECK_DATASET_COMPLETENESS,
+        CHECK_CRS_QUALITY,
+        CHECK_EMPTY_LAYERS,
+    }
+)
+
+LAYER_PROBLEM_CHECKS = frozenset(
+    {
+        CHECK_ATTRIBUTE_NAMES,
+        CHECK_SHP_FIELD_NAMES,
+        CHECK_TRUNCATED_DUPLICATES,
+        CHECK_CRS_QUALITY,
+        CHECK_EMPTY_LAYERS,
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -37,45 +70,140 @@ class CheckDefinition:
     checked: bool = True
 
 
-def check_definitions() -> List[CheckDefinition]:
+def check_definitions(
+    include_json_check: bool = True,
+) -> List[CheckDefinition]:
     """Вернуть проверки с учётом текущего языка интерфейса."""
 
-    return [
+    definitions = [
+        CheckDefinition(
+            key=CHECK_SIZE,
+            label=tr("Уточнить размер"),
+            description=tr(
+                "Считает полный размер каждого набора данных с учётом "
+                "сопутствующих файлов."
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_CRS,
+            label=tr("Уточнить систему координат"),
+            description=tr(
+                "Читает систему координат слоёв и обновляет колонку "
+                "«Система координат»."
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_ELEMENT_COUNT,
+            label=tr("Уточнить количество элементов"),
+            description=tr(
+                "Считает количество элементов слоёв и обновляет колонку "
+                "«Элементов»."
+            ),
+        ),
         CheckDefinition(
             key=CHECK_ATTRIBUTE_NAMES,
             label=tr("Проверка имён атрибутивных полей"),
             description=tr(
-                "Проверяет имена полей векторных файлов и добавляет "
-                "колонку «Проблемы с атрибутами». Если в имени поля есть "
-                "нелатинские символы, ставится «Да», иначе «Нет»; для "
+                "Проверяет имена полей векторных файлов на нелатинские "
+                "символы и добавляет колонку «Проблемы». Если в имени поля "
+                "есть нелатинские символы, ставится «Да», иначе «Нет»; для "
                 "растровых файлов — «—»."
             ),
         ),
         CheckDefinition(
-            key=CHECK_REFINE_DATA,
-            label=tr("Уточнение характеристик и объёмов"),
+            key=CHECK_SHP_FIELD_NAMES,
+            label=tr("Проверка имён полей для Shapefile"),
             description=tr(
-                "Читает систему координат, количество элементов и полный "
-                "объём наборов данных с учётом сопутствующих файлов."
+                "Проверяет длину имён полей (не более 10 символов для "
+                "DBF), пробелы и недопустимые символы."
+            ),
+            checked=False,
+        ),
+        CheckDefinition(
+            key=CHECK_TRUNCATED_DUPLICATES,
+            label=tr("Проверка дублей имён после усечения"),
+            description=tr(
+                "Ищет поля, имена которых совпадают после усечения до "
+                "10 символов."
+            ),
+            checked=False,
+        ),
+        CheckDefinition(
+            key=CHECK_DBF_ENCODING,
+            label=tr("Проверка кодировки DBF и .cpg"),
+            description=tr(
+                "Проверяет наличие файла .cpg и корректность указанной "
+                "кодировки DBF."
+            ),
+            checked=False,
+        ),
+        CheckDefinition(
+            key=CHECK_DATASET_COMPLETENESS,
+            label=tr("Проверка комплектности набора"),
+            description=tr(
+                "Проверяет обязательные файлы: .shp + .dbf + .shx, "
+                ".mif + .mid, .tab + .dat/.map/.id."
+            ),
+            checked=False,
+        ),
+        CheckDefinition(
+            key=CHECK_CRS_QUALITY,
+            label=tr("Проверка системы координат"),
+            description=tr(
+                "Ищет файлы без системы координат, с неизвестной или "
+                "смешанной системой координат."
+            ),
+            checked=False,
+        ),
+        CheckDefinition(
+            key=CHECK_EMPTY_LAYERS,
+            label=tr("Проверка пустых слоёв"),
+            description=tr(
+                "Ищет пустые слои и файлы с нулевым количеством объектов."
             ),
             checked=False,
         ),
     ]
 
+    if include_json_check:
+        attribute_index = next(
+            index
+            for index, definition in enumerate(definitions)
+            if definition.key == CHECK_ATTRIBUTE_NAMES
+        )
+        definitions.insert(
+            attribute_index,
+            CheckDefinition(
+                key=CHECK_JSON_GEOJSON,
+                label=tr("Проверка JSON на формат GEOJSON"),
+                description=tr(
+                    "Проверяет файлы .json и .geojson по полю type. "
+                    "Файлы, не являющиеся GeoJSON, исключаются из списка."
+                ),
+            ),
+        )
+
+    return definitions
+
 
 class ChecksDialog(QDialog):
     """Окно выбора проверок перед их выполнением."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        *,
+        include_json_check: bool = True,
+    ) -> None:
         super().__init__(parent)
         self._checkboxes: Dict[str, QCheckBox] = {}
         self._info_buttons: Dict[str, QToolButton] = {}
-        self._definitions = check_definitions()
+        self._definitions = check_definitions(include_json_check)
 
-        self.setWindowTitle(tr("Проверки данных"))
+        self.setWindowTitle(tr("Проверки"))
         self.setWindowIcon(QIcon(str(ICON_PATH)))
-        self.resize(580, 250)
-        self.setMinimumWidth(520)
+        self.resize(660, 560)
+        self.setMinimumSize(560, 420)
 
         self._build_ui()
 
@@ -98,7 +226,8 @@ class ChecksDialog(QDialog):
         self._set_font(hint, -1)
         layout.addWidget(hint)
 
-        grid = QGridLayout()
+        grid_host = QWidget()
+        grid = QGridLayout(grid_host)
         grid.setContentsMargins(0, 6, 0, 0)
         grid.setHorizontalSpacing(8)
         grid.setVerticalSpacing(10)
@@ -135,8 +264,11 @@ class ChecksDialog(QDialog):
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
             )
 
-        layout.addLayout(grid)
-        layout.addStretch(1)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(grid_host)
+        layout.addWidget(scroll, 1)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok

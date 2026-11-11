@@ -52,19 +52,40 @@ from qgis.PyQt.QtWidgets import (
 from .charts import BarChart, BarDatum
 from .check_dialog import (
     CHECK_ATTRIBUTE_NAMES,
-    CHECK_REFINE_DATA,
+    CHECK_CRS,
+    CHECK_CRS_QUALITY,
+    CHECK_DATASET_COMPLETENESS,
+    CHECK_DBF_ENCODING,
+    CHECK_ELEMENT_COUNT,
+    CHECK_EMPTY_LAYERS,
+    CHECK_JSON_GEOJSON,
+    CHECK_SIZE,
+    CHECK_SHP_FIELD_NAMES,
+    CHECK_TRUNCATED_DUPLICATES,
+    LAYER_PROBLEM_CHECKS,
+    PROBLEM_CHECKS,
     ChecksDialog,
 )
+from .attribute_check import has_non_latin_characters
 from .dataset_size import DirectoryIndex, measure_geo_file_cached
 from .explorer import reveal_files
+from .geojson_check import JSON_EXTENSIONS, check_json_file
 from .file_info import (
-    AttributeCheck,
     LayerSummary,
-    inspect_attribute_names,
     inspect_geofile,
     inspect_layer_summary,
 )
 from .formatting import format_size
+from .quality_check import (
+    QualityIssue,
+    completeness_issues,
+    crs_issues,
+    dbf_encoding_issues,
+    directory_files,
+    empty_layer_issues,
+    field_name_issues,
+    truncated_duplicate_issues,
+)
 from .i18n import (
     LANGUAGE_EN,
     LANGUAGE_KEY,
@@ -96,12 +117,10 @@ from .version import get_plugin_version
 LAST_FOLDER_KEY = "zgeo/last_folder"
 DISABLED_FORMATS_KEY = "zgeo/disabled_formats"
 ICON_PATH = Path(__file__).with_name("icon.svg")
-ATTRIBUTE_CHECK_TOOLTIP = (
-    "Проверить атрибуты: проверить имена полей векторных файлов "
-    "и добавить колонку «Проблемы с атрибутами».\n"
-    "Если в названии поля есть нелатинские символы (например, "
-    "кириллица) — «Да»; если проблем нет — «Нет»; для растровых "
-    "файлов — «—»."
+CHECKS_TOOLTIP = (
+    "Проверки: уточнить размер, систему координат и количество элементов, "
+    "проверить JSON и найти проблемы с полями, кодировкой, комплектностью "
+    "набора, системой координат и пустыми слоями."
 )
 SIZE_CHART_COLOR = "#0F766E"
 TYPE_CHART_COLORS = (
@@ -132,6 +151,15 @@ class ZGeoPanel(QDockWidget):
         self._entries: List[Tuple[QTreeWidgetItem, str]] = []
         self._item_by_path: Dict[str, QTreeWidgetItem] = {}
         self._element_counts: Dict[str, int] = {}
+        self._refined_crs_paths: Set[str] = set()
+        self._refined_count_paths: Set[str] = set()
+        self._refined_size_paths: Set[str] = set()
+        self._json_running = False
+        self._json_queue: Deque[GeoFile] = deque()
+        self._json_total = 0
+        self._json_processed = 0
+        self._json_removed: List[str] = []
+        self._json_after_checks: List[str] = []
         self._file_index_by_path: Dict[str, int] = {}
         self._size_index_cache: Dict[str, DirectoryIndex] = {}
         self._scan_task: Optional[ScanTask] = None
@@ -146,20 +174,29 @@ class ZGeoPanel(QDockWidget):
         self._details_total = 0
         self._details_processed = 0
         self._details_paused = False
+        self._details_read_size = False
+        self._details_read_crs = False
+        self._details_read_count = False
+        self._details_size_paths: Set[str] = set()
+        self._details_action_source = "Уточнение данных"
+        self._details_size_changed = False
         self._details_timer = QTimer(self)
         self._details_timer.setSingleShot(True)
         self._details_timer.setInterval(0)
         self._details_timer.timeout.connect(self._process_next_detail)
 
-        self._attribute_running = False
-        self._attribute_checked = False
-        self._attribute_queue: Deque[GeoFile] = deque()
-        self._attribute_total = 0
-        self._attribute_processed = 0
-        self._attribute_issue_count = 0
-        self._attribute_checks: Dict[str, AttributeCheck] = {}
-        self._attribute_unavailable: Set[str] = set()
-        self._attribute_interrupted = False
+        self._problem_running = False
+        self._problem_checked = False
+        self._problem_queue: Deque[GeoFile] = deque()
+        self._problem_total = 0
+        self._problem_processed = 0
+        self._problem_issue_count = 0
+        self._problem_issues: Dict[str, Tuple[QualityIssue, ...]] = {}
+        self._problem_checked_paths: Set[str] = set()
+        self._problem_candidate_paths: Set[str] = set()
+        self._problem_interrupted = False
+        self._problem_selected: Tuple[str, ...] = ()
+        self._problem_file_cache: Dict[str, Dict[str, Path]] = {}
         self._empty_title_source = "Геоданные не выбраны"
         self._empty_hint_source = (
             "Нажмите «Выбрать папку», чтобы найти шейпфайлы, GeoPackage "
@@ -170,12 +207,17 @@ class ZGeoPanel(QDockWidget):
             "Выберите папку и выполните сканирование. Здесь появятся "
             "диаграммы по размеру и типу файлов."
         )
-        self._attribute_timer = QTimer(self)
-        self._attribute_timer.setSingleShot(True)
-        self._attribute_timer.setInterval(0)
-        self._attribute_timer.timeout.connect(
-            self._process_next_attribute_check
+        self._problem_timer = QTimer(self)
+        self._problem_timer.setSingleShot(True)
+        self._problem_timer.setInterval(0)
+        self._problem_timer.timeout.connect(
+            self._process_next_problem_check
         )
+
+        self._json_timer = QTimer(self)
+        self._json_timer.setSingleShot(True)
+        self._json_timer.setInterval(0)
+        self._json_timer.timeout.connect(self._process_next_json_check)
 
         self.setObjectName("ZGeoPanel")
         self.setWindowTitle(tr("ZGeo — геоданные"))
@@ -211,7 +253,7 @@ class ZGeoPanel(QDockWidget):
         root = QWidget(self)
         root.setObjectName("zgeoRoot")
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setContentsMargins(14, 14, 14, 0)
         layout.setSpacing(9)
 
         layout.addLayout(self._build_brand())
@@ -293,7 +335,14 @@ class ZGeoPanel(QDockWidget):
         layout.addWidget(self.tabs, 1)
         layout.addWidget(self._build_status_bar())
 
-        self.setWidget(root)
+        outer = QWidget(self)
+        outer_layout = QVBoxLayout(outer)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+        outer_layout.addWidget(root, 1)
+        self.progress_bar = self._build_progress_bar()
+        outer_layout.addWidget(self.progress_bar)
+        self.setWidget(outer)
 
     def _build_status_bar(self) -> QStatusBar:
         bar = QStatusBar()
@@ -316,6 +365,23 @@ class ZGeoPanel(QDockWidget):
         self.selection_label.setMinimumWidth(150)
         self._set_font(self.selection_label, -1)
         bar.addPermanentWidget(self.selection_label)
+        return bar
+
+    def _build_progress_bar(self) -> QProgressBar:
+        """Создать полосу прогресса во всю ширину внизу окна."""
+
+        bar = QProgressBar()
+        bar.setObjectName("zgeoBottomProgress")
+        bar.setRange(0, 100)
+        bar.setValue(0)
+        bar.setTextVisible(True)
+        bar.setFormat("%v / %m")
+        bar.setFixedHeight(18)
+        bar.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        bar.setAccessibleName(tr("Ход выполнения"))
+        bar.setVisible(False)
         return bar
 
     def _build_files_page(self) -> QWidget:
@@ -351,8 +417,8 @@ class ZGeoPanel(QDockWidget):
         self.problems_only_checkbox = QCheckBox(tr("Только проблемные"))
         self.problems_only_checkbox.setToolTip(
             tr(
-                "Показывать только файлы, у которых проверка атрибутов "
-                "нашла проблемы"
+                "Показывать только файлы, у которых проверки нашли "
+                "проблемы"
             )
         )
         self.problems_only_checkbox.setEnabled(False)
@@ -445,10 +511,10 @@ class ZGeoPanel(QDockWidget):
         self.check_attributes_button.setAutoRaise(True)
         self.check_attributes_button.setFixedSize(30, 30)
         self.check_attributes_button.setToolTip(
-            tr(ATTRIBUTE_CHECK_TOOLTIP)
+            tr(CHECKS_TOOLTIP)
         )
         self.check_attributes_button.setAccessibleName(
-            tr("Проверить атрибуты")
+            tr("Проверки")
         )
         self.check_attributes_button.clicked.connect(
             self._show_checks_dialog
@@ -702,7 +768,7 @@ class ZGeoPanel(QDockWidget):
             tr("Размер"),
         ]
         if include_attributes:
-            headers.append(tr("Проблемы с атрибутами"))
+            headers.append(tr("Проблемы"))
         return headers
 
     @staticmethod
@@ -1178,8 +1244,9 @@ class ZGeoPanel(QDockWidget):
         if self._folder is None or self._busy:
             return
 
-        self._cancel_attribute_check()
+        self._cancel_problem_check()
         self._cancel_details()
+        self._cancel_json_check()
 
         if not self._folder.is_dir():
             self._files = []
@@ -1305,8 +1372,9 @@ class ZGeoPanel(QDockWidget):
     def shutdown(self) -> None:
         """Остановить фоновые задачи перед удалением панели."""
 
-        self._cancel_attribute_check()
+        self._cancel_problem_check()
         self._cancel_details()
+        self._cancel_json_check()
 
         task = self._scan_task
         self._scan_task = None
@@ -1323,14 +1391,18 @@ class ZGeoPanel(QDockWidget):
         super().closeEvent(event)
 
     def _populate(self, files: List[GeoFile]) -> None:
-        self._cancel_attribute_check()
+        self._cancel_problem_check()
         self._cancel_details()
+        self._cancel_json_check()
         self._files = files
         self.tree.setUpdatesEnabled(False)
         self.tree.clear()
         self._entries = []
         self._item_by_path = {}
         self._element_counts = {}
+        self._refined_crs_paths = set()
+        self._refined_count_paths = set()
+        self._refined_size_paths = set()
         self._file_index_by_path = {
             str(geo_file.path): index
             for index, geo_file in enumerate(files)
@@ -1365,7 +1437,6 @@ class ZGeoPanel(QDockWidget):
             return
 
         self._apply_filter()
-        self._start_details(files)
 
     def _search_text_for(self, geo_file: GeoFile) -> str:
         return " ".join(
@@ -1381,8 +1452,8 @@ class ZGeoPanel(QDockWidget):
         values = [
             geo_file.relative_posix,
             geo_file.format.name,
-            "…",
-            "…",
+            "—",
+            "—",
             format_size(geo_file.size),
         ]
         if self.tree.columnCount() > 5:
@@ -1397,9 +1468,26 @@ class ZGeoPanel(QDockWidget):
             1,
             category_label(geo_file.category),
         )
-        item.setToolTip(2, tr("Система координат читается…"))
-        item.setToolTip(3, tr("Количество элементов читается…"))
-        item.setToolTip(4, tr("{} Б", geo_file.size))
+        item.setToolTip(
+            2,
+            tr(
+                "Система координат не уточнена. Нажмите «Проверки»."
+            ),
+        )
+        item.setToolTip(
+            3,
+            tr(
+                "Количество элементов не уточнено. Нажмите «Проверки»."
+            ),
+        )
+        item.setToolTip(
+            4,
+            tr(
+                "Размер основного файла: {} Б. Нажмите «Проверки», "
+                "чтобы уточнить полный размер.",
+                geo_file.size,
+            ),
+        )
         item.setTextAlignment(
             3,
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
@@ -1416,9 +1504,7 @@ class ZGeoPanel(QDockWidget):
             )
             item.setToolTip(
                 5,
-                tr(
-                    "Атрибуты не проверены. Нажмите «Проверить атрибуты»."
-                ),
+                tr("Проверки не выполнялись. Нажмите «Проверки»."),
             )
         return item
 
@@ -1469,6 +1555,32 @@ class ZGeoPanel(QDockWidget):
         self.status_message_label.setText(message)
         self.status_message_label.setToolTip(message)
 
+    def _show_progress(self, processed: int, total: int) -> None:
+        """Показать определённый прогресс операции в статусной строке."""
+
+        if not hasattr(self, "progress_bar"):
+            return
+        if total <= 0:
+            self._hide_progress()
+            return
+        self.progress_bar.setRange(0, total)
+        self.progress_bar.setValue(min(max(processed, 0), total))
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setVisible(True)
+
+    def _show_indeterminate_progress(self) -> None:
+        """Показать индикатор операции с неизвестной длительностью."""
+
+        if not hasattr(self, "progress_bar"):
+            return
+        self.progress_bar.setRange(0, 0)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setVisible(True)
+
+    def _hide_progress(self) -> None:
+        if hasattr(self, "progress_bar"):
+            self.progress_bar.setVisible(False)
+
     def _update_selection_status(self) -> None:
         total = 0 if self._busy else len(self._entries)
         selected = 0 if self._busy else len(self._selected_files())
@@ -1485,7 +1597,10 @@ class ZGeoPanel(QDockWidget):
             self._has_visible_files() and enabled
         )
         self.check_attributes_button.setEnabled(
-            bool(self._files) and enabled and not self._attribute_running
+            bool(self._files)
+            and enabled
+            and not self._problem_running
+            and not self._json_running
         )
         self._update_selection_status()
 
@@ -1575,7 +1690,7 @@ class ZGeoPanel(QDockWidget):
         if not files:
             return
 
-        include_attributes = self._has_attribute_column()
+        include_attributes = self._has_problems_column()
         headers = self._tree_headers(include_attributes)
 
         rows = []
@@ -1636,22 +1751,43 @@ class ZGeoPanel(QDockWidget):
     # Система координат, количество элементов и полный объем
     # ------------------------------------------------------------------
 
-    def _start_details(self, files: List[GeoFile]) -> None:
+    def _start_details(
+        self,
+        files: List[GeoFile],
+        *,
+        read_size: bool,
+        read_crs: bool,
+        read_count: bool,
+        size_paths: Optional[Set[str]] = None,
+        action: str = "Уточнение данных",
+    ) -> None:
         self._cancel_details()
-        if not files:
+        if not files or not (read_size or read_crs or read_count):
             return
 
         self._details_queue = deque(files)
         self._details_total = len(files)
         self._details_processed = 0
+        self._details_read_size = read_size
+        self._details_read_crs = read_crs
+        self._details_read_count = read_count
+        self._details_size_paths = (
+            {str(geo_file.path) for geo_file in files}
+            if size_paths is None
+            else set(size_paths)
+        )
+        self._details_action_source = action
+        self._details_size_changed = False
         self._size_index_cache = {}
         self._set_status(
             tr(
-                "Чтение характеристик и объемов: 0 из {}",
+                "{}: 0 из {}",
+                tr(action),
                 self._details_total,
             )
         )
         self._details_timer.start(0)
+        self._show_progress(0, self._details_total)
         self._update_cancel_button()
 
     def _cancel_details(self) -> None:
@@ -1660,7 +1796,14 @@ class ZGeoPanel(QDockWidget):
         self._details_total = 0
         self._details_processed = 0
         self._details_paused = False
+        self._details_read_size = False
+        self._details_read_crs = False
+        self._details_read_count = False
+        self._details_size_paths = set()
+        self._details_action_source = "Уточнение данных"
+        self._details_size_changed = False
         self._size_index_cache = {}
+        self._hide_progress()
         self._update_cancel_button()
 
     def _abort_details(self) -> None:
@@ -1668,11 +1811,13 @@ class ZGeoPanel(QDockWidget):
             return
         processed = self._details_processed
         total = self._details_total
+        action = self._details_action_source
         self._cancel_details()
         self._update_controls()
         self._set_status(
             tr(
-                "Чтение характеристик прервано: {} из {}",
+                "{} прервано: {} из {}",
+                tr(action),
                 processed,
                 total,
             )
@@ -1689,6 +1834,9 @@ class ZGeoPanel(QDockWidget):
             return
         self._details_paused = False
         if self._details_queue:
+            self._show_progress(
+                self._details_processed, self._details_total
+            )
             self._details_timer.start(0)
 
     def _process_next_detail(self) -> None:
@@ -1697,11 +1845,13 @@ class ZGeoPanel(QDockWidget):
         if not self._details_queue:
             if self._details_total:
                 self._apply_filter()
-                self._update_statistics(self._files)
+                if self._details_size_changed:
+                    self._update_statistics(self._files)
                 self._update_controls()
                 self._set_status(
                     tr(
-                        "Характеристики и объемы прочитаны. Файлов: {}",
+                        "{} завершено. Файлов: {}",
+                        tr(self._details_action_source),
                         self._details_total,
                     )
                 )
@@ -1709,41 +1859,63 @@ class ZGeoPanel(QDockWidget):
 
         geo_file = self._details_queue.popleft()
         self._details_processed += 1
-
-        try:
-            summary = inspect_layer_summary(geo_file)
-        except Exception:
-            summary = LayerSummary("—", None)
-
-        try:
-            detail = measure_geo_file_cached(
-                geo_file, self._size_index_cache
-            )
-            refined = replace(geo_file, size=detail.total_size)
-        except Exception:
-            refined = geo_file
-
+        self._show_progress(
+            self._details_processed, self._details_total
+        )
         path_key = str(geo_file.path)
-        if summary.element_count is None:
-            self._element_counts.pop(path_key, None)
-        else:
-            self._element_counts[path_key] = summary.element_count
 
-        index = self._file_index_by_path.get(path_key)
-        if index is not None and 0 <= index < len(self._files):
-            if str(self._files[index].path) == path_key:
-                self._files[index] = refined
-        self._file_by_path[path_key] = refined
+        summary: Optional[LayerSummary] = None
+        if self._details_read_crs or self._details_read_count:
+            try:
+                summary = inspect_layer_summary(geo_file)
+            except Exception:
+                summary = LayerSummary("—", None)
+
+        refined = geo_file
+        if (
+            self._details_read_size
+            and path_key in self._details_size_paths
+        ):
+            try:
+                detail = measure_geo_file_cached(
+                    geo_file, self._size_index_cache
+                )
+                refined = replace(geo_file, size=detail.total_size)
+                self._details_size_changed = True
+                self._refined_size_paths.add(path_key)
+            except Exception:
+                refined = geo_file
+
+        if summary is not None and self._details_read_crs:
+            self._refined_crs_paths.add(path_key)
+        if summary is not None and self._details_read_count:
+            self._refined_count_paths.add(path_key)
+            if summary.element_count is None:
+                self._element_counts.pop(path_key, None)
+            else:
+                self._element_counts[path_key] = summary.element_count
+
+        if refined is not geo_file:
+            index = self._file_index_by_path.get(path_key)
+            if index is not None and 0 <= index < len(self._files):
+                if str(self._files[index].path) == path_key:
+                    self._files[index] = refined
+            self._file_by_path[path_key] = refined
 
         item = self._item_by_path.get(path_key)
         if item is not None:
-            self._update_item_details(item, summary)
-            self._update_item_size(item, refined.size)
+            if summary is not None and self._details_read_crs:
+                self._update_item_crs(item, summary.crs)
+            if summary is not None and self._details_read_count:
+                self._update_item_count(item, summary.element_count)
+            if refined is not geo_file:
+                self._update_item_size(item, refined.size)
 
         if self._details_queue:
             self._set_status(
                 tr(
-                    "Чтение характеристик и объемов: {} из {} · {}",
+                    "{}: {} из {} · {}",
+                    tr(self._details_action_source),
                     self._details_processed,
                     self._details_total,
                     geo_file.path.name,
@@ -1752,31 +1924,37 @@ class ZGeoPanel(QDockWidget):
             self._details_timer.start(0)
         else:
             self._apply_filter()
-            self._update_statistics(self._files)
+            if self._details_size_changed:
+                self._update_statistics(self._files)
             self._update_controls()
+            self._hide_progress()
             self._set_status(
                 tr(
-                    "Характеристики и объемы прочитаны. Файлов: {}",
+                    "{} завершено. Файлов: {}",
+                    tr(self._details_action_source),
                     self._details_total,
                 )
             )
 
     @staticmethod
-    def _update_item_details(
-        item: QTreeWidgetItem, summary: LayerSummary
-    ) -> None:
-        item.setText(2, summary.crs)
-        item.setToolTip(2, tr("Система координат: {}", summary.crs))
+    def _update_item_crs(item: QTreeWidgetItem, crs: str) -> None:
+        item.setText(2, crs)
+        if crs in ("—", "-"):
+            item.setToolTip(2, tr("Система координат не определена"))
+        else:
+            item.setToolTip(2, tr("Система координат: {}", crs))
 
-        if summary.element_count is None:
+    @staticmethod
+    def _update_item_count(
+        item: QTreeWidgetItem, element_count: Optional[int]
+    ) -> None:
+        if element_count is None:
             count_text = "—"
             count_tooltip = tr("Количество элементов не определено")
         else:
-            count_text = "{:,}".format(summary.element_count).replace(
-                ",", " "
-            )
+            count_text = "{:,}".format(element_count).replace(",", " ")
             count_tooltip = tr(
-                "Количество элементов: {}", summary.element_count
+                "Количество элементов: {}", element_count
             )
         item.setText(3, count_text)
         item.setToolTip(3, count_tooltip)
@@ -1787,14 +1965,14 @@ class ZGeoPanel(QDockWidget):
         item.setToolTip(4, tr("Полный объем набора: {} Б", size))
 
     # ------------------------------------------------------------------
-    # Проверка атрибутивных полей
+    # Проверки проблем с атрибутами, наборами и слоями
     # ------------------------------------------------------------------
 
-    def _has_attribute_column(self) -> bool:
+    def _has_problems_column(self) -> bool:
         return self.tree.columnCount() > 5
 
-    def _ensure_attribute_column(self) -> None:
-        if self._has_attribute_column():
+    def _ensure_problems_column(self) -> None:
+        if self._has_problems_column():
             return
 
         self.tree.setColumnCount(6)
@@ -1808,17 +1986,17 @@ class ZGeoPanel(QDockWidget):
             header_item.setToolTip(
                 5,
                 tr(
-                    "Да — в именах полей есть нелатинские символы; "
-                    "Нет — проблем не найдено; — — векторных полей нет."
+                    "Да — найдены проблемы; Нет — проблем не найдено; "
+                    "— — проверка не применима."
                 ),
             )
         for item, _search_text in self._entries:
-            self._set_attribute_cell(
-                item, "…", tr("Проверка атрибутов…")
+            self._set_problem_cell(
+                item, "…", tr("Проверка выполняется…")
             )
 
     @staticmethod
-    def _set_attribute_cell(
+    def _set_problem_cell(
         item: QTreeWidgetItem,
         text: str,
         tooltip: str,
@@ -1833,17 +2011,19 @@ class ZGeoPanel(QDockWidget):
             | Qt.AlignmentFlag.AlignVCenter,
         )
 
-    @staticmethod
-    def _can_check_attributes(geo_file: GeoFile) -> bool:
-        return geo_file.category in (VECTOR, TABLE, OTHER)
-
     def _show_checks_dialog(self) -> None:
         """Открыть окно выбора проверок для найденных файлов."""
 
         if not self._files:
             return
 
-        dialog = ChecksDialog(self)
+        include_json_check = any(
+            geo_file.extension in JSON_EXTENSIONS
+            for geo_file in self._files
+        )
+        dialog = ChecksDialog(
+            self, include_json_check=include_json_check
+        )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
@@ -1855,162 +2035,550 @@ class ZGeoPanel(QDockWidget):
         if not checks:
             return
 
-        if CHECK_REFINE_DATA in checks:
-            details_are_running = bool(self._details_queue) or (
-                self._details_timer.isActive()
-            )
-            if not details_are_running:
-                self._start_details(self._files)
+        remaining = [
+            check for check in checks if check != CHECK_JSON_GEOJSON
+        ]
+        if CHECK_JSON_GEOJSON in checks:
+            json_files = [
+                geo_file
+                for geo_file in self._files
+                if geo_file.extension in JSON_EXTENSIONS
+            ]
+            if json_files:
+                self._start_json_check(json_files, remaining)
+                return
+            if not remaining:
+                self._set_status(
+                    tr("Нет JSON-файлов для проверки")
+                )
+                return
 
-        if CHECK_ATTRIBUTE_NAMES in checks:
-            self._start_attribute_check()
+        self._run_checks_after_json(remaining)
 
-    def _start_attribute_check(self) -> None:
-        if self._attribute_running or not self._files:
+    def _run_checks_after_json(self, checks: List[str]) -> None:
+        """Выполнить проверки, не требующие разбора JSON."""
+
+        if not checks:
+            self._update_controls()
             return
 
-        self._attribute_checked = False
-        self._attribute_interrupted = False
-        self._attribute_checks.clear()
-        self._attribute_unavailable.clear()
-        self._set_problems_filter_available(False)
-        self.problems_label.setText(tr("Проблемных файлов: 0"))
-        self.problems_label.setToolTip(tr("Идёт проверка атрибутов…"))
-        self.problems_label.setVisible(True)
+        read_size = CHECK_SIZE in checks
+        read_crs = CHECK_CRS in checks
+        read_count = CHECK_ELEMENT_COUNT in checks
 
-        self._ensure_attribute_column()
-        for item, _search_text in self._entries:
-            self._set_attribute_cell(
-                item, "…", tr("Проверка атрибутов…")
+        if read_size and not read_crs and not read_count:
+            action = "Уточнение размера"
+        elif read_crs and not read_count and not read_size:
+            action = "Уточнение системы координат"
+        elif read_count and not read_crs and not read_size:
+            action = "Уточнение количества элементов"
+        else:
+            action = "Уточнение данных"
+
+        problem_checks = [
+            check for check in checks if check in PROBLEM_CHECKS
+        ]
+
+        if read_size or read_crs or read_count:
+            detail_files = list(self._files)
+            size_paths = (
+                {str(geo_file.path) for geo_file in detail_files}
+                if read_size
+                else set()
+            )
+            self._start_details(
+                detail_files,
+                read_size=read_size,
+                read_crs=read_crs,
+                read_count=read_count,
+                size_paths=size_paths,
+                action=action,
+            )
+        elif not problem_checks:
+            self._set_status(
+                tr("Нет файлов для выбранных проверок")
+            )
+            return
+
+        if problem_checks:
+            self._start_problem_check(problem_checks)
+
+    # ------------------------------------------------------------------
+    # Проверка JSON на соответствие GeoJSON
+    # ------------------------------------------------------------------
+
+    def _start_json_check(
+        self, files: List[GeoFile], after_checks: List[str]
+    ) -> None:
+        if self._json_running or not files:
+            return
+
+        self._cancel_details()
+        self._json_queue = deque(files)
+        self._json_total = len(files)
+        self._json_processed = 0
+        self._json_removed = []
+        self._json_after_checks = list(after_checks)
+        self._json_running = True
+        self._set_status(
+            tr(
+                "Проверка JSON на формат GeoJSON: 0 из {}",
+                self._json_total,
+            )
+        )
+        self._json_timer.start(0)
+        self._show_progress(0, self._json_total)
+        self._update_file_actions()
+        self._update_cancel_button()
+
+    def _process_next_json_check(self) -> None:
+        if not self._json_running:
+            return
+        if not self._json_queue:
+            self._finish_json_check()
+            return
+
+        geo_file = self._json_queue.popleft()
+        self._json_processed += 1
+        self._show_progress(self._json_processed, self._json_total)
+
+        try:
+            check = check_json_file(geo_file.path)
+        except Exception:
+            check = None
+
+        if check is None or not check.is_geojson:
+            self._json_removed.append(str(geo_file.path))
+
+        if self._json_queue:
+            self._set_status(
+                tr(
+                    "Проверка JSON: {} из {} · {}",
+                    self._json_processed,
+                    self._json_total,
+                    geo_file.path.name,
+                )
+            )
+            self._json_timer.start(0)
+        else:
+            self._finish_json_check()
+
+    def _finish_json_check(self) -> None:
+        total = self._json_total
+        removed = len(self._json_removed)
+        self._json_timer.stop()
+        self._json_queue.clear()
+        self._json_running = False
+        self._hide_progress()
+
+        if self._json_removed:
+            self._remove_files(set(self._json_removed))
+        self._json_removed = []
+
+        if removed:
+            self._set_status(
+                tr(
+                    "Проверка JSON завершена: проверено {} · исключено {}",
+                    total,
+                    removed,
+                )
+            )
+        else:
+            self._set_status(
+                tr(
+                    "Проверка JSON завершена: все файлы соответствуют "
+                    "GeoJSON. Проверено: {}",
+                    total,
+                )
             )
 
-        candidates = [
-            geo_file
+        after_checks = self._json_after_checks
+        self._json_after_checks = []
+        self._update_file_actions()
+        self._update_cancel_button()
+
+        if after_checks and self._files:
+            self._run_checks_after_json(after_checks)
+        else:
+            self._update_controls()
+
+    def _abort_json_check(self) -> None:
+        if not self._json_running:
+            return
+
+        processed = self._json_processed
+        total = self._json_total
+        removed = len(self._json_removed)
+        self._json_timer.stop()
+        self._json_queue.clear()
+        self._json_running = False
+        self._json_after_checks = []
+        self._hide_progress()
+
+        if self._json_removed:
+            self._remove_files(set(self._json_removed))
+        self._json_removed = []
+
+        self._update_file_actions()
+        self._update_cancel_button()
+        self._set_status(
+            tr(
+                "Проверка JSON прервана: проверено {} из {} · исключено {}",
+                processed,
+                total,
+                removed,
+            )
+        )
+
+    def _cancel_json_check(self) -> None:
+        self._json_timer.stop()
+        self._json_queue.clear()
+        self._json_running = False
+        self._json_total = 0
+        self._json_processed = 0
+        self._json_removed = []
+        self._json_after_checks = []
+        self._hide_progress()
+        if hasattr(self, "cancel_task_button"):
+            self._update_cancel_button()
+
+    def _remove_files(self, paths: Set[str]) -> None:
+        """Исключить файлы из списка и обновить все сводные данные."""
+
+        if not paths:
+            return
+
+        self.tree.setUpdatesEnabled(False)
+        try:
+            remaining: List[GeoFile] = []
+            for geo_file in self._files:
+                path_key = str(geo_file.path)
+                if path_key not in paths:
+                    remaining.append(geo_file)
+                    continue
+
+                item = self._item_by_path.pop(path_key, None)
+                if item is not None:
+                    index = self.tree.indexOfTopLevelItem(item)
+                    if index >= 0:
+                        self.tree.takeTopLevelItem(index)
+                self._file_by_path.pop(path_key, None)
+                self._element_counts.pop(path_key, None)
+                self._refined_crs_paths.discard(path_key)
+                self._refined_count_paths.discard(path_key)
+                self._refined_size_paths.discard(path_key)
+                self._problem_issues.pop(path_key, None)
+                self._problem_checked_paths.discard(path_key)
+                self._problem_candidate_paths.discard(path_key)
+            self._files = remaining
+            self._entries = [
+                (item, search_text)
+                for item, search_text in self._entries
+                if str(item.data(0, Qt.ItemDataRole.UserRole))
+                not in paths
+            ]
+            self._file_index_by_path = {
+                str(geo_file.path): index
+                for index, geo_file in enumerate(self._files)
+            }
+        finally:
+            self.tree.setUpdatesEnabled(True)
+
+        self._problem_issue_count = sum(
+            1
             for geo_file in self._files
-            if self._can_check_attributes(geo_file)
-        ]
-        candidate_paths = {str(geo_file.path) for geo_file in candidates}
+            if self._problem_issues.get(str(geo_file.path))
+        )
+
+        if not self._files:
+            self.summary_label.setText(
+                self._format_summary(tr("Файлов: 0"), 0)
+            )
+            self._set_empty(
+                "Файлы не найдены",
+                "Все найденные файлы исключены проверками.",
+            )
+            self._clear_statistics(
+                "Нет данных",
+                "Нет файлов для построения диаграмм.",
+            )
+            self._reset_problems_filter()
+        else:
+            self._update_statistics(self._files)
+            self._apply_filter()
+            self._update_problems_summary()
+
+        self._update_controls()
+
+    def _start_problem_check(self, checks: List[str]) -> None:
+        if self._problem_running or not self._files:
+            return
+
+        self._problem_checked = False
+        self._problem_interrupted = False
+        self._problem_issues.clear()
+        self._problem_checked_paths.clear()
+        self._problem_candidate_paths.clear()
+        self._problem_selected = tuple(checks)
+        self._problem_file_cache = {}
+        self._set_problems_filter_available(False)
+        self.problems_label.setText(tr("Проблемных файлов: 0"))
+        self.problems_label.setToolTip(tr("Идёт проверка…"))
+        self.problems_label.setVisible(True)
+
+        self._ensure_problems_column()
+        for item, _search_text in self._entries:
+            self._set_problem_cell(
+                item, "…", tr("Проверка выполняется…")
+            )
+
+        needs_layers = any(
+            check in LAYER_PROBLEM_CHECKS for check in checks
+        )
+        if needs_layers:
+            allowed = {VECTOR, TABLE, OTHER}
+            if CHECK_CRS_QUALITY in checks:
+                allowed.add(RASTER)
+            candidates = [
+                geo_file
+                for geo_file in self._files
+                if geo_file.category in allowed
+            ]
+        else:
+            candidates = [
+                geo_file
+                for geo_file in self._files
+                if (
+                    CHECK_DATASET_COMPLETENESS in checks
+                    and geo_file.extension in (".shp", ".mif", ".tab")
+                )
+                or (
+                    CHECK_DBF_ENCODING in checks
+                    and geo_file.extension == ".shp"
+                )
+            ]
+
+        candidate_paths = {
+            str(geo_file.path) for geo_file in candidates
+        }
+        self._problem_candidate_paths = set(candidate_paths)
         for geo_file in self._files:
             if str(geo_file.path) in candidate_paths:
                 continue
             item = self._item_by_path.get(str(geo_file.path))
             if item is not None:
-                self._attribute_unavailable.add(
-                    str(geo_file.path)
-                )
-                self._set_attribute_cell(
+                self._set_problem_cell(
                     item,
                     "—",
-                    tr("Векторные атрибутивные поля не найдены."),
+                    tr("Проверка не применима к этому файлу."),
                     False,
                 )
 
         if not candidates:
-            self._attribute_checked = True
+            self._problem_checked = True
+            self._hide_progress()
             self._update_problems_summary()
             self.problems_label.setToolTip("")
             self._set_problems_filter_available(True)
             self._apply_filter()
             self._set_status(
-                tr("Нет векторных файлов для проверки атрибутов")
+                tr("Нет файлов для выбранных проверок")
             )
             self._update_file_actions()
             self._update_cancel_button()
             return
 
-        self._attribute_queue = deque(candidates)
-        self._attribute_total = len(candidates)
-        self._attribute_processed = 0
-        self._attribute_issue_count = 0
-        self._attribute_running = True
+        self._problem_queue = deque(candidates)
+        self._problem_total = len(candidates)
+        self._problem_processed = 0
+        self._problem_issue_count = 0
+        self._problem_running = True
+        self._show_progress(0, self._problem_total)
         self.check_attributes_button.setToolTip(
-            tr("Проверка атрибутов выполняется…")
+            tr("Проверки выполняются…")
         )
         self._pause_details()
         self._apply_filter()
         self._update_file_actions()
         self._update_cancel_button()
         self._set_status(
-            tr("Проверка атрибутов: 0 из {}", self._attribute_total)
+            tr("Проверки: 0 из {}", self._problem_total)
         )
-        self._attribute_timer.start(0)
+        self._problem_timer.start(0)
 
-    def _process_next_attribute_check(self) -> None:
-        if not self._attribute_queue:
-            self._finish_attribute_check()
+    def _process_next_problem_check(self) -> None:
+        if not self._problem_queue:
+            self._finish_problem_check()
             return
 
-        geo_file = self._attribute_queue.popleft()
-        self._attribute_processed += 1
+        geo_file = self._problem_queue.popleft()
+        self._problem_processed += 1
+        self._show_progress(
+            self._problem_processed, self._problem_total
+        )
 
         try:
-            check = inspect_attribute_names(geo_file)
+            issues, applicable = self._inspect_problems(geo_file)
         except Exception:
-            check = AttributeCheck((), ())
+            issues, applicable = [], False
 
         path_key = str(geo_file.path)
-        self._attribute_checks[path_key] = check
+        self._problem_issues[path_key] = tuple(issues)
+        if applicable:
+            self._problem_checked_paths.add(path_key)
         item = self._item_by_path.get(path_key)
         if item is not None:
-            self._update_item_attributes(item, check)
+            self._update_item_problems(item, issues, applicable)
 
-        if check.has_issues:
-            self._attribute_issue_count += 1
+        if issues:
+            self._problem_issue_count += 1
             self._update_problems_summary()
 
-        if self._attribute_queue:
+        if self._problem_queue:
             self._set_status(
                 tr(
-                    "Проверка атрибутов: {} из {} · {}",
-                    self._attribute_processed,
-                    self._attribute_total,
+                    "Проверки: {} из {} · {}",
+                    self._problem_processed,
+                    self._problem_total,
                     geo_file.path.name,
                 )
             )
-            self._attribute_timer.start(0)
+            self._problem_timer.start(0)
         else:
-            self._finish_attribute_check()
+            self._finish_problem_check()
+
+    def _inspect_problems(
+        self, geo_file: GeoFile
+    ) -> Tuple[List[QualityIssue], bool]:
+        checks = self._problem_selected
+        issues: List[QualityIssue] = []
+        applicable = False
+
+        files = directory_files(
+            geo_file.path.parent, self._problem_file_cache
+        )
+
+        if CHECK_DATASET_COMPLETENESS in checks:
+            if geo_file.extension in (".shp", ".mif", ".tab"):
+                applicable = True
+                issues.extend(
+                    completeness_issues(geo_file, files)
+                )
+
+        if CHECK_DBF_ENCODING in checks:
+            if geo_file.extension == ".shp":
+                dbf_name = geo_file.path.stem.casefold() + ".dbf"
+                if dbf_name in files:
+                    applicable = True
+                    issues.extend(
+                        dbf_encoding_issues(geo_file, files)
+                    )
+
+        needs_layers = any(
+            check in LAYER_PROBLEM_CHECKS for check in checks
+        )
+        if not needs_layers:
+            return issues, applicable
+
+        try:
+            file_info = inspect_geofile(geo_file)
+        except Exception:
+            return issues, applicable
+
+        vector_layers = file_info.vector_layers
+        raster_layers = file_info.raster_layers
+        layer_fields = [
+            (
+                layer.name,
+                tuple(field.name for field in layer.fields),
+            )
+            for layer in vector_layers
+        ]
+        layer_counts = [
+            (layer.name, layer.feature_count)
+            for layer in vector_layers
+        ]
+        crs_values = [layer.crs for layer in vector_layers]
+        crs_values.extend(layer.crs for layer in raster_layers)
+
+        if CHECK_ATTRIBUTE_NAMES in checks and vector_layers:
+            applicable = True
+            non_latin = [
+                name
+                for _layer_name, names in layer_fields
+                for name in names
+                if has_non_latin_characters(name)
+            ]
+            if non_latin:
+                issues.append(
+                    QualityIssue(
+                        CHECK_ATTRIBUTE_NAMES,
+                        "Нелатинские имена полей:\n{}",
+                        ("\n".join(dict.fromkeys(non_latin)),),
+                    )
+                )
+
+        if CHECK_SHP_FIELD_NAMES in checks and vector_layers:
+            applicable = True
+            issues.extend(field_name_issues(layer_fields))
+
+        if CHECK_TRUNCATED_DUPLICATES in checks and vector_layers:
+            applicable = True
+            issues.extend(truncated_duplicate_issues(layer_fields))
+
+        if CHECK_CRS_QUALITY in checks and (
+            vector_layers or raster_layers
+        ):
+            applicable = True
+            issues.extend(crs_issues(crs_values))
+
+        if CHECK_EMPTY_LAYERS in checks and vector_layers:
+            applicable = True
+            issues.extend(empty_layer_issues(layer_counts))
+
+        return issues, applicable
 
     @staticmethod
-    def _update_item_attributes(
-        item: QTreeWidgetItem, check: AttributeCheck
+    def _update_item_problems(
+        item: QTreeWidgetItem,
+        issues: List[QualityIssue],
+        applicable: bool,
     ) -> None:
-        if check.non_latin_names:
+        if issues:
             item.setText(5, tr("Да"))
             item.setToolTip(
                 5,
-                tr(
-                    "Нелатинские имена полей:\n{}",
-                    "\n".join(check.non_latin_names),
+                "\n".join(
+                    tr(issue.message, *issue.args)
+                    for issue in issues
                 ),
             )
             item.setData(5, Qt.ItemDataRole.UserRole, True)
-        elif check.field_names:
+        elif applicable:
             item.setText(5, tr("Нет"))
-            item.setToolTip(
-                5, tr("Проблем с именами полей не найдено.")
-            )
+            item.setToolTip(5, tr("Проблем не найдено."))
             item.setData(5, Qt.ItemDataRole.UserRole, False)
         else:
-            item.setText(5, tr("—"))
+            item.setText(5, "—")
             item.setToolTip(
-                5, tr("Векторные атрибутивные поля не найдены.")
+                5, tr("Проверка не применима к этому файлу.")
             )
             item.setData(5, Qt.ItemDataRole.UserRole, False)
 
-    def _finish_attribute_check(self) -> None:
-        total = self._attribute_total
-        issues = self._attribute_issue_count
-        self._attribute_running = False
-        self._attribute_checked = True
-        self._attribute_interrupted = False
-        self._attribute_queue.clear()
+    def _finish_problem_check(self) -> None:
+        total = self._problem_total
+        issues = self._problem_issue_count
+        self._problem_running = False
+        self._problem_checked = True
+        self._problem_interrupted = False
+        self._problem_queue.clear()
         self.check_attributes_button.setToolTip(
-            tr(ATTRIBUTE_CHECK_TOOLTIP)
+            tr(CHECKS_TOOLTIP)
         )
         self._update_problems_summary()
         self._set_problems_filter_available(True)
         self._update_file_actions()
+        self._hide_progress()
         self._resume_details()
         self._update_cancel_button()
         self._apply_filter()
@@ -2018,7 +2586,7 @@ class ZGeoPanel(QDockWidget):
         if issues:
             self._set_status(
                 tr(
-                    "Атрибуты проверены: файлов {} · с проблемами {}",
+                    "Проверки завершены: файлов {} · с проблемами {}",
                     total,
                     issues,
                 )
@@ -2026,57 +2594,62 @@ class ZGeoPanel(QDockWidget):
         else:
             self._set_status(
                 tr(
-                    "Атрибуты проверены: проблем не найдено. Файлов: {}",
+                    "Проверки завершены: проблем не найдено. "
+                    "Файлов: {}",
                     total,
                 )
             )
 
-    def _abort_attribute_check(self) -> None:
-        if not self._attribute_running:
+    def _abort_problem_check(self) -> None:
+        if not self._problem_running:
             return
 
-        processed = self._attribute_processed
-        total = self._attribute_total
-        issues = self._attribute_issue_count
-        self._attribute_timer.stop()
-        self._attribute_queue.clear()
-        self._attribute_running = False
-        self._attribute_checked = processed > 0
-        self._attribute_interrupted = self._attribute_checked
+        processed = self._problem_processed
+        total = self._problem_total
+        issues = self._problem_issue_count
+        self._problem_timer.stop()
+        self._problem_queue.clear()
+        self._problem_running = False
+        self._problem_checked = processed > 0
+        self._problem_interrupted = self._problem_checked
         self.check_attributes_button.setToolTip(
-            tr(ATTRIBUTE_CHECK_TOOLTIP)
+            tr(CHECKS_TOOLTIP)
         )
         self._update_problems_summary()
-        self._set_problems_filter_available(self._attribute_checked)
+        self._set_problems_filter_available(self._problem_checked)
+        self._hide_progress()
         self._resume_details()
         self._update_file_actions()
         self._update_cancel_button()
         self._apply_filter()
         self._set_status(
             tr(
-                "Проверка атрибутов прервана: обработано {} из {} · "
-                "проблем {}",
+                "Проверки прерваны: обработано {} из {} · проблем {}",
                 processed,
                 total,
                 issues,
             )
         )
 
-    def _cancel_attribute_check(self) -> None:
-        self._attribute_timer.stop()
-        self._attribute_queue.clear()
-        self._attribute_running = False
-        self._attribute_total = 0
-        self._attribute_processed = 0
-        self._attribute_issue_count = 0
-        self._attribute_checked = False
-        self._attribute_interrupted = False
-        self._attribute_checks.clear()
-        self._attribute_unavailable.clear()
+    def _cancel_problem_check(self) -> None:
+        self._problem_timer.stop()
+        self._problem_queue.clear()
+        self._problem_running = False
+        self._problem_total = 0
+        self._problem_processed = 0
+        self._problem_issue_count = 0
+        self._problem_checked = False
+        self._problem_interrupted = False
+        self._problem_issues.clear()
+        self._problem_checked_paths.clear()
+        self._problem_candidate_paths.clear()
+        self._problem_selected = ()
+        self._problem_file_cache = {}
         self._reset_problems_filter()
+        self._hide_progress()
         if hasattr(self, "check_attributes_button"):
             self.check_attributes_button.setToolTip(
-                tr(ATTRIBUTE_CHECK_TOOLTIP)
+                tr(CHECKS_TOOLTIP)
             )
         self._update_cancel_button()
 
@@ -2090,7 +2663,7 @@ class ZGeoPanel(QDockWidget):
             self.problems_only_checkbox.blockSignals(False)
 
     def _reset_problems_filter(self) -> None:
-        self._attribute_checked = False
+        self._problem_checked = False
         if not hasattr(self, "problems_label"):
             return
         self._set_problems_filter_available(False)
@@ -2102,30 +2675,31 @@ class ZGeoPanel(QDockWidget):
         if not hasattr(self, "problems_label"):
             return
         self.problems_label.setText(
-            tr("Проблемных файлов: {}", self._attribute_issue_count)
+            tr("Проблемных файлов: {}", self._problem_issue_count)
         )
         if (
-            self._attribute_interrupted
-            and self._attribute_processed < self._attribute_total
+            self._problem_interrupted
+            and self._problem_processed < self._problem_total
         ):
             self.problems_label.setToolTip(
                 tr(
                     "Проверка прервана: обработано {} из {} файлов",
-                    self._attribute_processed,
-                    self._attribute_total,
+                    self._problem_processed,
+                    self._problem_total,
                 )
             )
         else:
             self.problems_label.setToolTip("")
         self.problems_label.setVisible(
-            self._attribute_checked or self._attribute_running
+            self._problem_checked or self._problem_running
         )
 
     def _update_cancel_button(self) -> None:
         if not hasattr(self, "cancel_task_button"):
             return
         active = not self._busy and (
-            self._attribute_running
+            self._problem_running
+            or self._json_running
             or bool(self._details_queue)
             or self._details_timer.isActive()
         )
@@ -2133,15 +2707,19 @@ class ZGeoPanel(QDockWidget):
         self.cancel_task_button.setEnabled(active)
         if not active:
             return
-        if self._attribute_running:
-            tooltip = tr("Прервать проверку атрибутов")
+        if self._json_running:
+            tooltip = tr("Прервать проверку JSON")
+        elif self._problem_running:
+            tooltip = tr("Прервать проверки")
         else:
-            tooltip = tr("Прервать чтение характеристик")
+            tooltip = tr("Прервать уточнение данных")
         self.cancel_task_button.setToolTip(tooltip)
 
     def _cancel_long_operation(self) -> None:
-        if self._attribute_running:
-            self._abort_attribute_check()
+        if self._json_running:
+            self._abort_json_check()
+        elif self._problem_running:
+            self._abort_problem_check()
         elif self._details_queue or self._details_timer.isActive():
             self._abort_details()
 
@@ -2405,6 +2983,7 @@ class ZGeoPanel(QDockWidget):
             self.scan_file_label.setToolTip("")
             self.scan_found_label.setText("0")
             self.scan_progress.setRange(0, 0)
+            self._show_indeterminate_progress()
             self.scan_cancel_button.setText(tr("Прервать"))
             self.scan_cancel_button.setEnabled(True)
             self.stack.setCurrentWidget(self.scan_page)
@@ -2415,6 +2994,7 @@ class ZGeoPanel(QDockWidget):
         else:
             self.scan_cancel_button.setEnabled(False)
             self.scan_cancel_button.setText(tr("Прервать"))
+            self._hide_progress()
         self._update_controls()
         if busy:
             QApplication.processEvents()
@@ -2428,7 +3008,7 @@ class ZGeoPanel(QDockWidget):
         self.filter_edit.setEnabled(bool(self._files) and enabled)
         if hasattr(self, "problems_only_checkbox"):
             self.problems_only_checkbox.setEnabled(
-                self._attribute_checked and enabled
+                self._problem_checked and enabled
             )
         self._update_file_actions()
         self._update_cancel_button()
@@ -2479,8 +3059,8 @@ class ZGeoPanel(QDockWidget):
         self.problems_only_checkbox.setText(tr("Только проблемные"))
         self.problems_only_checkbox.setToolTip(
             tr(
-                "Показывать только файлы, у которых проверка атрибутов "
-                "нашла проблемы"
+                "Показывать только файлы, у которых проверки нашли "
+                "проблемы"
             )
         )
 
@@ -2495,15 +3075,19 @@ class ZGeoPanel(QDockWidget):
             tr("Экспорт в Excel")
         )
         self.check_attributes_button.setAccessibleName(
-            tr("Проверить атрибуты")
+            tr("Проверки")
         )
-        if not self._attribute_running:
+        if self._json_running:
             self.check_attributes_button.setToolTip(
-                tr(ATTRIBUTE_CHECK_TOOLTIP)
+                tr("Проверка JSON выполняется…")
+            )
+        elif not self._problem_running:
+            self.check_attributes_button.setToolTip(
+                tr(CHECKS_TOOLTIP)
             )
         else:
             self.check_attributes_button.setToolTip(
-                tr("Проверка атрибутов выполняется…")
+                tr("Проверки выполняются…")
             )
         self.cancel_task_button.setToolTip(
             tr("Прервать длительную операцию")
@@ -2511,6 +3095,7 @@ class ZGeoPanel(QDockWidget):
         self.cancel_task_button.setAccessibleName(
             tr("Прервать операцию")
         )
+        self.progress_bar.setAccessibleName(tr("Ход выполнения"))
 
         self._retranslate_scan_page()
         self._retranslate_stats_page()
@@ -2626,21 +3211,21 @@ class ZGeoPanel(QDockWidget):
             )
 
     def _retranslate_tree(self) -> None:
-        include_attributes = self._has_attribute_column()
+        include_problems = self._has_problems_column()
         self.tree.setHeaderLabels(
-            self._tree_headers(include_attributes)
+            self._tree_headers(include_problems)
         )
         self.tree.setAccessibleName(
             tr("Найденные пространственные файлы")
         )
-        if include_attributes:
+        if include_problems:
             header_item = self.tree.headerItem()
             if header_item is not None:
                 header_item.setToolTip(
                     5,
                     tr(
-                        "Да — в именах полей есть нелатинские символы; "
-                        "Нет — проблем не найдено; — — векторных полей нет."
+                        "Да — найдены проблемы; Нет — проблем не найдено; "
+                        "— — проверка не применима."
                     ),
                 )
 
@@ -2662,6 +3247,18 @@ class ZGeoPanel(QDockWidget):
                 item.setToolTip(
                     2, tr("Система координат читается…")
                 )
+            elif str(path_key) not in self._refined_crs_paths:
+                item.setToolTip(
+                    2,
+                    tr(
+                        "Система координат не уточнена. "
+                        "Нажмите «Проверки»."
+                    ),
+                )
+            elif crs_text in ("—", "-"):
+                item.setToolTip(
+                    2, tr("Система координат не определена")
+                )
             else:
                 item.setToolTip(
                     2, tr("Система координат: {}", crs_text)
@@ -2671,6 +3268,14 @@ class ZGeoPanel(QDockWidget):
             if count_text == "…":
                 item.setToolTip(
                     3, tr("Количество элементов читается…")
+                )
+            elif str(path_key) not in self._refined_count_paths:
+                item.setToolTip(
+                    3,
+                    tr(
+                        "Количество элементов не уточнено. "
+                        "Нажмите «Проверки»."
+                    ),
                 )
             elif count_text == "—":
                 item.setToolTip(
@@ -2683,35 +3288,48 @@ class ZGeoPanel(QDockWidget):
                 )
 
             item.setText(4, format_size(geo_file.size))
-            item.setToolTip(
-                4, tr("Полный объем набора: {} Б", geo_file.size)
-            )
-            if include_attributes:
+            if str(path_key) in self._refined_size_paths:
+                item.setToolTip(
+                    4, tr("Полный объем набора: {} Б", geo_file.size)
+                )
+            else:
+                item.setToolTip(
+                    4,
+                    tr(
+                        "Размер основного файла: {} Б. Нажмите "
+                        "«Проверки», чтобы уточнить полный размер.",
+                        geo_file.size,
+                    ),
+                )
+            if include_problems:
                 path_text = str(geo_file.path)
-                if path_text in self._attribute_checks:
-                    self._update_item_attributes(
-                        item, self._attribute_checks[path_text]
+                issues = self._problem_issues.get(path_text)
+                if issues:
+                    self._update_item_problems(
+                        item, list(issues), True
                     )
-                elif path_text in self._attribute_unavailable:
-                    self._set_attribute_cell(
-                        item,
-                        "—",
-                        tr("Векторные атрибутивные поля не найдены."),
-                        False,
-                    )
-                elif self._attribute_running or self._attribute_checked:
-                    self._set_attribute_cell(
-                        item,
-                        "…",
-                        tr("Проверка атрибутов…"),
-                    )
+                elif path_text in self._problem_checked_paths:
+                    self._update_item_problems(item, [], True)
+                elif path_text in self._problem_candidate_paths:
+                    if path_text in self._problem_issues:
+                        self._update_item_problems(item, [], False)
+                    elif self._problem_running:
+                        self._set_problem_cell(
+                            item,
+                            "…",
+                            tr("Проверка выполняется…"),
+                        )
+                    else:
+                        self._update_item_problems(item, [], False)
+                elif self._problem_checked or self._problem_running:
+                    self._update_item_problems(item, [], False)
                 else:
-                    self._set_attribute_cell(
+                    self._set_problem_cell(
                         item,
                         "—",
                         tr(
-                            "Атрибуты не проверены. Нажмите «Проверить "
-                            "атрибуты»."
+                            "Проверки не выполнялись. "
+                            "Нажмите «Проверки»."
                         ),
                         False,
                     )
@@ -2728,18 +3346,27 @@ class ZGeoPanel(QDockWidget):
                     self.scan_found_label.text(),
                 )
             )
-        elif self._attribute_running:
+        elif self._json_running:
             self._set_status(
                 tr(
-                    "Проверка атрибутов: {} из {}",
-                    self._attribute_processed,
-                    self._attribute_total,
+                    "Проверка JSON: {} из {}",
+                    self._json_processed,
+                    self._json_total,
+                )
+            )
+        elif self._problem_running:
+            self._set_status(
+                tr(
+                    "Проверки: {} из {}",
+                    self._problem_processed,
+                    self._problem_total,
                 )
             )
         elif self._details_queue or self._details_timer.isActive():
             self._set_status(
                 tr(
-                    "Чтение характеристик и объемов: {} из {}",
+                    "{}: {} из {}",
+                    tr(self._details_action_source),
                     self._details_processed,
                     self._details_total,
                 )

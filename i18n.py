@@ -113,7 +113,6 @@ EN_TRANSLATIONS = {
     "Имя файла": "File name",
     "Найдено": "Found",
     "Прервать": "Cancel",
-    "Проверка атрибутов: {} из {}": "Attribute check: {} of {}",
     "Диаграммы обновятся после завершения поиска файлов.": (
         "Charts will update when the file search finishes."
     ),
@@ -123,16 +122,17 @@ EN_TRANSLATIONS = {
     "Форматы файлов, которые нужно искать": "File formats to search for",
     "Фильтр по имени, формату или пути": "Filter by name, format or path",
     "Только проблемные": "Only problem files",
-    "Показывать только файлы, у которых проверка атрибутов нашла проблемы": (
-        "Show only files with attribute problems"
+    "Показывать только файлы, у которых проверки нашли проблемы": (
+        "Show only files with problems found by checks"
     ),
     "Открыть в проводнике": "Open in Explorer",
     "Экспорт в Excel": "Export to Excel",
-    "Проверить атрибуты": "Check attributes",
+    "Проверки": "Checks",
     "Прервать длительную операцию": "Cancel long operation",
+    "Ход выполнения": "Progress",
     "Прервать операцию": "Cancel operation",
     "Прервать проверку атрибутов": "Cancel attribute check",
-    "Прервать чтение характеристик": "Cancel reading characteristics",
+    "Прервать уточнение данных": "Cancel data refinement",
     "Выбрано: 0 из 0": "Selected: 0 of 0",
     "Выбрано: {} из {}": "Selected: {} of {}",
     "Файлов: 0 · Общий объем: 0 Б": "Files: 0 · Total size: 0 B",
@@ -158,87 +158,176 @@ EN_TRANSLATIONS = {
     "Поиск остановлен пользователем.": "Search stopped by user.",
     "Прерывание…": "Cancelling…",
     "Прерывание сканирования…": "Cancelling scan…",
-    "Чтение характеристик и объемов: 0 из {}": (
-        "Reading characteristics and sizes: 0 of {}"
-    ),
-    "Чтение характеристик и объемов: {} из {}": (
-        "Reading characteristics and sizes: {} of {}"
-    ),
-    "Чтение характеристик и объемов: {} из {} · {}": (
-        "Reading characteristics and sizes: {} of {} · {}"
-    ),
-    "Чтение характеристик прервано: {} из {}": (
-        "Reading characteristics cancelled: {} of {}"
-    ),
-    "Характеристики и объемы прочитаны. Файлов: {}": (
-        "Characteristics and sizes read. Files: {}"
+    "Уточнение данных": "Data refinement",
+    "Уточнение размера": "Size refinement",
+    "Уточнение системы координат": "CRS refinement",
+    "Уточнение количества элементов": "Feature count refinement",
+    "{}: 0 из {}": "{}: 0 of {}",
+    "{}: {} из {}": "{}: {} of {}",
+    "{}: {} из {} · {}": "{}: {} of {} · {}",
+    "{} завершено. Файлов: {}": "{} completed. Files: {}",
+    "{} прервано: {} из {}": "{} cancelled: {} of {}",
+    "Нет файлов для выбранных проверок": (
+        "No files for the selected checks"
     ),
     "Система координат читается…": "Reading CRS…",
     "Количество элементов читается…": "Reading feature count…",
     "Количество элементов не определено": "Feature count is undefined",
+    "Система координат не определена": "CRS is undefined",
     "Система координат: {}": "CRS: {}",
     "Количество элементов: {}": "Feature count: {}",
     "Полный объем набора: {} Б": "Full dataset size: {} B",
     "{} Б": "{} B",
-    "Атрибуты не проверены. Нажмите «Проверить атрибуты».": (
-        "Attributes not checked. Click “Check attributes”."
+    "Система координат не уточнена. Нажмите «Проверки».": (
+        "CRS not refined. Click “Checks”."
     ),
-    "Проверка атрибутов…": "Checking attributes…",
-    "Проверка атрибутов выполняется…": "Attribute check in progress…",
-    "Проверка атрибутов: 0 из {}": "Attribute check: 0 of {}",
-    "Проверка атрибутов: {} из {} · {}": "Attribute check: {} of {} · {}",
-    "Проверка атрибутов прервана: обработано {} из {} · проблем {}": (
-        "Attribute check cancelled: processed {} of {} · issues {}"
+    "Количество элементов не уточнено. Нажмите «Проверки».": (
+        "Feature count not refined. Click “Checks”."
+    ),
+    "Размер основного файла: {} Б. Нажмите «Проверки», чтобы уточнить полный размер.": (
+        "Main file size: {} B. Click “Checks” to refine the full size."
+    ),
+    "Проверки не выполнялись. Нажмите «Проверки».": (
+        "Checks have not been run. Click “Checks”."
+    ),
+    "Проверка выполняется…": "Checking…",
+    "Проверки выполняются…": "Checks are running…",
+    "Проверки: 0 из {}": "Checks: 0 of {}",
+    "Проверки: {} из {}": "Checks: {} of {}",
+    "Проверки: {} из {} · {}": "Checks: {} of {} · {}",
+    "Проверки завершены: файлов {} · с проблемами {}": (
+        "Checks completed: {} files · {} with issues"
+    ),
+    "Проверки завершены: проблем не найдено. Файлов: {}": (
+        "Checks completed: no problems found. Files: {}"
+    ),
+    "Проверки прерваны: обработано {} из {} · проблем {}": (
+        "Checks cancelled: processed {} of {} · issues {}"
     ),
     "Проверка прервана: обработано {} из {} файлов": (
         "Check cancelled: processed {} of {} files"
     ),
-    "Проверить атрибуты: проверить имена полей векторных файлов и добавить колонку «Проблемы с атрибутами».\n"
-    "Если в названии поля есть нелатинские символы (например, кириллица) — «Да»; "
-    "если проблем нет — «Нет»; для растровых файлов — «—».": (
-        "Check attributes: inspect vector field names and add the "
-        "“Attribute issues” column.\n"
-        "If a field name contains non-Latin characters (for example, "
-        "Cyrillic) — “Yes”; if there are no problems — “No”; for raster "
-        "files — “—”."
+    "Проверка не применима к этому файлу.": (
+        "Check is not applicable to this file."
     ),
-    "Проверки данных": "Data checks",
+    "Проблем не найдено.": "No problems found.",
+    "Идёт проверка…": "Check in progress…",
+    "Прервать проверки": "Cancel checks",
+    "Проверки: уточнить размер, систему координат и количество элементов, проверить JSON и найти проблемы с полями, кодировкой, комплектностью набора, системой координат и пустыми слоями.": (
+        "Checks: refine size, CRS and feature count, check JSON, and find "
+        "problems with fields, encoding, dataset completeness, CRS and "
+        "empty layers."
+    ),
     "Выберите проверки": "Select checks",
     "Отметьте проверки, которые нужно выполнить для найденных файлов.": (
         "Select the checks to run on the found files."
     ),
-    "Проверка имён атрибутивных полей": "Attribute field name check",
-    "Проверяет имена полей векторных файлов и добавляет колонку «Проблемы с атрибутами». Если в имени поля есть нелатинские символы, ставится «Да», иначе «Нет»; для растровых файлов — «—».": (
-        "Checks vector field names and adds the “Attribute issues” column. "
-        "If a field name contains non-Latin characters, “Yes” is shown; "
-        "otherwise “No”; for raster files — “—”."
+    "Уточнить размер": "Refine size",
+    "Считает полный размер каждого набора данных с учётом сопутствующих файлов.": (
+        "Calculates the full size of each dataset, including sidecar files."
     ),
-    "Уточнение характеристик и объёмов": "Refine characteristics and sizes",
-    "Читает систему координат, количество элементов и полный объём наборов данных с учётом сопутствующих файлов.": (
-        "Reads the CRS, feature count and full dataset size, including "
-        "sidecar files."
+    "Уточнить систему координат": "Refine CRS",
+    "Читает систему координат слоёв и обновляет колонку «Система координат».": (
+        "Reads the CRS of layers and updates the “CRS” column."
+    ),
+    "Уточнить количество элементов": "Refine feature count",
+    "Считает количество элементов слоёв и обновляет колонку «Элементов».": (
+        "Counts layer features and updates the “Features” column."
+    ),
+    "Проверка JSON на формат GEOJSON": "Check JSON for GeoJSON format",
+    "Проверяет файлы .json и .geojson по полю type. Файлы, не являющиеся GeoJSON, исключаются из списка.": (
+        "Checks .json and .geojson files by the type field. Files that are "
+        "not GeoJSON are excluded from the list."
+    ),
+    "Проверка JSON на формат GeoJSON: 0 из {}": (
+        "JSON check for GeoJSON format: 0 of {}"
+    ),
+    "Проверка JSON: {} из {} · {}": "JSON check: {} of {} · {}",
+    "Проверка JSON завершена: проверено {} · исключено {}": (
+        "JSON check completed: checked {} · excluded {}"
+    ),
+    "Проверка JSON завершена: все файлы соответствуют GeoJSON. Проверено: {}": (
+        "JSON check completed: all files are GeoJSON. Checked: {}"
+    ),
+    "Проверка JSON прервана: проверено {} из {} · исключено {}": (
+        "JSON check cancelled: checked {} of {} · excluded {}"
+    ),
+    "Проверка JSON выполняется…": "JSON check in progress…",
+    "Прервать проверку JSON": "Cancel JSON check",
+    "Нет JSON-файлов для проверки": "No JSON files to check",
+    "Все найденные файлы исключены проверками.": (
+        "All found files were excluded by checks."
+    ),
+    "Нет файлов для построения диаграмм.": "No files to build charts.",
+    "Проверка имён атрибутивных полей": "Attribute field name check",
+    "Проверяет имена полей векторных файлов на нелатинские символы и добавляет колонку «Проблемы». Если в имени поля есть нелатинские символы, ставится «Да», иначе «Нет»; для растровых файлов — «—».": (
+        "Checks vector field names for non-Latin characters and adds the "
+        "“Issues” column. If a field name contains non-Latin characters, "
+        "“Yes” is shown; otherwise “No”; for raster files — “—”."
+    ),
+    "Проверка имён полей для Shapefile": "Shapefile field name check",
+    "Проверяет длину имён полей (не более 10 символов для DBF), пробелы и недопустимые символы.": (
+        "Checks field name length (10 characters max for DBF), spaces and "
+        "invalid characters."
+    ),
+    "Проверка дублей имён после усечения": (
+        "Truncated field name duplicates check"
+    ),
+    "Ищет поля, имена которых совпадают после усечения до 10 символов.": (
+        "Finds fields whose names collide after truncation to 10 characters."
+    ),
+    "Проверка кодировки DBF и .cpg": "DBF encoding and .cpg check",
+    "Проверяет наличие файла .cpg и корректность указанной кодировки DBF.": (
+        "Checks for the .cpg file and validates the specified DBF encoding."
+    ),
+    "Проверка комплектности набора": "Dataset completeness check",
+    "Проверяет обязательные файлы: .shp + .dbf + .shx, .mif + .mid, .tab + .dat/.map/.id.": (
+        "Checks required files: .shp + .dbf + .shx, .mif + .mid, "
+        ".tab + .dat/.map/.id."
+    ),
+    "Проверка системы координат": "CRS check",
+    "Ищет файлы без системы координат, с неизвестной или смешанной системой координат.": (
+        "Finds files without a CRS, with an unknown CRS or with mixed CRSs."
+    ),
+    "Проверка пустых слоёв": "Empty layers check",
+    "Ищет пустые слои и файлы с нулевым количеством объектов.": (
+        "Finds empty layers and files with zero features."
     ),
     "Описание проверки: {}": "Check description: {}",
-    "Проблемы с атрибутами": "Attribute issues",
-    "Да — в именах полей есть нелатинские символы; Нет — проблем не найдено; — — векторных полей нет.": (
-        "Yes — field names contain non-Latin characters; No — no problems "
-        "found; — — no vector fields."
-    ),
-    "Векторные атрибутивные поля не найдены.": (
-        "No vector attribute fields found."
-    ),
-    "Идёт проверка атрибутов…": "Attribute check in progress…",
-    "Нет векторных файлов для проверки атрибутов": (
-        "No vector files to check attributes"
+    "Проблемы": "Issues",
+    "Да — найдены проблемы; Нет — проблем не найдено; — — проверка не применима.": (
+        "Yes — problems found; No — no problems found; — — check is not "
+        "applicable."
     ),
     "Нелатинские имена полей:\n{}": "Non-Latin field names:\n{}",
-    "Проблем с именами полей не найдено.": "No field name problems found.",
-    "Атрибуты проверены: файлов {} · с проблемами {}": (
-        "Attributes checked: {} files · {} with issues"
+    "В наборе отсутствуют файлы: {}": "Dataset is missing files: {}",
+    "Не удалось прочитать заголовок DBF": (
+        "Could not read the DBF header"
     ),
-    "Атрибуты проверены: проблем не найдено. Файлов: {}": (
-        "Attributes checked: no problems found. Files: {}"
+    "Нет файла .cpg: кодировка DBF не указана": (
+        "No .cpg file: DBF encoding is not specified"
     ),
+    "Файл .cpg пуст: кодировка DBF не указана": (
+        "The .cpg file is empty: DBF encoding is not specified"
+    ),
+    "Неизвестная кодировка в .cpg: {}": "Unknown encoding in .cpg: {}",
+    "Поле «{}»: длина {} больше {} символов (ограничение DBF)": (
+        "Field “{}”: length {} exceeds {} characters (DBF limit)"
+    ),
+    "Поле «{}»: содержит пробел": "Field “{}”: contains a space",
+    "Поле «{}»: недопустимые символы: {}": (
+        "Field “{}”: invalid characters: {}"
+    ),
+    "Слой «{}»: после усечения до {} символов совпадают имена полей: {}": (
+        "Layer “{}”: field names collide after truncation to {} characters: "
+        "{}"
+    ),
+    "У части слоёв не определена система координат": (
+        "Some layers have no CRS"
+    ),
+    "Смешанные системы координат: {}": "Mixed CRS: {}",
+    "Файл не содержит объектов": "File contains no features",
+    "Слой «{}» не содержит объектов": "Layer “{}” contains no features",
     # Информация о файле
     "Информация — {}": "Information — {}",
     "Слой:": "Layer:",
