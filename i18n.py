@@ -409,6 +409,8 @@ EN_TRANSLATIONS = {
     "Проверка": "Check",
     "Файлов с проблемами": "Files with issues",
     "Ошибок": "Issues",
+    "Проверки: {}": "Checks: {}",
+    "Текущая проверка": "Current check",
     # Информация о файле
     "Информация — {}": "Information — {}",
     "Слой:": "Layer:",

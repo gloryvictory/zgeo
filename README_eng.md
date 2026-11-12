@@ -4,7 +4,7 @@
 
 A QGIS plugin for quickly browsing the contents of a spatial data folder.
 
-Plugin version: **1.26.0**
+Plugin version: **1.26.1**
 
 The plugin adds a dedicated **“ZGeo”** toolbar to QGIS with a **“ZGeo Catalog”** button that opens a floating panel. The panel provides:
 
@@ -18,7 +18,7 @@ The plugin adds a dedicated **“ZGeo”** toolbar to QGIS with a **“ZGeo Cata
 - after scanning, the CRS, feature count and full dataset size are not read automatically; use the **“Checks”** window to refine them, with progress shown in the status bar and on the progress bar;
 - the number of files and their total size are shown above the list; when filtering, the total size is calculated for visible files only;
 - the full dataset size includes sidecar files (SHP + DBF + SHX + PRJ + CPG and others, MIF + MID, TAB + DAT/MAP/ID/IND);
-- the status bar is at the bottom of the window: the current operation is shown on the left, and **“Selected: N of M”** is shown on the right; during scanning and checks, a full-width progress bar with the current and total file counts is shown below the status bar;
+- the status bar is at the bottom of the window: the current operation is shown on the left, and **“Selected: N of M”** is shown on the right; during scanning and checks, a full-width progress bar with the current and total file counts is shown below the status bar, with the current check name above it;
 - the list can be filtered by name, format, path or issues;
 - the **“Settings”** tab lets you select the formats to scan; the **“Select all”**, **“Clear all”**, **“Vector only”** and **“Raster only”** buttons are available at the top; **Excel** is disabled by default;
 - the **“Files”** tab has the **“Information”**, **“Open in Explorer”**, **“Export to Excel”** and **“Checks”** buttons at the bottom;
@@ -107,7 +107,7 @@ The last selected folder is remembered and used as the starting folder next time
 
 The status bar is at the bottom of the window. The current operation is shown on the left: scanning, size, CRS or feature count refinement, JSON check, problem checks, retrieving information, opening Explorer, Excel export, cancellation messages and errors. The number of selected rows is always shown on the right: **“Selected: N of M”**. The counter is updated when files are selected and when the list is filtered.
 
-During scanning and long-running checks, a full-width progress bar appears below the status bar: while scanning it shows indeterminate progress, and during checks it shows how many files have been processed out of the total. The progress bar is hidden when the operation finishes.
+During scanning and long-running checks, a full-width progress bar appears below the status bar: while scanning it shows indeterminate progress, and during checks it shows how many files have been processed out of the total. The current check or operation name is displayed above the progress bar. The progress bar and its title are hidden when the operation finishes.
 
 ## Interface language
 

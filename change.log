@@ -1,36 +1,27 @@
 ZGeo change log
 ===============
 
-Version 1.26.0 — 2026-11-12
-Previous GitHub release: v1.25.0 (2026-11-12)
+Version 1.26.1 — 2026-11-12
+Previous GitHub release: v1.26.0 (2026-11-12)
 
 Overview
 --------
-ZGeo 1.26.0 removes the redundant format-specific size checks and extends
-Excel export with per-check error worksheets and a summary worksheet.
+ZGeo 1.26.1 shows the name of the current check or operation directly
+above the progress bar at the bottom of the panel.
 
-Changes in 1.26.0
+Changes in 1.26.1
 -----------------
-- Removed the "Refine SHP size" and "Refine MIF/MID size" checks. Both
-  are subsets of "Refine size", which already covers all formats,
-  including SHP and MIF/MID.
-- The checks window now contains 7 checks instead of 9.
-- Excel export now adds a worksheet for every executed problem check that
-  found issues. Each worksheet contains the columns:
-  - "Full path";
-  - "File";
-  - "Feature ID";
-  - "Where";
-  - "Error description".
-- Geometry and coordinate rows include the feature ID and the vertex or
-  geometry location. Field-name rows include the layer and field name.
-- A final "Check statistics" worksheet lists each executed check with the
-  number of files that have issues and the number of error rows.
-- The per-check worksheets respect the active file filter, like the main
-  file list worksheet.
+- Added a label above the progress bar that displays:
+  - the name of the current check (or the list of selected checks);
+  - "Scanning folder…" during scanning;
+  - the refinement action name (size, CRS or feature count) when a
+    refinement is running.
+- The label is updated when the language is switched while an operation
+  is running.
+- The label and the progress bar are hidden when the operation finishes.
 - README, metadata, translations and tests were updated.
 
-Available checks in 1.26.0
+Available checks in 1.26.1
 --------------------------
 Refinement:
 - Refine size (all formats, including SHP and MIF/MID)
@@ -58,7 +49,7 @@ Compatibility
 
 Installation
 ------------
-1. Download `zgeo-1.26.0.zip`.
+1. Download `zgeo-1.26.1.zip`.
 2. In QGIS open Plugins → Manage and Install Plugins → Install from ZIP.
 3. Select the downloaded archive and restart QGIS if it was running.
 

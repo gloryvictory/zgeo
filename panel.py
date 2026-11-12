@@ -340,6 +340,25 @@ class ZGeoPanel(QDockWidget):
         outer_layout.setContentsMargins(0, 0, 0, 0)
         outer_layout.setSpacing(0)
         outer_layout.addWidget(root, 1)
+
+        self.progress_label = QLabel()
+        self.progress_label.setObjectName("zgeoProgressLabel")
+        self.progress_label.setContentsMargins(14, 0, 14, 2)
+        self.progress_label.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.progress_label.setWordWrap(True)
+        self.progress_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        self._set_font(self.progress_label, -1)
+        self._set_muted(self.progress_label)
+        self.progress_label.setAccessibleName(
+            tr("Текущая проверка")
+        )
+        self.progress_label.setVisible(False)
+        outer_layout.addWidget(self.progress_label)
+
         self.progress_bar = self._build_progress_bar()
         outer_layout.addWidget(self.progress_bar)
         self.setWidget(outer)
@@ -1555,6 +1574,10 @@ class ZGeoPanel(QDockWidget):
         self.status_message_label.setText(message)
         self.status_message_label.setToolTip(message)
 
+    def _set_progress_title(self, title: str) -> None:
+        self.progress_label.setText(title)
+        self.progress_label.setToolTip(title)
+
     def _show_progress(self, processed: int, total: int) -> None:
         """Показать определённый прогресс операции в статусной строке."""
 
@@ -1566,6 +1589,9 @@ class ZGeoPanel(QDockWidget):
         self.progress_bar.setRange(0, total)
         self.progress_bar.setValue(min(max(processed, 0), total))
         self.progress_bar.setTextVisible(True)
+        self.progress_label.setVisible(
+            bool(self.progress_label.text())
+        )
         self.progress_bar.setVisible(True)
 
     def _show_indeterminate_progress(self) -> None:
@@ -1575,11 +1601,16 @@ class ZGeoPanel(QDockWidget):
             return
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setTextVisible(False)
+        self.progress_label.setVisible(
+            bool(self.progress_label.text())
+        )
         self.progress_bar.setVisible(True)
 
     def _hide_progress(self) -> None:
         if hasattr(self, "progress_bar"):
             self.progress_bar.setVisible(False)
+        if hasattr(self, "progress_label"):
+            self.progress_label.setVisible(False)
 
     def _update_selection_status(self) -> None:
         total = 0 if self._busy else len(self._entries)
@@ -1879,6 +1910,7 @@ class ZGeoPanel(QDockWidget):
             )
         )
         self._details_timer.start(0)
+        self._set_progress_title(tr(action))
         self._show_progress(0, self._details_total)
         self._update_cancel_button()
 
@@ -1926,6 +1958,9 @@ class ZGeoPanel(QDockWidget):
             return
         self._details_paused = False
         if self._details_queue:
+            self._set_progress_title(
+                tr(self._details_action_source)
+            )
             self._show_progress(
                 self._details_processed, self._details_total
             )
@@ -2205,6 +2240,9 @@ class ZGeoPanel(QDockWidget):
             )
         )
         self._json_timer.start(0)
+        self._set_progress_title(
+            tr("Проверка JSON на формат GeoJSON")
+        )
         self._show_progress(0, self._json_total)
         self._update_file_actions()
         self._update_cancel_button()
@@ -2388,6 +2426,21 @@ class ZGeoPanel(QDockWidget):
 
         self._update_controls()
 
+    def _problem_progress_title(self) -> str:
+        labels = {
+            definition.key: definition.label
+            for definition in check_definitions()
+        }
+        names = [
+            labels.get(check, check)
+            for check in self._problem_selected
+        ]
+        if not names:
+            return tr("Проверки")
+        if len(names) == 1:
+            return names[0]
+        return tr("Проверки: {}", ", ".join(names))
+
     def _start_problem_check(self, checks: List[str]) -> None:
         if self._problem_running or not self._files:
             return
@@ -2466,6 +2519,7 @@ class ZGeoPanel(QDockWidget):
         self._problem_processed = 0
         self._problem_issue_count = 0
         self._problem_running = True
+        self._set_progress_title(self._problem_progress_title())
         self._show_progress(0, self._problem_total)
         self.check_attributes_button.setToolTip(
             tr("Проверки выполняются…")
@@ -3124,6 +3178,7 @@ class ZGeoPanel(QDockWidget):
             self.scan_file_label.setToolTip("")
             self.scan_found_label.setText("0")
             self.scan_progress.setRange(0, 0)
+            self._set_progress_title(tr("Сканирование папки…"))
             self._show_indeterminate_progress()
             self.scan_cancel_button.setText(tr("Прервать"))
             self.scan_cancel_button.setEnabled(True)
@@ -3237,6 +3292,8 @@ class ZGeoPanel(QDockWidget):
             tr("Прервать операцию")
         )
         self.progress_bar.setAccessibleName(tr("Ход выполнения"))
+        self.progress_label.setAccessibleName(tr("Текущая проверка"))
+        self._retranslate_progress()
 
         self._retranslate_scan_page()
         self._retranslate_stats_page()
@@ -3478,6 +3535,21 @@ class ZGeoPanel(QDockWidget):
                 (item, self._search_text_for(geo_file))
             )
         self._entries = new_entries
+
+    def _retranslate_progress(self) -> None:
+        if not hasattr(self, "progress_label"):
+            return
+        if self._json_running:
+            title = tr("Проверка JSON на формат GeoJSON")
+        elif self._problem_running:
+            title = self._problem_progress_title()
+        elif self._details_queue or self._details_timer.isActive():
+            title = tr(self._details_action_source)
+        elif self._busy:
+            title = tr("Сканирование папки…")
+        else:
+            return
+        self._set_progress_title(title)
 
     def _retranslate_status(self) -> None:
         if self._busy:
