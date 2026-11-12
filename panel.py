@@ -51,21 +51,15 @@ from qgis.PyQt.QtWidgets import (
 
 from .charts import BarChart, BarDatum
 from .check_dialog import (
-    CHECK_ATTRIBUTE_NAMES,
-    CHECK_CRS,
     CHECK_CRS_QUALITY,
-    CHECK_COORDINATE_RANGE,
-    CHECK_DATASET_COMPLETENESS,
-    CHECK_DBF_ENCODING,
-    CHECK_ELEMENT_COUNT,
-    CHECK_EMPTY_LAYERS,
-    CHECK_GEOMETRY_VALIDITY,
+    CHECK_COUNT_QUALITY,
+    CHECK_DATASET_INTEGRITY,
+    CHECK_FIELD_NAMES,
+    CHECK_GEOMETRY_COORDINATES,
     CHECK_JSON_GEOJSON,
     CHECK_SIZE,
     CHECK_SIZE_MIF_MID,
     CHECK_SIZE_SHP,
-    CHECK_SHP_FIELD_NAMES,
-    CHECK_TRUNCATED_DUPLICATES,
     LAYER_PROBLEM_CHECKS,
     PROBLEM_CHECKS,
     ChecksDialog,
@@ -124,9 +118,8 @@ DISABLED_FORMATS_KEY = "zgeo/disabled_formats"
 ICON_PATH = Path(__file__).with_name("icon.svg")
 CHECKS_TOOLTIP = (
     "Проверки: уточнить размер (в том числе отдельно для SHP и MIF/MID), "
-    "систему координат и количество элементов, проверить JSON и найти "
-    "проблемы с полями, кодировкой, комплектностью набора, системой "
-    "координат, геометриями, координатами и пустыми слоями."
+    "систему координат и количество элементов, проверить JSON, имена "
+    "полей, набор данных, геометрии и координаты."
 )
 SIZE_CHART_COLOR = "#0F766E"
 TYPE_CHART_COLORS = (
@@ -2073,8 +2066,6 @@ class ZGeoPanel(QDockWidget):
         read_size_mif_mid = (
             CHECK_SIZE_MIF_MID in checks and not read_size_all
         )
-        read_crs = CHECK_CRS in checks
-        read_count = CHECK_ELEMENT_COUNT in checks
 
         size_paths: Set[str] = set()
         if read_size_all:
@@ -2096,35 +2087,24 @@ class ZGeoPanel(QDockWidget):
                 )
 
         read_size = bool(size_paths)
-        if not read_crs and not read_count:
-            if read_size_all:
-                action = "Уточнение размера"
-            elif read_size_shp and read_size_mif_mid:
-                action = "Уточнение размера"
-            elif read_size_shp:
-                action = "Уточнение размера SHP"
-            elif read_size_mif_mid:
-                action = "Уточнение размера MIF/MID"
-            else:
-                action = "Уточнение данных"
-        elif read_size:
-            action = "Уточнение данных"
-        elif read_crs and not read_count:
-            action = "Уточнение системы координат"
-        elif read_count and not read_crs:
-            action = "Уточнение количества элементов"
+        if read_size_all:
+            action = "Уточнение размера"
+        elif read_size_shp and read_size_mif_mid:
+            action = "Уточнение размера"
+        elif read_size_shp:
+            action = "Уточнение размера SHP"
+        elif read_size_mif_mid:
+            action = "Уточнение размера MIF/MID"
         else:
-            action = "Уточнение данных"
+            action = "Уточнение размера"
 
         problem_checks = [
             check for check in checks if check in PROBLEM_CHECKS
         ]
 
-        if read_size or read_crs or read_count:
+        if read_size:
             detail_files = list(self._files)
-            if (
-                read_size_shp or read_size_mif_mid
-            ) and not read_crs and not read_count:
+            if (read_size_shp or read_size_mif_mid) and not read_size_all:
                 detail_files = [
                     geo_file
                     for geo_file in detail_files
@@ -2132,9 +2112,9 @@ class ZGeoPanel(QDockWidget):
                 ]
             self._start_details(
                 detail_files,
-                read_size=read_size,
-                read_crs=read_crs,
-                read_count=read_count,
+                read_size=True,
+                read_crs=False,
+                read_count=False,
                 size_paths=size_paths,
                 action=action,
             )
@@ -2392,14 +2372,8 @@ class ZGeoPanel(QDockWidget):
             candidates = [
                 geo_file
                 for geo_file in self._files
-                if (
-                    CHECK_DATASET_COMPLETENESS in checks
-                    and geo_file.extension in (".shp", ".mif", ".tab")
-                )
-                or (
-                    CHECK_DBF_ENCODING in checks
-                    and geo_file.extension == ".shp"
-                )
+                if CHECK_DATASET_INTEGRITY in checks
+                and geo_file.extension in (".shp", ".mif", ".tab")
             ]
 
         candidate_paths = {
@@ -2502,14 +2476,12 @@ class ZGeoPanel(QDockWidget):
             geo_file.path.parent, self._problem_file_cache
         )
 
-        if CHECK_DATASET_COMPLETENESS in checks:
+        if CHECK_DATASET_INTEGRITY in checks:
             if geo_file.extension in (".shp", ".mif", ".tab"):
                 applicable = True
                 issues.extend(
                     completeness_issues(geo_file, files)
                 )
-
-        if CHECK_DBF_ENCODING in checks:
             if geo_file.extension == ".shp":
                 dbf_name = geo_file.path.stem.casefold() + ".dbf"
                 if dbf_name in files:
@@ -2545,7 +2517,7 @@ class ZGeoPanel(QDockWidget):
         crs_values = [layer.crs for layer in vector_layers]
         crs_values.extend(layer.crs for layer in raster_layers)
 
-        if CHECK_ATTRIBUTE_NAMES in checks and vector_layers:
+        if CHECK_FIELD_NAMES in checks and vector_layers:
             applicable = True
             non_latin = [
                 name
@@ -2556,18 +2528,12 @@ class ZGeoPanel(QDockWidget):
             if non_latin:
                 issues.append(
                     QualityIssue(
-                        CHECK_ATTRIBUTE_NAMES,
+                        CHECK_FIELD_NAMES,
                         "Нелатинские имена полей:\n{}",
                         ("\n".join(dict.fromkeys(non_latin)),),
                     )
                 )
-
-        if CHECK_SHP_FIELD_NAMES in checks and vector_layers:
-            applicable = True
             issues.extend(field_name_issues(layer_fields))
-
-        if CHECK_TRUNCATED_DUPLICATES in checks and vector_layers:
-            applicable = True
             issues.extend(truncated_duplicate_issues(layer_fields))
 
         if CHECK_CRS_QUALITY in checks and (
@@ -2575,20 +2541,19 @@ class ZGeoPanel(QDockWidget):
         ):
             applicable = True
             issues.extend(crs_issues(crs_values))
+            self._apply_crs_summary(geo_file, crs_values)
 
-        if CHECK_EMPTY_LAYERS in checks and vector_layers:
+        if CHECK_COUNT_QUALITY in checks and vector_layers:
             applicable = True
             issues.extend(empty_layer_issues(layer_counts))
+            self._apply_count_summary(geo_file, layer_counts)
 
-        if (
-            CHECK_GEOMETRY_VALIDITY in checks
-            or CHECK_COORDINATE_RANGE in checks
-        ) and vector_layers:
+        if CHECK_GEOMETRY_COORDINATES in checks and vector_layers:
             geometry_issues, geometry_applicable = (
                 inspect_geometry_and_coordinates(
                     geo_file,
-                    check_geometry=CHECK_GEOMETRY_VALIDITY in checks,
-                    check_coordinates=CHECK_COORDINATE_RANGE in checks,
+                    check_geometry=True,
+                    check_coordinates=True,
                 )
             )
             if geometry_applicable:
@@ -2596,6 +2561,43 @@ class ZGeoPanel(QDockWidget):
             issues.extend(geometry_issues)
 
         return issues, applicable
+
+    def _apply_crs_summary(
+        self, geo_file: GeoFile, values: List[str]
+    ) -> None:
+        unique = {value for value in values if value}
+        if not unique:
+            text = "—"
+        elif len(unique) == 1:
+            text = next(iter(unique))
+        else:
+            text = tr("Разные")
+
+        path_key = str(geo_file.path)
+        self._refined_crs_paths.add(path_key)
+        item = self._item_by_path.get(path_key)
+        if item is not None:
+            self._update_item_crs(item, text)
+
+    def _apply_count_summary(
+        self, geo_file: GeoFile, layer_counts: List[Tuple[str, int]]
+    ) -> None:
+        counts = [count for _name, count in layer_counts]
+        if not counts or any(count < 0 for count in counts):
+            total = None
+        else:
+            total = sum(counts)
+
+        path_key = str(geo_file.path)
+        self._refined_count_paths.add(path_key)
+        if total is None:
+            self._element_counts.pop(path_key, None)
+        else:
+            self._element_counts[path_key] = total
+
+        item = self._item_by_path.get(path_key)
+        if item is not None:
+            self._update_item_count(item, total)
 
     @staticmethod
     def _update_item_problems(

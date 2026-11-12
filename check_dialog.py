@@ -28,42 +28,29 @@ ICON_PATH = Path(__file__).with_name("icon.svg")
 CHECK_SIZE = "refine_size"
 CHECK_SIZE_SHP = "refine_size_shp"
 CHECK_SIZE_MIF_MID = "refine_size_mif_mid"
-CHECK_CRS = "refine_crs"
-CHECK_ELEMENT_COUNT = "refine_element_count"
 CHECK_JSON_GEOJSON = "json_geojson"
-CHECK_ATTRIBUTE_NAMES = "attribute_names"
-CHECK_SHP_FIELD_NAMES = "shp_field_names"
-CHECK_TRUNCATED_DUPLICATES = "truncated_duplicates"
-CHECK_DBF_ENCODING = "dbf_encoding"
-CHECK_DATASET_COMPLETENESS = "dataset_completeness"
 CHECK_CRS_QUALITY = "crs_quality"
-CHECK_GEOMETRY_VALIDITY = "geometry_validity"
-CHECK_COORDINATE_RANGE = "coordinate_range"
-CHECK_EMPTY_LAYERS = "empty_layers"
+CHECK_COUNT_QUALITY = "count_quality"
+CHECK_FIELD_NAMES = "field_names"
+CHECK_DATASET_INTEGRITY = "dataset_integrity"
+CHECK_GEOMETRY_COORDINATES = "geometry_coordinates"
 
 PROBLEM_CHECKS = frozenset(
     {
-        CHECK_ATTRIBUTE_NAMES,
-        CHECK_SHP_FIELD_NAMES,
-        CHECK_TRUNCATED_DUPLICATES,
-        CHECK_DBF_ENCODING,
-        CHECK_DATASET_COMPLETENESS,
         CHECK_CRS_QUALITY,
-        CHECK_GEOMETRY_VALIDITY,
-        CHECK_COORDINATE_RANGE,
-        CHECK_EMPTY_LAYERS,
+        CHECK_COUNT_QUALITY,
+        CHECK_FIELD_NAMES,
+        CHECK_DATASET_INTEGRITY,
+        CHECK_GEOMETRY_COORDINATES,
     }
 )
 
 LAYER_PROBLEM_CHECKS = frozenset(
     {
-        CHECK_ATTRIBUTE_NAMES,
-        CHECK_SHP_FIELD_NAMES,
-        CHECK_TRUNCATED_DUPLICATES,
         CHECK_CRS_QUALITY,
-        CHECK_GEOMETRY_VALIDITY,
-        CHECK_COORDINATE_RANGE,
-        CHECK_EMPTY_LAYERS,
+        CHECK_COUNT_QUALITY,
+        CHECK_FIELD_NAMES,
+        CHECK_GEOMETRY_COORDINATES,
     }
 )
 
@@ -111,112 +98,62 @@ def check_definitions(
             checked=False,
         ),
         CheckDefinition(
-            key=CHECK_CRS,
-            label=tr("Уточнить систему координат"),
-            description=tr(
-                "Читает систему координат слоёв и обновляет колонку "
-                "«Система координат»."
-            ),
-        ),
-        CheckDefinition(
-            key=CHECK_ELEMENT_COUNT,
-            label=tr("Уточнить количество элементов"),
-            description=tr(
-                "Считает количество элементов слоёв и обновляет колонку "
-                "«Элементов»."
-            ),
-        ),
-        CheckDefinition(
-            key=CHECK_ATTRIBUTE_NAMES,
-            label=tr("Проверка имён атрибутивных полей"),
-            description=tr(
-                "Проверяет имена полей векторных файлов на нелатинские "
-                "символы и добавляет колонку «Проблемы». Если в имени поля "
-                "есть нелатинские символы, ставится «Да», иначе «Нет»; для "
-                "растровых файлов — «—»."
-            ),
-        ),
-        CheckDefinition(
-            key=CHECK_SHP_FIELD_NAMES,
-            label=tr("Проверка имён полей для Shapefile"),
-            description=tr(
-                "Проверяет длину имён полей (не более 10 символов для "
-                "DBF), пробелы и недопустимые символы."
-            ),
-            checked=False,
-        ),
-        CheckDefinition(
-            key=CHECK_TRUNCATED_DUPLICATES,
-            label=tr("Проверка дублей имён после усечения"),
-            description=tr(
-                "Ищет поля, имена которых совпадают после усечения до "
-                "10 символов."
-            ),
-            checked=False,
-        ),
-        CheckDefinition(
-            key=CHECK_DBF_ENCODING,
-            label=tr("Проверка кодировки DBF и .cpg"),
-            description=tr(
-                "Проверяет наличие файла .cpg и корректность указанной "
-                "кодировки DBF."
-            ),
-            checked=False,
-        ),
-        CheckDefinition(
-            key=CHECK_DATASET_COMPLETENESS,
-            label=tr("Проверка комплектности набора"),
-            description=tr(
-                "Проверяет обязательные файлы: .shp + .dbf + .shx, "
-                ".mif + .mid, .tab + .dat/.map/.id."
-            ),
-            checked=False,
-        ),
-        CheckDefinition(
             key=CHECK_CRS_QUALITY,
-            label=tr("Проверка системы координат"),
+            label=tr("Уточнить систему координат и проверить СК"),
             description=tr(
-                "Ищет файлы без системы координат, с неизвестной или "
-                "смешанной системой координат."
+                "Читает систему координат слоёв, обновляет колонку "
+                "«Система координат» и отмечает отсутствующую, неизвестную "
+                "или смешанную СК."
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_COUNT_QUALITY,
+            label=tr(
+                "Уточнить количество элементов и проверить пустые слои"
+            ),
+            description=tr(
+                "Считает количество элементов, обновляет колонку "
+                "«Элементов» и отмечает пустые слои и файлы без объектов."
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_FIELD_NAMES,
+            label=tr("Проверка имён полей"),
+            description=tr(
+                "Проверяет нелатинские символы, длину имени (не более "
+                "10 символов DBF), пробелы, недопустимые символы и дубли "
+                "после усечения."
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_DATASET_INTEGRITY,
+            label=tr("Проверка набора данных"),
+            description=tr(
+                "Проверяет обязательные файлы набора, наличие .cpg и "
+                "корректность указанной кодировки DBF."
             ),
             checked=False,
         ),
         CheckDefinition(
-            key=CHECK_GEOMETRY_VALIDITY,
-            label=tr("Проверка валидности геометрий"),
+            key=CHECK_GEOMETRY_COORDINATES,
+            label=tr("Проверка геометрий и координат"),
             description=tr(
                 "Ищет самопересечения, незамкнутые кольца, пустые и "
-                "null-геометрии."
-            ),
-            checked=False,
-        ),
-        CheckDefinition(
-            key=CHECK_COORDINATE_RANGE,
-            label=tr("Проверка координат"),
-            description=tr(
-                "Ищет NaN/Inf, слишком большие координаты, перепутанные "
-                "широту и долготу и выход за допустимый диапазон CRS."
-            ),
-            checked=False,
-        ),
-        CheckDefinition(
-            key=CHECK_EMPTY_LAYERS,
-            label=tr("Проверка пустых слоёв"),
-            description=tr(
-                "Ищет пустые слои и файлы с нулевым количеством объектов."
+                "null-геометрии, NaN/Inf, слишком большие координаты, "
+                "перепутанные широту и долготу и выход за диапазон CRS."
             ),
             checked=False,
         ),
     ]
 
     if include_json_check:
-        attribute_index = next(
+        field_index = next(
             index
             for index, definition in enumerate(definitions)
-            if definition.key == CHECK_ATTRIBUTE_NAMES
+            if definition.key == CHECK_FIELD_NAMES
         )
         definitions.insert(
-            attribute_index,
+            field_index,
             CheckDefinition(
                 key=CHECK_JSON_GEOJSON,
                 label=tr("Проверка JSON на формат GEOJSON"),
@@ -228,6 +165,7 @@ def check_definitions(
         )
 
     return definitions
+
 
 
 class ChecksDialog(QDialog):
@@ -246,8 +184,8 @@ class ChecksDialog(QDialog):
 
         self.setWindowTitle(tr("Проверки"))
         self.setWindowIcon(QIcon(str(ICON_PATH)))
-        self.resize(680, 640)
-        self.setMinimumSize(580, 460)
+        self.resize(640, 540)
+        self.setMinimumSize(540, 400)
 
         self._build_ui()
 

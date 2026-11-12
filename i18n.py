@@ -215,11 +215,10 @@ EN_TRANSLATIONS = {
     "Проблем не найдено.": "No problems found.",
     "Идёт проверка…": "Check in progress…",
     "Прервать проверки": "Cancel checks",
-    "Проверки: уточнить размер (в том числе отдельно для SHP и MIF/MID), систему координат и количество элементов, проверить JSON и найти проблемы с полями, кодировкой, комплектностью набора, системой координат, геометриями, координатами и пустыми слоями.": (
+    "Проверки: уточнить размер (в том числе отдельно для SHP и MIF/MID), систему координат и количество элементов, проверить JSON, имена полей, набор данных, геометрии и координаты.": (
         "Checks: refine size (including separately for SHP and MIF/MID), "
-        "CRS and feature count, check JSON, and find problems with fields, "
-        "encoding, dataset completeness, CRS, geometries, coordinates and "
-        "empty layers."
+        "CRS and feature count, validate JSON, field names, dataset "
+        "integrity, geometries and coordinates."
     ),
     "Выберите проверки": "Select checks",
     "Отметьте проверки, которые нужно выполнить для найденных файлов.": (
@@ -358,6 +357,36 @@ EN_TRANSLATIONS = {
     ),
     "Файл не содержит объектов": "File contains no features",
     "Слой «{}» не содержит объектов": "Layer “{}” contains no features",
+    "Уточнить систему координат и проверить СК": (
+        "Refine CRS and check it"
+    ),
+    "Читает систему координат слоёв, обновляет колонку «Система координат» и отмечает отсутствующую, неизвестную или смешанную СК.": (
+        "Reads the CRS of layers, updates the “CRS” column and flags "
+        "missing, unknown or mixed CRS."
+    ),
+    "Уточнить количество элементов и проверить пустые слои": (
+        "Refine feature count and check empty layers"
+    ),
+    "Считает количество элементов, обновляет колонку «Элементов» и отмечает пустые слои и файлы без объектов.": (
+        "Counts features, updates the “Features” column and flags empty "
+        "layers and files without features."
+    ),
+    "Проверка имён полей": "Field name check",
+    "Проверяет нелатинские символы, длину имени (не более 10 символов DBF), пробелы, недопустимые символы и дубли после усечения.": (
+        "Checks non-Latin characters, name length (10 characters max for "
+        "DBF), spaces, invalid characters and duplicates after truncation."
+    ),
+    "Проверка набора данных": "Dataset integrity check",
+    "Проверяет обязательные файлы набора, наличие .cpg и корректность указанной кодировки DBF.": (
+        "Checks required dataset files, the presence of .cpg and the "
+        "specified DBF encoding."
+    ),
+    "Проверка геометрий и координат": "Geometry and coordinate check",
+    "Ищет самопересечения, незамкнутые кольца, пустые и null-геометрии, NaN/Inf, слишком большие координаты, перепутанные широту и долготу и выход за диапазон CRS.": (
+        "Finds self-intersections, unclosed rings, empty and null "
+        "geometries, NaN/Inf, excessively large coordinates, swapped "
+        "latitude and longitude, and coordinates outside the CRS range."
+    ),
     # Информация о файле
     "Информация — {}": "Information — {}",
     "Слой:": "Layer:",
