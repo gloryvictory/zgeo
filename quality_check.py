@@ -7,11 +7,13 @@
 from __future__ import annotations
 
 import codecs
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 DBF_FIELD_NAME_LIMIT = 10
+MAX_ABS_COORDINATE = 1e9
 
 REQUIRED_SIDECARS: Dict[str, Tuple[str, ...]] = {
     ".shp": (".dbf", ".shx"),
@@ -306,6 +308,34 @@ def crs_issues(values: Sequence[str]) -> List[QualityIssue]:
         )
 
     return issues
+
+
+def coordinate_problem(
+    x: float,
+    y: float,
+    *,
+    geographic: bool,
+    max_abs: float = MAX_ABS_COORDINATE,
+) -> Optional[str]:
+    """Классифицировать проблему координаты без привязки к QGIS.
+
+    Возвращает ``non_finite``, ``huge``, ``swapped`` или
+    ``out_of_range``. Для географических координат предполагается
+    традиционный порядок QGIS: x — долгота, y — широта.
+    """
+
+    if not math.isfinite(x) or not math.isfinite(y):
+        return "non_finite"
+    if abs(x) > max_abs or abs(y) > max_abs:
+        return "huge"
+
+    if geographic:
+        if abs(x) <= 90.0 and 90.0 < abs(y) <= 180.0:
+            return "swapped"
+        if not (-180.0 <= x <= 180.0 and -90.0 <= y <= 90.0):
+            return "out_of_range"
+
+    return None
 
 
 def empty_layer_issues(

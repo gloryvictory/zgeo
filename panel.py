@@ -54,12 +54,16 @@ from .check_dialog import (
     CHECK_ATTRIBUTE_NAMES,
     CHECK_CRS,
     CHECK_CRS_QUALITY,
+    CHECK_COORDINATE_RANGE,
     CHECK_DATASET_COMPLETENESS,
     CHECK_DBF_ENCODING,
     CHECK_ELEMENT_COUNT,
     CHECK_EMPTY_LAYERS,
+    CHECK_GEOMETRY_VALIDITY,
     CHECK_JSON_GEOJSON,
     CHECK_SIZE,
+    CHECK_SIZE_MIF_MID,
+    CHECK_SIZE_SHP,
     CHECK_SHP_FIELD_NAMES,
     CHECK_TRUNCATED_DUPLICATES,
     LAYER_PROBLEM_CHECKS,
@@ -76,6 +80,7 @@ from .file_info import (
     inspect_layer_summary,
 )
 from .formatting import format_size
+from .geometry_check import inspect_geometry_and_coordinates
 from .quality_check import (
     QualityIssue,
     completeness_issues,
@@ -118,9 +123,10 @@ LAST_FOLDER_KEY = "zgeo/last_folder"
 DISABLED_FORMATS_KEY = "zgeo/disabled_formats"
 ICON_PATH = Path(__file__).with_name("icon.svg")
 CHECKS_TOOLTIP = (
-    "Проверки: уточнить размер, систему координат и количество элементов, "
-    "проверить JSON и найти проблемы с полями, кодировкой, комплектностью "
-    "набора, системой координат и пустыми слоями."
+    "Проверки: уточнить размер (в том числе отдельно для SHP и MIF/MID), "
+    "систему координат и количество элементов, проверить JSON и найти "
+    "проблемы с полями, кодировкой, комплектностью набора, системой "
+    "координат, геометриями, координатами и пустыми слоями."
 )
 SIZE_CHART_COLOR = "#0F766E"
 TYPE_CHART_COLORS = (
@@ -2062,15 +2068,50 @@ class ZGeoPanel(QDockWidget):
             self._update_controls()
             return
 
-        read_size = CHECK_SIZE in checks
+        read_size_all = CHECK_SIZE in checks
+        read_size_shp = CHECK_SIZE_SHP in checks and not read_size_all
+        read_size_mif_mid = (
+            CHECK_SIZE_MIF_MID in checks and not read_size_all
+        )
         read_crs = CHECK_CRS in checks
         read_count = CHECK_ELEMENT_COUNT in checks
 
-        if read_size and not read_crs and not read_count:
-            action = "Уточнение размера"
-        elif read_crs and not read_count and not read_size:
+        size_paths: Set[str] = set()
+        if read_size_all:
+            size_paths = {
+                str(geo_file.path) for geo_file in self._files
+            }
+        else:
+            if read_size_shp:
+                size_paths.update(
+                    str(geo_file.path)
+                    for geo_file in self._files
+                    if geo_file.extension == ".shp"
+                )
+            if read_size_mif_mid:
+                size_paths.update(
+                    str(geo_file.path)
+                    for geo_file in self._files
+                    if geo_file.extension == ".mif"
+                )
+
+        read_size = bool(size_paths)
+        if not read_crs and not read_count:
+            if read_size_all:
+                action = "Уточнение размера"
+            elif read_size_shp and read_size_mif_mid:
+                action = "Уточнение размера"
+            elif read_size_shp:
+                action = "Уточнение размера SHP"
+            elif read_size_mif_mid:
+                action = "Уточнение размера MIF/MID"
+            else:
+                action = "Уточнение данных"
+        elif read_size:
+            action = "Уточнение данных"
+        elif read_crs and not read_count:
             action = "Уточнение системы координат"
-        elif read_count and not read_crs and not read_size:
+        elif read_count and not read_crs:
             action = "Уточнение количества элементов"
         else:
             action = "Уточнение данных"
@@ -2081,11 +2122,14 @@ class ZGeoPanel(QDockWidget):
 
         if read_size or read_crs or read_count:
             detail_files = list(self._files)
-            size_paths = (
-                {str(geo_file.path) for geo_file in detail_files}
-                if read_size
-                else set()
-            )
+            if (
+                read_size_shp or read_size_mif_mid
+            ) and not read_crs and not read_count:
+                detail_files = [
+                    geo_file
+                    for geo_file in detail_files
+                    if str(geo_file.path) in size_paths
+                ]
             self._start_details(
                 detail_files,
                 read_size=read_size,
@@ -2535,6 +2579,21 @@ class ZGeoPanel(QDockWidget):
         if CHECK_EMPTY_LAYERS in checks and vector_layers:
             applicable = True
             issues.extend(empty_layer_issues(layer_counts))
+
+        if (
+            CHECK_GEOMETRY_VALIDITY in checks
+            or CHECK_COORDINATE_RANGE in checks
+        ) and vector_layers:
+            geometry_issues, geometry_applicable = (
+                inspect_geometry_and_coordinates(
+                    geo_file,
+                    check_geometry=CHECK_GEOMETRY_VALIDITY in checks,
+                    check_coordinates=CHECK_COORDINATE_RANGE in checks,
+                )
+            )
+            if geometry_applicable:
+                applicable = True
+            issues.extend(geometry_issues)
 
         return issues, applicable
 

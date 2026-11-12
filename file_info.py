@@ -166,6 +166,34 @@ def inspect_attribute_names(geo_file: GeoFile) -> AttributeCheck:
     )
 
 
+def vector_layers(geo_file: GeoFile) -> List[QgsVectorLayer]:
+    """Открыть все векторные слои файла, включая слои контейнеров."""
+
+    path = geo_file.path
+    layers: List[QgsVectorLayer] = []
+    seen_uris = set()
+
+    for details in _query_sublayers("ogr", path):
+        if details.type() != _VECTOR_LAYER_TYPE:
+            continue
+        provider = details.providerKey() or "ogr"
+        layer = QgsVectorLayer(details.uri(), details.name(), provider)
+        if not layer.isValid():
+            continue
+        uri = layer.source()
+        if uri in seen_uris:
+            continue
+        seen_uris.add(uri)
+        layers.append(layer)
+
+    if not layers and geo_file.category in (VECTOR, TABLE, OTHER):
+        layer = QgsVectorLayer(str(path), path.stem, "ogr")
+        if layer.isValid():
+            layers.append(layer)
+
+    return layers
+
+
 def _vector_field_names(geo_file: GeoFile) -> Tuple[str, ...]:
     path = geo_file.path
     names: List[str] = []
@@ -204,29 +232,10 @@ def _vector_field_names(geo_file: GeoFile) -> Tuple[str, ...]:
 def _vector_layer_summaries(
     geo_file: GeoFile,
 ) -> List[Tuple[str, int]]:
-    path = geo_file.path
-    summaries: List[Tuple[str, int]] = []
-    seen_uris = set()
-
-    for details in _query_sublayers("ogr", path):
-        if details.type() != _VECTOR_LAYER_TYPE:
-            continue
-        provider = details.providerKey() or "ogr"
-        layer = QgsVectorLayer(details.uri(), details.name(), provider)
-        if not layer.isValid():
-            continue
-        uri = layer.source()
-        if uri in seen_uris:
-            continue
-        seen_uris.add(uri)
-        summaries.append((_crs_text(layer), layer.featureCount()))
-
-    if not summaries and geo_file.category in (VECTOR, TABLE, OTHER):
-        layer = QgsVectorLayer(str(path), path.stem, "ogr")
-        if layer.isValid():
-            summaries.append((_crs_text(layer), layer.featureCount()))
-
-    return summaries
+    return [
+        (_crs_text(layer), layer.featureCount())
+        for layer in vector_layers(geo_file)
+    ]
 
 
 def _summarize_crs(values: List[str]) -> str:
@@ -245,26 +254,14 @@ def _summarize_count(values: List[int]) -> Optional[int]:
 
 
 def _inspect_vector_layers(geo_file: GeoFile) -> List[VectorLayerInfo]:
-    path = geo_file.path
     layers: List[VectorLayerInfo] = []
     seen_uris = set()
 
-    for details in _query_sublayers("ogr", path):
-        if details.type() != _VECTOR_LAYER_TYPE:
-            continue
-        provider = details.providerKey() or "ogr"
-        layer = QgsVectorLayer(details.uri(), details.name(), provider)
-        if not layer.isValid():
-            continue
+    for layer in vector_layers(geo_file):
         info = _vector_layer_info(layer)
         if info.uri not in seen_uris:
             seen_uris.add(info.uri)
             layers.append(info)
-
-    if not layers and geo_file.category in (VECTOR, TABLE, OTHER):
-        layer = QgsVectorLayer(str(path), path.stem, "ogr")
-        if layer.isValid():
-            layers.append(_vector_layer_info(layer))
 
     return layers
 

@@ -1,100 +1,64 @@
 ZGeo change log
 ===============
 
-Version 1.22.0 — 2026-11-12
-Previous GitHub release: v1.15.0 (2026-11-08)
+Version 1.24.0 — 2026-11-12
+Previous GitHub release: v1.22.0 (2026-11-11)
 
 Overview
 --------
-This changelog covers all changes between the previous public release
-(v1.15.0) and version 1.22.0. The main themes are a configurable checks
-system, GeoJSON validation, data-quality checks for attributes and
-datasets, a full-width progress bar, and a complete Russian/English
-interface.
+ZGeo 1.24.0 adds optional checks for geometry validity and coordinate
+sanity, restores format-specific size refinement for SHP and MIF/MID, and
+brings the checks window to 15 checks. All new checks are optional and
+disabled by default, so the existing default workflow is unchanged.
 
-Changes since v1.15.0
+Changes since v1.22.0
 ---------------------
 
-1.16.0
-- The interface can be switched between Russian and English with the
-  "EN" / "RU" button in the top-right corner of the panel.
-- The selected language is saved in QGIS settings and restored on the
-  next launch.
+1.23.0
+- Restored the separate "Refine SHP size" and "Refine MIF/MID size"
+  checks, placed directly after "Refine size".
+- Both format-specific size checks are optional and disabled by default.
+- "Refine size" remains first and is enabled by default. It covers all
+  formats and takes precedence, so selected formats are not processed
+  twice.
+- The checks window grew from 11 to 13 checks.
 
-1.17.0
-- Clicking "Check Attributes" opens a separate "Checks" window with a
-  list of checks.
-- Each check has a checkbox, and an "i" button shows its description on
-  hover.
-- Refinement of layer characteristics and dataset sizes is available as
-  a separate check.
+1.24.0
+- Added the "Geometry validity check":
+  - self-intersections;
+  - unclosed rings;
+  - empty geometries;
+  - null geometries.
+- Added the "Coordinate check":
+  - NaN and infinite coordinates;
+  - excessively large coordinates;
+  - swapped latitude and longitude;
+  - coordinates outside the valid CRS range.
+- For projected CRSs, coordinates are transformed to EPSG:4326 and also
+  checked against the CRS area of use.
+- Both new checks are optional and disabled by default.
+- The checks window now shows 15 checks.
+- Updated Russian and English labels, descriptions, tests and
+  documentation.
 
-1.18.0
-- Automatic refinement after the first scan has been removed.
-- The "Check Attributes" button has been renamed to "Checks".
-- Dataset size, SHP size, MIF/MID size, CRS and feature count are
-  available as separate checks, with size first.
-
-1.19.0
-- Added the "Check JSON for GeoJSON format" check.
-- `.json` and `.geojson` files are validated by the GeoJSON `type` field.
-- Files that are not GeoJSON are excluded from the list, and the file
-  count, total size and statistics are recalculated.
-- The JSON check runs before the other refinements and appears only when
-  JSON/GeoJSON files are found.
-
-1.20.0
-- Added a progress bar at the bottom of the window.
-- It shows indeterminate progress during scanning and the number of
-  processed files during checks.
-
-1.20.1
-- The progress bar was moved below the status bar and now spans the full
-  width of the window.
-
-1.21.0
-- Removed the separate "Refine SHP size" and "Refine MIF/MID size"
-  checks because "Refine size" already covers all formats, including SHP
-  and MIF/MID.
-
-1.22.0
-- Added six data-quality checks:
-  - "Shapefile field name check" — field name length (10 characters max
-    for DBF), spaces and invalid characters.
-  - "Truncated field name duplicates check" — field names that collide
-    after truncation to 10 characters.
-  - "DBF encoding and .cpg check" — missing or empty `.cpg`, unknown
-    encoding, unreadable DBF header.
-  - "Dataset completeness check" — required files for SHP
-    (`.shp + .dbf + .shx`), MIF/MID (`.mif + .mid`) and TAB
-    (`.tab + .dat/.map/.id`), case-insensitive.
-  - "CRS check" — missing, unknown, partially missing or mixed
-    coordinate reference systems.
-  - "Empty layers check" — layers without features and files with zero
-    features.
-- The "Attribute issues" column has been replaced by a unified "Issues"
-  column. It shows "Yes", "No" or "—" and contains the full list of
-  findings in the cell tooltip.
-- "Problem files: N" and the "Only problem files" filter now cover all
-  problem checks, not only attribute names.
-- The checks window is scrollable and shows 11 checks.
-- The checks run in the background with progress reporting and can be
-  cancelled; partial results are kept.
-
-What changed in 1.22.0 compared with 1.21.0
+What changed in 1.24.0 compared with 1.22.0
 -------------------------------------------
-- New checks: Shapefile field names, truncated duplicates, DBF encoding
-  and `.cpg`, dataset completeness, CRS quality, empty layers.
-- Unified "Issues" column instead of the attribute-only column.
-- Problem counter and filter include every problem check.
-- Updated Russian and English documentation and translations.
-- Added unit tests for all new checks and QGIS smoke tests for real
-  GeoJSON, SHP and GPKG datasets.
+- Added "Refine SHP size" and "Refine MIF/MID size" as optional checks.
+- Added "Geometry validity check" and "Coordinate check".
+- The checks dialog was enlarged to fit 15 checks.
+- The checks tooltip now mentions format-specific size refinement,
+  geometry and coordinate checks.
+- All problem-check findings continue to be collected in the "Issues"
+  column with details in the cell tooltip, the "Problem files: N" counter
+  and the "Only problem files" filter.
+- Updated unit tests and QGIS smoke tests.
 
-Available checks in 1.22.0
+Available checks in 1.24.0
 --------------------------
 Refinement:
-- Refine size
+- Refine size (first, default; all formats)
+- Refine SHP size (optional)
+- Refine MIF/MID size (optional)
 - Refine CRS
 - Refine feature count
 
@@ -106,6 +70,8 @@ Validation and problem checks:
 - DBF encoding and .cpg check
 - Dataset completeness check
 - CRS check
+- Geometry validity check
+- Coordinate check
 - Empty layers check
 
 Compatibility
@@ -116,7 +82,7 @@ Compatibility
 
 Installation
 ------------
-1. Download `zgeo-1.22.0.zip`.
+1. Download `zgeo-1.24.0.zip`.
 2. In QGIS open Plugins → Manage and Install Plugins → Install from ZIP.
 3. Select the downloaded archive and restart QGIS if it was running.
 

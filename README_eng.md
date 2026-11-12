@@ -4,7 +4,7 @@
 
 A QGIS plugin for quickly browsing the contents of a spatial data folder.
 
-Plugin version: **1.22.0**
+Plugin version: **1.24.0**
 
 The plugin adds a dedicated **“ZGeo”** toolbar to QGIS with a **“ZGeo Catalog”** button that opens a floating panel. The panel provides:
 
@@ -15,14 +15,14 @@ The plugin adds a dedicated **“ZGeo”** toolbar to QGIS with a **“ZGeo Cata
 - all supported spatial files are found recursively, including subfolders;
 - while scanning, the current file name and the number of supported spatial files found are shown, and the **“Cancel”** button stops the scan;
 - results are displayed as a list: relative path, format, coordinate reference system, feature count and file size;
-- after scanning, the CRS, feature count and full dataset size are not read automatically; use the **“Checks”** window to refine them, with progress shown in the status bar;
+- after scanning, the CRS, feature count and full dataset size are not read automatically; use the **“Checks”** window to refine them, with progress shown in the status bar and on the progress bar;
 - the number of files and their total size are shown above the list; when filtering, the total size is calculated for visible files only;
 - the full dataset size includes sidecar files (SHP + DBF + SHX + PRJ + CPG and others, MIF + MID, TAB + DAT/MAP/ID/IND);
 - the status bar is at the bottom of the window: the current operation is shown on the left, and **“Selected: N of M”** is shown on the right; during scanning and checks, a full-width progress bar with the current and total file counts is shown below the status bar;
-- the list can be filtered by name, format, path or attribute issues;
+- the list can be filtered by name, format, path or issues;
 - the **“Settings”** tab lets you select the formats to scan; the **“Select all”**, **“Clear all”**, **“Vector only”** and **“Raster only”** buttons are available at the top; **Excel** is disabled by default;
 - the **“Files”** tab has the **“Information”**, **“Open in Explorer”**, **“Export to Excel”** and **“Checks”** buttons at the bottom;
-- **“Checks”** opens the **“Checks”** window with a list of checks: **“Refine size”** (first), **“Refine CRS”**, **“Refine feature count”**, **“Check JSON for GeoJSON format”**, **“Attribute field name check”**, **“Shapefile field name check”**, **“Truncated field name duplicates check”**, **“DBF encoding and .cpg check”**, **“Dataset completeness check”**, **“CRS check”** and **“Empty layers check”**; checks are enabled with checkboxes, and an **“i”** button to the right of each check shows its description on hover; by default, **“Refine size”**, **“Refine CRS”**, **“Refine feature count”**, the JSON check and the attribute field name check are selected;
+- **“Checks”** opens the **“Checks”** window with a list of checks: **“Refine size”** (first), **“Refine SHP size”**, **“Refine MIF/MID size”**, **“Refine CRS”**, **“Refine feature count”**, **“Check JSON for GeoJSON format”**, **“Attribute field name check”**, **“Shapefile field name check”**, **“Truncated field name duplicates check”**, **“DBF encoding and .cpg check”**, **“Dataset completeness check”**, **“CRS check”**, **“Geometry validity check”**, **“Coordinate check”** and **“Empty layers check”**; checks are enabled with checkboxes, and an **“i”** button to the right of each check shows its description on hover; by default, **“Refine size”**, **“Refine CRS”**, **“Refine feature count”**, the JSON check and the attribute field name check are selected;
 - the JSON check appears when the list contains `.json` or `.geojson` files; it validates the document by its `type` field and excludes files that are not GeoJSON;
 - problems found are shown in the **“Issues”** column with the values **“Yes”**, **“No”** or **“—”**; details are available in the cell tooltip;
 - after the checks, the **“Problem files: N”** line is shown and the **“Only problem files”** filter becomes available;
@@ -41,9 +41,9 @@ QGIS 3.16 and newer are supported, including QGIS 4 / Qt 6.
 
 ### Files tab
 
-Attribute check results, the problematic file counter and the **“Only problem files”** filter.
+Problem check results, the **“Issues”** column, the problematic file counter and detail tooltips.
 
-<img src="img/screen_1.png" alt="Files tab with the Only problem files filter" width="720">
+<img src="img/screen_1.png" alt="Files tab with the Issues column" width="720">
 
 ### Statistics tab
 
@@ -95,7 +95,7 @@ After updating the plugin, close QGIS completely and start it again. If the **�
 5. During scanning, the current file name and the number of supported files found are shown. The scan can be stopped with **“Cancel”**.
 6. When scanning finishes, the folder name appears at the top and the found files are shown in the list. The CRS and feature count show **“—”** until checks are run. If needed, enter part of a file name or format in the filter field.
 7. Open the **“Settings”** tab to choose the formats to scan. **Excel** is disabled by default; after changing the settings, rescan the folder with the refresh button.
-8. Click **“Checks”** and select the required checks in the **“Checks”** window. Available checks include size, CRS and feature count refinement, the JSON check, the attribute field name check, and the checks for Shapefile field names, truncated duplicates, DBF encoding and `.cpg`, dataset completeness, CRS and empty layers. The description of each check is shown when you hover over the **“i”** button. If the list contains `.json` or `.geojson`, the JSON check excludes files that are not GeoJSON. After the checks, the **“Problem files: N”** line and the **“Issues”** column appear, and the **“Only problem files”** filter becomes available.
+8. Click **“Checks”** and select the required checks in the **“Checks”** window. Available checks include size, CRS and feature count refinement, the JSON check, the attribute field name check, and the checks for Shapefile field names, truncated duplicates, DBF encoding and `.cpg`, dataset completeness, CRS, geometry validity, coordinates and empty layers. The description of each check is shown when you hover over the **“i”** button. If the list contains `.json` or `.geojson`, the JSON check excludes files that are not GeoJSON. After the checks, the **“Problem files: N”** line and the **“Issues”** column appear, and the **“Only problem files”** filter becomes available.
 9. Select a file and click **“Information”** at the bottom of the list.
 10. Click **“Open in Explorer”** to show the file in Windows Explorer.
 11. Click **“Export to Excel”** to export the found files with a total row and a separate statistics worksheet. After saving, Explorer opens with the selected `.xlsx`.
@@ -152,6 +152,8 @@ Below the attribute field table is the **“Export to Excel”** button. It save
 The **“Checks”** button at the bottom of the **“Files”** tab opens the **“Checks”** window. The following checks are available:
 
 - **“Refine size”** — full size of each dataset, including sidecar files;
+- **“Refine SHP size”** — full size of ESRI Shapefile datasets only, including sidecar files;
+- **“Refine MIF/MID size”** — full size of MapInfo MIF/MID datasets only, including the `.mif` and `.mid` files;
 - **“Refine CRS”** — reads the coordinate reference system of layers;
 - **“Refine feature count”** — counts features in layers;
 - **“Check JSON for GeoJSON format”** — validates `.json` and `.geojson` files by the `type` field; files that are not GeoJSON are excluded from the list;
@@ -161,13 +163,15 @@ The **“Checks”** button at the bottom of the **“Files”** tab opens the *
 - **“DBF encoding and .cpg check”** — presence of the `.cpg` file and a known DBF encoding;
 - **“Dataset completeness check”** — required files: `.shp` + `.dbf` + `.shx`, `.mif` + `.mid`, `.tab` + `.dat/.map/.id`;
 - **“CRS check”** — missing, unknown or mixed coordinate reference systems;
+- **“Geometry validity check”** — self-intersections, unclosed rings, empty and null geometries;
+- **“Coordinate check”** — NaN/Inf, excessively large coordinates, swapped latitude and longitude, and coordinates outside the valid CRS range;
 - **“Empty layers check”** — empty layers and files with zero features.
 
-Checks are enabled with checkboxes. To the right of each check is an **“i”** button; hover over it to see the check description. By default, **“Refine size”**, **“Refine CRS”**, **“Refine feature count”**, **“Check JSON for GeoJSON format”** and **“Attribute field name check”** are selected; the six problem checks are optional. **“Refine size”** covers all formats, including SHP and MIF/MID.
+Checks are enabled with checkboxes. To the right of each check is an **“i”** button; hover over it to see the check description. By default, **“Refine size”**, **“Refine CRS”**, **“Refine feature count”**, **“Check JSON for GeoJSON format”** and **“Attribute field name check”** are selected; the separate SHP and MIF/MID size checks and the eight problem checks are optional. **“Refine size”** covers all formats, including SHP and MIF/MID, and takes precedence over the separate size checks when selected, so they are not run twice.
 
 The JSON check appears in the window only when the found files include `.json` or `.geojson`. It reads the document and validates its `type` field: `FeatureCollection`, `Feature`, `GeometryCollection` and the geometry types (`Point`, `MultiPoint`, `LineString`, `MultiLineString`, `Polygon`, `MultiPolygon`) are allowed. For collections, the `features` and `geometries` members are validated as well. If the document is not GeoJSON (for example, a plain JSON object without `type` or with an unknown `type`), the file is excluded from the list and the file count, total size and statistics are recalculated. The JSON check runs before size, CRS and feature count refinement, so the remaining checks work on the already filtered list.
 
-Problem checks inspect the found files and collect all findings in the **“Issues”** column: **“Yes”** — problems found, **“No”** — no problems found, **“—”** — the check is not applicable to the file. The detailed list of problems is shown in the cell tooltip. The encoding check verifies the presence of `.cpg`, an empty file and whether the specified encoding is known. The completeness check looks for missing required dataset files. The CRS check flags files without a CRS, with an unknown CRS and files whose layers have different CRSs. The empty layers check flags layers without features and files with no features at all.
+Problem checks inspect the found files and collect all findings in the **“Issues”** column: **“Yes”** — problems found, **“No”** — no problems found, **“—”** — the check is not applicable to the file. The detailed list of problems is shown in the cell tooltip. The encoding check verifies the presence of `.cpg`, an empty file and whether the specified encoding is known. The completeness check looks for missing required dataset files. The CRS check flags files without a CRS, with an unknown CRS and files whose layers have different CRSs. The geometry validity check finds self-intersections, unclosed rings, empty and null geometries. The coordinate check finds NaN/Inf, excessively large values, swapped latitude and longitude, and coordinates outside the valid CRS range; for projected CRSs, points are also checked against the CRS area of use. The empty layers check flags layers without features and files with no features at all.
 
 The **“Issues”** column appears after the first problem check. Check progress is shown in the status bar and on the progress bar. If the column has already been added, it is also included in the file list export.
 
@@ -185,7 +189,7 @@ A separate **“Statistics”** worksheet is created in the same workbook with t
 
 ## Full dataset size
 
-The full size of each dataset is refined by the **“Refine size”** check for all formats at once, including SHP and MIF/MID. The following sidecar files are included:
+The full size of each dataset is refined by the **“Refine size”** check for all formats at once, including SHP and MIF/MID. To process only one format, use the separate **“Refine SHP size”** or **“Refine MIF/MID size”** checks. The following sidecar files are included:
 
 - Shapefile: `.shp`, `.dbf`, `.shx`, `.prj`, `.cpg`, `.qix`, `.sbn`, `.sbx`, `.fbn`, `.fbx`, `.ain`, `.aih`, `.atx`, `.ixs`, `.mxs`, `.fix`, `.shp.xml`;
 - MapInfo MIF: `.mif` + `.mid`;
@@ -240,6 +244,9 @@ zgeo/
 ├── charts.py            # bar charts without external dependencies
 ├── attribute_check.py   # field name check for non-Latin characters
 ├── file_info.py         # file, CRS and feature information
+├── geojson_check.py     # JSON compliance with GeoJSON
+├── quality_check.py     # attribute, dataset and layer quality checks
+├── geometry_check.py    # geometry validity and coordinate checks
 ├── info_dialog.py       # Information dialog
 ├── check_dialog.py      # check selection window and descriptions
 ├── explorer.py          # opening files in Explorer
@@ -261,6 +268,10 @@ zgeo/
     ├── test_formatting.py     # size formatting
     ├── test_attribute_check.py # field name check
     ├── test_excel_export.py   # XLSX generation
+    ├── test_geojson_check.py  # JSON compliance with GeoJSON
+    ├── test_quality_check.py  # attribute and dataset quality checks
+    ├── test_metadata.py       # plugin metadata
+    ├── test_version.py        # plugin version
     └── test_i18n.py           # translations and language switching
 ```
 
@@ -276,7 +287,7 @@ python -m unittest discover -s tests -t .. -v
 Syntax check:
 
 ```powershell
-python -m py_compile __init__.py plugin.py panel.py i18n.py scanner.py scan_task.py dataset_size.py stats.py charts.py attribute_check.py file_info.py info_dialog.py check_dialog.py explorer.py formatting.py excel_export.py table_export.py version.py
+python -m py_compile __init__.py plugin.py panel.py i18n.py scanner.py scan_task.py dataset_size.py stats.py charts.py attribute_check.py file_info.py quality_check.py geometry_check.py geojson_check.py info_dialog.py check_dialog.py explorer.py formatting.py excel_export.py table_export.py version.py
 ```
 
 Scanning runs in a background thread. For very large directories on network drives, the list may fill gradually, but the interface remains responsive and the scan can be interrupted.

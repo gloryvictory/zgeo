@@ -160,6 +160,8 @@ EN_TRANSLATIONS = {
     "Прерывание сканирования…": "Cancelling scan…",
     "Уточнение данных": "Data refinement",
     "Уточнение размера": "Size refinement",
+    "Уточнение размера SHP": "SHP size refinement",
+    "Уточнение размера MIF/MID": "MIF/MID size refinement",
     "Уточнение системы координат": "CRS refinement",
     "Уточнение количества элементов": "Feature count refinement",
     "{}: 0 из {}": "{}: 0 of {}",
@@ -213,9 +215,10 @@ EN_TRANSLATIONS = {
     "Проблем не найдено.": "No problems found.",
     "Идёт проверка…": "Check in progress…",
     "Прервать проверки": "Cancel checks",
-    "Проверки: уточнить размер, систему координат и количество элементов, проверить JSON и найти проблемы с полями, кодировкой, комплектностью набора, системой координат и пустыми слоями.": (
-        "Checks: refine size, CRS and feature count, check JSON, and find "
-        "problems with fields, encoding, dataset completeness, CRS and "
+    "Проверки: уточнить размер (в том числе отдельно для SHP и MIF/MID), систему координат и количество элементов, проверить JSON и найти проблемы с полями, кодировкой, комплектностью набора, системой координат, геометриями, координатами и пустыми слоями.": (
+        "Checks: refine size (including separately for SHP and MIF/MID), "
+        "CRS and feature count, check JSON, and find problems with fields, "
+        "encoding, dataset completeness, CRS, geometries, coordinates and "
         "empty layers."
     ),
     "Выберите проверки": "Select checks",
@@ -225,6 +228,16 @@ EN_TRANSLATIONS = {
     "Уточнить размер": "Refine size",
     "Считает полный размер каждого набора данных с учётом сопутствующих файлов.": (
         "Calculates the full size of each dataset, including sidecar files."
+    ),
+    "Уточнить размер SHP": "Refine SHP size",
+    "Считает полный размер только наборов ESRI Shapefile с учётом сопутствующих файлов.": (
+        "Calculates the full size of ESRI Shapefile datasets only, including "
+        "sidecar files."
+    ),
+    "Уточнить размер MIF/MID": "Refine MIF/MID size",
+    "Считает полный размер только наборов MapInfo MIF/MID с учётом файлов .mif и .mid.": (
+        "Calculates the full size of MapInfo MIF/MID datasets only, "
+        "including the .mif and .mid files."
     ),
     "Уточнить систему координат": "Refine CRS",
     "Читает систему координат слоёв и обновляет колонку «Система координат».": (
@@ -289,6 +302,15 @@ EN_TRANSLATIONS = {
     "Ищет файлы без системы координат, с неизвестной или смешанной системой координат.": (
         "Finds files without a CRS, with an unknown CRS or with mixed CRSs."
     ),
+    "Проверка валидности геометрий": "Geometry validity check",
+    "Ищет самопересечения, незамкнутые кольца, пустые и null-геометрии.": (
+        "Finds self-intersections, unclosed rings, empty and null geometries."
+    ),
+    "Проверка координат": "Coordinate check",
+    "Ищет NaN/Inf, слишком большие координаты, перепутанные широту и долготу и выход за допустимый диапазон CRS.": (
+        "Finds NaN/Inf, excessively large coordinates, swapped latitude "
+        "and longitude, and coordinates outside the valid CRS range."
+    ),
     "Проверка пустых слоёв": "Empty layers check",
     "Ищет пустые слои и файлы с нулевым количеством объектов.": (
         "Finds empty layers and files with zero features."
@@ -326,6 +348,14 @@ EN_TRANSLATIONS = {
         "Some layers have no CRS"
     ),
     "Смешанные системы координат: {}": "Mixed CRS: {}",
+    "Слой «{}»: некорректных геометрий: {} (самопересечения: {}, незамкнутые кольца: {}, прочие: {}), пустых: {}, null-геометрий: {}": (
+        "Layer “{}”: invalid geometries: {} (self-intersections: {}, "
+        "unclosed rings: {}, other: {}), empty: {}, null geometries: {}"
+    ),
+    "Слой «{}»: координаты — NaN/Inf: {}, слишком большие: {}, вне диапазона CRS: {}, похоже на перепутанные широту и долготу: {}": (
+        "Layer “{}”: coordinates — NaN/Inf: {}, excessively large: {}, "
+        "outside CRS range: {}, possibly swapped latitude and longitude: {}"
+    ),
     "Файл не содержит объектов": "File contains no features",
     "Слой «{}» не содержит объектов": "Layer “{}” contains no features",
     # Информация о файле

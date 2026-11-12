@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 from zgeo.quality_check import (
     completeness_issues,
+    coordinate_problem,
     crs_issues,
     dbf_encoding_issues,
     directory_files,
@@ -282,6 +283,54 @@ class EmptyLayerTests(unittest.TestCase):
 
     def test_unknown_count_is_not_empty(self) -> None:
         self.assertEqual(empty_layer_issues([("one", -1)]), [])
+
+
+class CoordinateProblemTests(unittest.TestCase):
+    def test_valid_geographic_coordinate(self) -> None:
+        self.assertIsNone(
+            coordinate_problem(39.0, 45.0, geographic=True)
+        )
+
+    def test_non_finite_coordinates(self) -> None:
+        for x, y in (
+            (float("nan"), 0.0),
+            (0.0, float("inf")),
+            (float("-inf"), float("inf")),
+        ):
+            with self.subTest(x=x, y=y):
+                self.assertEqual(
+                    coordinate_problem(x, y, geographic=True),
+                    "non_finite",
+                )
+
+    def test_excessively_large_coordinate(self) -> None:
+        self.assertEqual(
+            coordinate_problem(1e12, 0.0, geographic=False),
+            "huge",
+        )
+
+    def test_swapped_latitude_and_longitude(self) -> None:
+        self.assertEqual(
+            coordinate_problem(45.0, 120.0, geographic=True),
+            "swapped",
+        )
+
+    def test_out_of_geographic_range(self) -> None:
+        self.assertEqual(
+            coordinate_problem(200.0, 45.0, geographic=True),
+            "out_of_range",
+        )
+        self.assertEqual(
+            coordinate_problem(45.0, 200.0, geographic=True),
+            "out_of_range",
+        )
+
+    def test_projected_coordinate_is_not_range_checked_here(self) -> None:
+        self.assertIsNone(
+            coordinate_problem(
+                500000.0, 5000000.0, geographic=False
+            )
+        )
 
 
 class DirectoryFilesTests(unittest.TestCase):
