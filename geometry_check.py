@@ -18,11 +18,12 @@ from qgis.core import (
     QgsRectangle,
 )
 
+from .check_dialog import CHECK_GEOMETRY_COORDINATES
 from .file_info import vector_layers
+from .i18n import tr
 from .quality_check import QualityIssue, coordinate_problem
 
-GEOMETRY_VALIDITY_CHECK = "geometry_validity"
-COORDINATE_RANGE_CHECK = "coordinate_range"
+MAX_DETAIL_ISSUES = 1000
 
 
 @dataclass
@@ -83,14 +84,40 @@ def inspect_geometry_and_coordinates(
 
         try:
             request = QgsFeatureRequest().setNoAttributes()
-            for feature in layer.getFeatures(request):
+            detail_budget = MAX_DETAIL_ISSUES
+            for feature_index, feature in enumerate(
+                layer.getFeatures(request), start=1
+            ):
                 try:
                     geometry = feature.geometry()
+                    feature_id = feature.id()
+                    if feature_id is None or feature_id < 0:
+                        feature_id = feature_index
+
+                    details: List[QualityIssue] = []
                     if check_geometry:
-                        _inspect_geometry(geometry, stats)
+                        details.extend(
+                            _inspect_geometry(
+                                geometry,
+                                stats,
+                                layer.name(),
+                                feature_id,
+                            )
+                        )
                     if coordinate_context is not None:
-                        _inspect_coordinates(
-                            geometry, coordinate_context, stats
+                        details.extend(
+                            _inspect_coordinates(
+                                geometry,
+                                coordinate_context,
+                                stats,
+                                layer.name(),
+                                feature_id,
+                            )
+                        )
+                    if detail_budget > 0:
+                        issues.extend(details[:detail_budget])
+                        detail_budget -= min(
+                            len(details), detail_budget
                         )
                 except Exception:
                     continue
@@ -105,37 +132,113 @@ def inspect_geometry_and_coordinates(
     return issues, applicable
 
 
+def _detail(
+    layer_name: str,
+    feature_id: int,
+    location: str,
+    message: str,
+    args: Tuple[object, ...] = (),
+) -> QualityIssue:
+    return QualityIssue(
+        CHECK_GEOMETRY_COORDINATES,
+        message,
+        args,
+        layer=layer_name,
+        feature_id=feature_id,
+        location=location,
+        detail_only=True,
+    )
+
+
 def _inspect_geometry(
-    geometry: QgsGeometry, stats: _LayerStats
-) -> None:
+    geometry: QgsGeometry,
+    stats: _LayerStats,
+    layer_name: str,
+    feature_id: int,
+) -> List[QualityIssue]:
+    details: List[QualityIssue] = []
+
     if geometry.isNull():
         stats.null += 1
-        return
+        details.append(
+            _detail(
+                layer_name,
+                feature_id,
+                "Геометрия",
+                "Геометрия отсутствует (null)",
+            )
+        )
+        return details
+
     if geometry.isEmpty():
         stats.empty += 1
-        return
+        details.append(
+            _detail(
+                layer_name,
+                feature_id,
+                "Геометрия",
+                "Пустая геометрия",
+            )
+        )
+        return details
 
     invalid = _has_unclosed_ring(geometry)
     if invalid:
         stats.unclosed_rings += 1
+        details.append(
+            _detail(
+                layer_name,
+                feature_id,
+                "Кольцо",
+                "Незамкнутое кольцо",
+            )
+        )
 
     try:
         if not geometry.isGeosValid():
             invalid = True
             messages = [
-                str(error.what()).casefold()
+                str(error.what())
                 for error in geometry.validateGeometry()
             ]
-            if any("intersect" in message for message in messages):
+            folded = [message.casefold() for message in messages]
+            if any("intersect" in message for message in folded):
                 stats.self_intersections += 1
+                details.append(
+                    _detail(
+                        layer_name,
+                        feature_id,
+                        "Геометрия",
+                        "Самопересечение",
+                    )
+                )
             else:
                 stats.other_invalid += 1
+                details.append(
+                    _detail(
+                        layer_name,
+                        feature_id,
+                        "Геометрия",
+                        "Некорректная геометрия: {}",
+                        (("; ".join(messages))[:300],),
+                    )
+                )
     except Exception:
         invalid = True
         stats.other_invalid += 1
+        details.append(
+            _detail(
+                layer_name,
+                feature_id,
+                "Геометрия",
+                "Не удалось проверить геометрию",
+            )
+        )
 
     if invalid:
         stats.invalid += 1
+
+    return details
 
 
 def _has_unclosed_ring(geometry: QgsGeometry) -> bool:
@@ -230,11 +333,16 @@ def _inspect_coordinates(
     geometry: QgsGeometry,
     context: _CoordinateContext,
     stats: _LayerStats,
-) -> None:
+    layer_name: str,
+    feature_id: int,
+) -> List[QualityIssue]:
     if geometry.isNull() or geometry.isEmpty():
-        return
+        return []
 
-    for vertex in geometry.vertices():
+    details: List[QualityIssue] = []
+    for vertex_index, vertex in enumerate(
+        geometry.vertices(), start=1
+    ):
         x = vertex.x()
         y = vertex.y()
         problem = coordinate_problem(
@@ -260,12 +368,29 @@ def _inspect_coordinates(
 
         if problem == "non_finite":
             stats.non_finite += 1
+            message = "Координата NaN/Inf"
         elif problem == "huge":
             stats.huge += 1
+            message = "Слишком большая координата"
         elif problem == "swapped":
             stats.swapped += 1
+            message = "Похоже на перепутанные широту и долготу"
         elif problem == "out_of_range":
             stats.out_of_range += 1
+            message = "Координата вне диапазона CRS"
+        else:
+            continue
+
+        details.append(
+            _detail(
+                layer_name,
+                feature_id,
+                tr("Вершина {}", vertex_index),
+                message,
+            )
+        )
+
+    return details
 
 
 def _geometry_issues(stats: _LayerStats) -> List[QualityIssue]:
@@ -273,7 +398,7 @@ def _geometry_issues(stats: _LayerStats) -> List[QualityIssue]:
         return []
     return [
         QualityIssue(
-            GEOMETRY_VALIDITY_CHECK,
+            CHECK_GEOMETRY_COORDINATES,
             "Слой «{}»: некорректных геометрий: {} "
             "(самопересечения: {}, незамкнутые кольца: {}, прочие: {}), "
             "пустых: {}, null-геометрий: {}",
@@ -300,7 +425,7 @@ def _coordinate_issues(stats: _LayerStats) -> List[QualityIssue]:
         return []
     return [
         QualityIssue(
-            COORDINATE_RANGE_CHECK,
+            CHECK_GEOMETRY_COORDINATES,
             "Слой «{}»: координаты — NaN/Inf: {}, слишком большие: {}, "
             "вне диапазона CRS: {}, похоже на перепутанные широту и "
             "долготу: {}",

@@ -58,14 +58,14 @@ from .check_dialog import (
     CHECK_GEOMETRY_COORDINATES,
     CHECK_JSON_GEOJSON,
     CHECK_SIZE,
-    CHECK_SIZE_MIF_MID,
-    CHECK_SIZE_SHP,
     LAYER_PROBLEM_CHECKS,
     PROBLEM_CHECKS,
     ChecksDialog,
+    check_definitions,
 )
 from .attribute_check import has_non_latin_characters
 from .dataset_size import DirectoryIndex, measure_geo_file_cached
+from .excel_export import SheetSpec
 from .explorer import reveal_files
 from .geojson_check import JSON_EXTENSIONS, check_json_file
 from .file_info import (
@@ -195,6 +195,7 @@ class ZGeoPanel(QDockWidget):
         self._problem_candidate_paths: Set[str] = set()
         self._problem_interrupted = False
         self._problem_selected: Tuple[str, ...] = ()
+        self._problem_checks_run: Set[str] = set()
         self._problem_file_cache: Dict[str, Dict[str, Path]] = {}
         self._empty_title_source = "Геоданные не выбраны"
         self._empty_hint_source = (
@@ -1684,6 +1685,95 @@ class ZGeoPanel(QDockWidget):
             rows,
         )
 
+    def _problem_sheets_data(
+        self, files: List[GeoFile]
+    ) -> List[SheetSpec]:
+        """Подготовить листы с ошибками и статистикой проверок."""
+
+        if not self._problem_checks_run:
+            return []
+
+        issues_by_check: Dict[
+            str, List[Tuple[GeoFile, QualityIssue]]
+        ] = {check: [] for check in self._problem_checks_run}
+        for geo_file in files:
+            for issue in self._problem_issues.get(
+                str(geo_file.path), ()
+            ):
+                if issue.check in issues_by_check:
+                    issues_by_check[issue.check].append(
+                        (geo_file, issue)
+                    )
+
+        headers = [
+            tr("Полный путь"),
+            tr("Файл"),
+            tr("Идентификатор объекта"),
+            tr("Где ошибка"),
+            tr("Описание ошибки"),
+        ]
+
+        sheets: List[SheetSpec] = []
+        stats_rows: List[List[object]] = []
+        for definition in check_definitions():
+            check = definition.key
+            if check not in issues_by_check:
+                continue
+            entries = issues_by_check[check]
+            files_with_issues = {
+                str(geo_file.path)
+                for geo_file, _issue in entries
+            }
+            stats_rows.append(
+                [
+                    definition.label,
+                    len(files_with_issues),
+                    len(entries),
+                ]
+            )
+            if not entries:
+                continue
+
+            rows = []
+            for geo_file, issue in entries:
+                rows.append(
+                    [
+                        str(geo_file.path),
+                        geo_file.path.name,
+                        (
+                            issue.feature_id
+                            if issue.feature_id is not None
+                            else "—"
+                        ),
+                        self._issue_location(issue),
+                        tr(issue.message, *issue.args),
+                    ]
+                )
+            sheets.append((definition.label, headers, rows))
+
+        if stats_rows:
+            sheets.append(
+                (
+                    tr("Статистика проверок"),
+                    [
+                        tr("Проверка"),
+                        tr("Файлов с проблемами"),
+                        tr("Ошибок"),
+                    ],
+                    stats_rows,
+                )
+            )
+        return sheets
+
+    @staticmethod
+    def _issue_location(issue: QualityIssue) -> str:
+        parts = [
+            part
+            for part in (issue.layer, issue.location)
+            if part
+        ]
+        return " · ".join(parts) if parts else "—"
+
     def _export_file_list(self) -> None:
         files = self._visible_files()
         if not files:
@@ -1737,7 +1827,10 @@ class ZGeoPanel(QDockWidget):
             rows,
             tr("{}_файлы.xlsx", folder_name or "zgeo"),
             tr("Файлы"),
-            extra_sheets=[self._statistics_sheet_data()],
+            extra_sheets=[
+                self._statistics_sheet_data(),
+                *self._problem_sheets_data(files),
+            ],
         )
         if exported is not None:
             self._set_status(
@@ -2061,62 +2154,23 @@ class ZGeoPanel(QDockWidget):
             self._update_controls()
             return
 
-        read_size_all = CHECK_SIZE in checks
-        read_size_shp = CHECK_SIZE_SHP in checks and not read_size_all
-        read_size_mif_mid = (
-            CHECK_SIZE_MIF_MID in checks and not read_size_all
-        )
-
-        size_paths: Set[str] = set()
-        if read_size_all:
-            size_paths = {
-                str(geo_file.path) for geo_file in self._files
-            }
-        else:
-            if read_size_shp:
-                size_paths.update(
-                    str(geo_file.path)
-                    for geo_file in self._files
-                    if geo_file.extension == ".shp"
-                )
-            if read_size_mif_mid:
-                size_paths.update(
-                    str(geo_file.path)
-                    for geo_file in self._files
-                    if geo_file.extension == ".mif"
-                )
-
-        read_size = bool(size_paths)
-        if read_size_all:
-            action = "Уточнение размера"
-        elif read_size_shp and read_size_mif_mid:
-            action = "Уточнение размера"
-        elif read_size_shp:
-            action = "Уточнение размера SHP"
-        elif read_size_mif_mid:
-            action = "Уточнение размера MIF/MID"
-        else:
-            action = "Уточнение размера"
-
+        read_size = CHECK_SIZE in checks
         problem_checks = [
             check for check in checks if check in PROBLEM_CHECKS
         ]
 
         if read_size:
             detail_files = list(self._files)
-            if (read_size_shp or read_size_mif_mid) and not read_size_all:
-                detail_files = [
-                    geo_file
-                    for geo_file in detail_files
-                    if str(geo_file.path) in size_paths
-                ]
+            size_paths = {
+                str(geo_file.path) for geo_file in detail_files
+            }
             self._start_details(
                 detail_files,
                 read_size=True,
                 read_crs=False,
                 read_count=False,
                 size_paths=size_paths,
-                action=action,
+                action="Уточнение размера",
             )
         elif not problem_checks:
             self._set_status(
@@ -2344,6 +2398,7 @@ class ZGeoPanel(QDockWidget):
         self._problem_checked_paths.clear()
         self._problem_candidate_paths.clear()
         self._problem_selected = tuple(checks)
+        self._problem_checks_run = set(checks)
         self._problem_file_cache = {}
         self._set_problems_filter_available(False)
         self.problems_label.setText(tr("Проблемных файлов: 0"))
@@ -2479,16 +2534,24 @@ class ZGeoPanel(QDockWidget):
         if CHECK_DATASET_INTEGRITY in checks:
             if geo_file.extension in (".shp", ".mif", ".tab"):
                 applicable = True
-                issues.extend(
-                    completeness_issues(geo_file, files)
-                )
+                for issue in completeness_issues(geo_file, files):
+                    issues.append(
+                        replace(
+                            issue,
+                            check=CHECK_DATASET_INTEGRITY,
+                        )
+                    )
             if geo_file.extension == ".shp":
                 dbf_name = geo_file.path.stem.casefold() + ".dbf"
                 if dbf_name in files:
                     applicable = True
-                    issues.extend(
-                        dbf_encoding_issues(geo_file, files)
-                    )
+                    for issue in dbf_encoding_issues(geo_file, files):
+                        issues.append(
+                            replace(
+                                issue,
+                                check=CHECK_DATASET_INTEGRITY,
+                            )
+                        )
 
         needs_layers = any(
             check in LAYER_PROBLEM_CHECKS for check in checks
@@ -2519,22 +2582,26 @@ class ZGeoPanel(QDockWidget):
 
         if CHECK_FIELD_NAMES in checks and vector_layers:
             applicable = True
-            non_latin = [
-                name
-                for _layer_name, names in layer_fields
-                for name in names
-                if has_non_latin_characters(name)
-            ]
-            if non_latin:
+            for layer_name, names in layer_fields:
+                for name in names:
+                    if has_non_latin_characters(name):
+                        issues.append(
+                            QualityIssue(
+                                CHECK_FIELD_NAMES,
+                                "Нелатинское имя поля: {}",
+                                (name,),
+                                layer=layer_name,
+                                location=name,
+                            )
+                        )
+            for issue in field_name_issues(layer_fields):
                 issues.append(
-                    QualityIssue(
-                        CHECK_FIELD_NAMES,
-                        "Нелатинские имена полей:\n{}",
-                        ("\n".join(dict.fromkeys(non_latin)),),
-                    )
+                    replace(issue, check=CHECK_FIELD_NAMES)
                 )
-            issues.extend(field_name_issues(layer_fields))
-            issues.extend(truncated_duplicate_issues(layer_fields))
+            for issue in truncated_duplicate_issues(layer_fields):
+                issues.append(
+                    replace(issue, check=CHECK_FIELD_NAMES)
+                )
 
         if CHECK_CRS_QUALITY in checks and (
             vector_layers or raster_layers
@@ -2545,7 +2612,10 @@ class ZGeoPanel(QDockWidget):
 
         if CHECK_COUNT_QUALITY in checks and vector_layers:
             applicable = True
-            issues.extend(empty_layer_issues(layer_counts))
+            for issue in empty_layer_issues(layer_counts):
+                issues.append(
+                    replace(issue, check=CHECK_COUNT_QUALITY)
+                )
             self._apply_count_summary(geo_file, layer_counts)
 
         if CHECK_GEOMETRY_COORDINATES in checks and vector_layers:
@@ -2558,7 +2628,13 @@ class ZGeoPanel(QDockWidget):
             )
             if geometry_applicable:
                 applicable = True
-            issues.extend(geometry_issues)
+            for issue in geometry_issues:
+                issues.append(
+                    replace(
+                        issue,
+                        check=CHECK_GEOMETRY_COORDINATES,
+                    )
+                )
 
         return issues, applicable
 
@@ -2607,11 +2683,14 @@ class ZGeoPanel(QDockWidget):
     ) -> None:
         if issues:
             item.setText(5, tr("Да"))
+            visible_issues = [
+                issue for issue in issues if not issue.detail_only
+            ] or issues
             item.setToolTip(
                 5,
                 "\n".join(
                     tr(issue.message, *issue.args)
-                    for issue in issues
+                    for issue in visible_issues
                 ),
             )
             item.setData(5, Qt.ItemDataRole.UserRole, True)
@@ -2705,6 +2784,7 @@ class ZGeoPanel(QDockWidget):
         self._problem_checked_paths.clear()
         self._problem_candidate_paths.clear()
         self._problem_selected = ()
+        self._problem_checks_run.clear()
         self._problem_file_cache = {}
         self._reset_problems_filter()
         self._hide_progress()

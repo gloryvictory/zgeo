@@ -4,7 +4,7 @@
 
 A QGIS plugin for quickly browsing the contents of a spatial data folder.
 
-Plugin version: **1.25.0**
+Plugin version: **1.26.0**
 
 The plugin adds a dedicated **“ZGeo”** toolbar to QGIS with a **“ZGeo Catalog”** button that opens a floating panel. The panel provides:
 
@@ -22,7 +22,7 @@ The plugin adds a dedicated **“ZGeo”** toolbar to QGIS with a **“ZGeo Cata
 - the list can be filtered by name, format, path or issues;
 - the **“Settings”** tab lets you select the formats to scan; the **“Select all”**, **“Clear all”**, **“Vector only”** and **“Raster only”** buttons are available at the top; **Excel** is disabled by default;
 - the **“Files”** tab has the **“Information”**, **“Open in Explorer”**, **“Export to Excel”** and **“Checks”** buttons at the bottom;
-- **“Checks”** opens the **“Checks”** window with 9 checks: **“Refine size”**, **“Refine SHP size”**, **“Refine MIF/MID size”**, **“Refine CRS and check it”**, **“Refine feature count and check empty layers”**, **“Check JSON for GeoJSON format”**, **“Field name check”**, **“Dataset integrity check”** and **“Geometry and coordinate check”**; checks are enabled with checkboxes, and an **“i”** button to the right of each check shows its description on hover; by default, **“Refine size”**, **“Refine CRS and check it”**, **“Refine feature count and check empty layers”**, the JSON check and the field name check are selected;
+- **“Checks”** opens the **“Checks”** window with 7 checks: **“Refine size”**, **“Refine CRS and check it”**, **“Refine feature count and check empty layers”**, **“Check JSON for GeoJSON format”**, **“Field name check”**, **“Dataset integrity check”** and **“Geometry and coordinate check”**; checks are enabled with checkboxes, and an **“i”** button to the right of each check shows its description on hover; by default, **“Refine size”**, **“Refine CRS and check it”**, **“Refine feature count and check empty layers”**, the JSON check and the field name check are selected;
 - the JSON check appears when the list contains `.json` or `.geojson` files; it validates the document by its `type` field and excludes files that are not GeoJSON;
 - problems found are shown in the **“Issues”** column with the values **“Yes”**, **“No”** or **“—”**; details are available in the cell tooltip;
 - after the checks, the **“Problem files: N”** line is shown and the **“Only problem files”** filter becomes available;
@@ -95,7 +95,7 @@ After updating the plugin, close QGIS completely and start it again. If the **�
 5. During scanning, the current file name and the number of supported files found are shown. The scan can be stopped with **“Cancel”**.
 6. When scanning finishes, the folder name appears at the top and the found files are shown in the list. The CRS and feature count show **“—”** until checks are run. If needed, enter part of a file name or format in the filter field.
 7. Open the **“Settings”** tab to choose the formats to scan. **Excel** is disabled by default; after changing the settings, rescan the folder with the refresh button.
-8. Click **“Checks”** and select the required checks in the **“Checks”** window. Available checks include size refinement (all formats or SHP/MIF/MID only), CRS refinement and checking, feature count refinement with empty-layer checking, and the JSON, field name, dataset integrity, geometry and coordinate checks. The description of each check is shown when you hover over the **“i”** button. If the list contains `.json` or `.geojson`, the JSON check excludes files that are not GeoJSON. After the checks, the **“Problem files: N”** line and the **“Issues”** column appear, and the **“Only problem files”** filter becomes available.
+8. Click **“Checks”** and select the required checks in the **“Checks”** window. Available checks include size refinement, CRS refinement and checking, feature count refinement with empty-layer checking, and the JSON, field name, dataset integrity, geometry and coordinate checks. The description of each check is shown when you hover over the **“i”** button. If the list contains `.json` or `.geojson`, the JSON check excludes files that are not GeoJSON. After the checks, the **“Problem files: N”** line and the **“Issues”** column appear, and the **“Only problem files”** filter becomes available.
 9. Select a file and click **“Information”** at the bottom of the list.
 10. Click **“Open in Explorer”** to show the file in Windows Explorer.
 11. Click **“Export to Excel”** to export the found files with a total row and a separate statistics worksheet. After saving, Explorer opens with the selected `.xlsx`.
@@ -151,9 +151,7 @@ Below the attribute field table is the **“Export to Excel”** button. It save
 
 The **“Checks”** button at the bottom of the **“Files”** tab opens the **“Checks”** window. The following checks are available:
 
-- **“Refine size”** — full size of each dataset, including sidecar files;
-- **“Refine SHP size”** — full size of ESRI Shapefile datasets only, including sidecar files;
-- **“Refine MIF/MID size”** — full size of MapInfo MIF/MID datasets only, including the `.mif` and `.mid` files;
+- **“Refine size”** — full size of each dataset, including sidecar files; it covers all formats, including SHP and MIF/MID;
 - **“Refine CRS and check it”** — reads the CRS, fills the “CRS” column and flags missing, unknown or mixed CRSs;
 - **“Refine feature count and check empty layers”** — counts features, fills the “Features” column and flags empty layers and files without features;
 - **“Check JSON for GeoJSON format”** — validates `.json` and `.geojson` files by the `type` field; files that are not GeoJSON are excluded from the list;
@@ -161,7 +159,7 @@ The **“Checks”** button at the bottom of the **“Files”** tab opens the *
 - **“Dataset integrity check”** — required files: `.shp` + `.dbf` + `.shx`, `.mif` + `.mid`, `.tab` + `.dat/.map/.id`, plus the presence of `.cpg` and the DBF encoding;
 - **“Geometry and coordinate check”** — self-intersections, unclosed rings, empty and null geometries, NaN/Inf, excessively large coordinates, swapped latitude and longitude, and coordinates outside the valid CRS range.
 
-Checks are enabled with checkboxes. To the right of each check is an **“i”** button; hover over it to see the check description. By default, **“Refine size”**, **“Refine CRS and check it”**, **“Refine feature count and check empty layers”**, **“Check JSON for GeoJSON format”** and **“Field name check”** are selected; the separate SHP and MIF/MID size checks, the dataset integrity check and the geometry and coordinate check are optional. **“Refine size”** covers all formats, including SHP and MIF/MID, and takes precedence over the separate size checks when selected, so they are not run twice.
+Checks are enabled with checkboxes. To the right of each check is an **“i”** button; hover over it to see the check description. By default, **“Refine size”**, **“Refine CRS and check it”**, **“Refine feature count and check empty layers”**, **“Check JSON for GeoJSON format”** and **“Field name check”** are selected; the dataset integrity check and the geometry and coordinate check are optional. **“Refine size”** covers all formats, including SHP and MIF/MID.
 
 The JSON check appears in the window only when the found files include `.json` or `.geojson`. It reads the document and validates its `type` field: `FeatureCollection`, `Feature`, `GeometryCollection` and the geometry types (`Point`, `MultiPoint`, `LineString`, `MultiLineString`, `Polygon`, `MultiPolygon`) are allowed. For collections, the `features` and `geometries` members are validated as well. If the document is not GeoJSON (for example, a plain JSON object without `type` or with an unknown `type`), the file is excluded from the list and the file count, total size and statistics are recalculated. The JSON check runs before size, CRS and feature count refinement, so the remaining checks work on the already filtered list.
 
@@ -181,9 +179,11 @@ A blank row and a total are added at the end of the table: **“Total files: N�
 
 A separate **“Statistics”** worksheet is created in the same workbook with the **“Format”**, **“Count”** and **“Full size”** columns. It is built from all found files, like the table on the **“Statistics”** tab, and ends with an **“Total”** row containing the total file count and size. After a successful save, Windows Explorer opens with the selected `.xlsx` file.
 
+If checks were run before exporting, additional worksheets named after the checks are added. Each such worksheet contains a table with the columns **“Full path”**, **“File”**, **“Feature ID”**, **“Where”** and **“Error description”**. For geometry and coordinate checks the feature ID and the vertex/error location are included; for field checks the layer and field name are included. The last worksheet is **“Check statistics”**, with the number of files with issues and the number of errors for each check.
+
 ## Full dataset size
 
-The full size of each dataset is refined by the **“Refine size”** check for all formats at once, including SHP and MIF/MID. To process only one format, use the separate **“Refine SHP size”** or **“Refine MIF/MID size”** checks. The following sidecar files are included:
+The full size of each dataset is refined by the **“Refine size”** check for all formats at once, including SHP and MIF/MID. The following sidecar files are included:
 
 - Shapefile: `.shp`, `.dbf`, `.shx`, `.prj`, `.cpg`, `.qix`, `.sbn`, `.sbx`, `.fbn`, `.fbx`, `.ain`, `.aih`, `.atx`, `.ixs`, `.mxs`, `.fix`, `.shp.xml`;
 - MapInfo MIF: `.mif` + `.mid`;

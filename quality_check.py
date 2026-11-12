@@ -33,6 +33,10 @@ class QualityIssue:
     check: str
     message: str
     args: Tuple[object, ...] = ()
+    layer: str = ""
+    feature_id: Optional[int] = None
+    location: str = ""
+    detail_only: bool = False
 
 
 def directory_files(
@@ -78,6 +82,7 @@ def completeness_issues(
             "dataset_completeness",
             "В наборе отсутствуют файлы: {}",
             (", ".join(missing),),
+            location=", ".join(missing),
         )
     ]
 
@@ -103,6 +108,7 @@ def dbf_encoding_issues(
             QualityIssue(
                 "dbf_encoding",
                 "Не удалось прочитать заголовок DBF",
+                location="DBF",
             )
         )
 
@@ -111,6 +117,7 @@ def dbf_encoding_issues(
             QualityIssue(
                 "dbf_encoding",
                 "Нет файла .cpg: кодировка DBF не указана",
+                location=".cpg",
             )
         )
         return issues
@@ -128,6 +135,7 @@ def dbf_encoding_issues(
             QualityIssue(
                 "dbf_encoding",
                 "Файл .cpg пуст: кодировка DBF не указана",
+                location=".cpg",
             )
         )
     elif not is_known_encoding(content):
@@ -136,6 +144,7 @@ def dbf_encoding_issues(
                 "dbf_encoding",
                 "Неизвестная кодировка в .cpg: {}",
                 (content,),
+                location=".cpg",
             )
         )
 
@@ -188,7 +197,7 @@ def field_name_issues(
     issues: List[QualityIssue] = []
     seen_names = set()
 
-    for _layer_name, field_names in layers:
+    for layer_name, field_names in layers:
         for name in field_names:
             if not name or name in seen_names:
                 continue
@@ -201,6 +210,8 @@ def field_name_issues(
                         "Поле «{}»: длина {} больше {} символов "
                         "(ограничение DBF)",
                         (name, len(name), DBF_FIELD_NAME_LIMIT),
+                        layer=layer_name,
+                        location=name,
                     )
                 )
 
@@ -210,6 +221,8 @@ def field_name_issues(
                         "shp_field_names",
                         "Поле «{}»: содержит пробел",
                         (name,),
+                        layer=layer_name,
+                        location=name,
                     )
                 )
 
@@ -229,6 +242,8 @@ def field_name_issues(
                         "shp_field_names",
                         "Поле «{}»: недопустимые символы: {}",
                         (name, special),
+                        layer=layer_name,
+                        location=name,
                     )
                 )
 
@@ -260,6 +275,8 @@ def truncated_duplicate_issues(
                     "Слой «{}»: после усечения до {} символов совпадают "
                     "имена полей: {}",
                     (layer_name, DBF_FIELD_NAME_LIMIT, ", ".join(unique)),
+                    layer=layer_name,
+                    location=key,
                 )
             )
 
@@ -285,6 +302,7 @@ def crs_issues(values: Sequence[str]) -> List[QualityIssue]:
             QualityIssue(
                 "crs_quality",
                 "Система координат не определена",
+                location="Система координат",
             )
         ]
 
@@ -294,6 +312,7 @@ def crs_issues(values: Sequence[str]) -> List[QualityIssue]:
             QualityIssue(
                 "crs_quality",
                 "У части слоёв не определена система координат",
+                location="Система координат",
             )
         )
 
@@ -304,6 +323,7 @@ def crs_issues(values: Sequence[str]) -> List[QualityIssue]:
                 "crs_quality",
                 "Смешанные системы координат: {}",
                 (examples,),
+                location="Система координат",
             )
         )
 
@@ -355,7 +375,11 @@ def empty_layer_issues(
     issues: List[QualityIssue] = []
     if len(empty) == len(layers):
         issues.append(
-            QualityIssue("empty_layers", "Файл не содержит объектов")
+            QualityIssue(
+                "empty_layers",
+                "Файл не содержит объектов",
+                location="Файл",
+            )
         )
 
     for name, _count in empty:
@@ -364,6 +388,8 @@ def empty_layer_issues(
                 "empty_layers",
                 "Слой «{}» не содержит объектов",
                 (name,),
+                layer=name,
+                location="Слой",
             )
         )
 

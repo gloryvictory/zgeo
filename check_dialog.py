@@ -26,8 +26,6 @@ from .i18n import tr
 ICON_PATH = Path(__file__).with_name("icon.svg")
 
 CHECK_SIZE = "refine_size"
-CHECK_SIZE_SHP = "refine_size_shp"
-CHECK_SIZE_MIF_MID = "refine_size_mif_mid"
 CHECK_JSON_GEOJSON = "json_geojson"
 CHECK_CRS_QUALITY = "crs_quality"
 CHECK_COUNT_QUALITY = "count_quality"
@@ -78,24 +76,6 @@ def check_definitions(
                 "Считает полный размер каждого набора данных с учётом "
                 "сопутствующих файлов."
             ),
-        ),
-        CheckDefinition(
-            key=CHECK_SIZE_SHP,
-            label=tr("Уточнить размер SHP"),
-            description=tr(
-                "Считает полный размер только наборов ESRI Shapefile с "
-                "учётом сопутствующих файлов."
-            ),
-            checked=False,
-        ),
-        CheckDefinition(
-            key=CHECK_SIZE_MIF_MID,
-            label=tr("Уточнить размер MIF/MID"),
-            description=tr(
-                "Считает полный размер только наборов MapInfo MIF/MID с "
-                "учётом файлов .mif и .mid."
-            ),
-            checked=False,
         ),
         CheckDefinition(
             key=CHECK_CRS_QUALITY,
@@ -184,8 +164,8 @@ class ChecksDialog(QDialog):
 
         self.setWindowTitle(tr("Проверки"))
         self.setWindowIcon(QIcon(str(ICON_PATH)))
-        self.resize(640, 540)
-        self.setMinimumSize(540, 400)
+        self.resize(640, 480)
+        self.setMinimumSize(540, 380)
 
         self._build_ui()
 

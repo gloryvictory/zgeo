@@ -387,6 +387,28 @@ EN_TRANSLATIONS = {
         "geometries, NaN/Inf, excessively large coordinates, swapped "
         "latitude and longitude, and coordinates outside the CRS range."
     ),
+    "Нелатинское имя поля: {}": "Non-Latin field name: {}",
+    "Геометрия отсутствует (null)": "Geometry is missing (null)",
+    "Пустая геометрия": "Empty geometry",
+    "Незамкнутое кольцо": "Unclosed ring",
+    "Самопересечение": "Self-intersection",
+    "Некорректная геометрия: {}": "Invalid geometry: {}",
+    "Не удалось проверить геометрию": "Could not validate geometry",
+    "Координата NaN/Inf": "NaN/Inf coordinate",
+    "Слишком большая координата": "Excessively large coordinate",
+    "Похоже на перепутанные широту и долготу": (
+        "Possibly swapped latitude and longitude"
+    ),
+    "Координата вне диапазона CRS": "Coordinate outside the CRS range",
+    "Вершина {}": "Vertex {}",
+    "Полный путь": "Full path",
+    "Идентификатор объекта": "Feature ID",
+    "Где ошибка": "Where",
+    "Описание ошибки": "Error description",
+    "Статистика проверок": "Check statistics",
+    "Проверка": "Check",
+    "Файлов с проблемами": "Files with issues",
+    "Ошибок": "Issues",
     # Информация о файле
     "Информация — {}": "Information — {}",
     "Слой:": "Layer:",
