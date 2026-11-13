@@ -57,6 +57,7 @@ from .check_dialog import (
     CHECK_FIELD_NAMES,
     CHECK_GEOMETRY_COORDINATES,
     CHECK_JSON_GEOJSON,
+    CHECK_METADATA_CRS,
     CHECK_SIZE,
     LAYER_PROBLEM_CHECKS,
     PROBLEM_CHECKS,
@@ -79,10 +80,12 @@ from .quality_check import (
     QualityIssue,
     completeness_issues,
     crs_issues,
+    crs_metadata_issues,
     dbf_encoding_issues,
     directory_files,
     empty_layer_issues,
     field_name_issues,
+    metadata_sidecar_issues,
     truncated_duplicate_issues,
 )
 from .i18n import (
@@ -117,9 +120,9 @@ LAST_FOLDER_KEY = "zgeo/last_folder"
 DISABLED_FORMATS_KEY = "zgeo/disabled_formats"
 ICON_PATH = Path(__file__).with_name("icon.svg")
 CHECKS_TOOLTIP = (
-    "Проверки: уточнить размер (в том числе отдельно для SHP и MIF/MID), "
-    "систему координат и количество элементов, проверить JSON, имена "
-    "полей, набор данных, геометрии и координаты."
+    "Проверки: уточнить размер, систему координат и количество элементов, "
+    "проверить JSON, имена полей, набор данных, метаданные и CRS, "
+    "геометрии и координаты."
 )
 SIZE_CHART_COLOR = "#0F766E"
 TYPE_CHART_COLORS = (
@@ -176,7 +179,6 @@ class ZGeoPanel(QDockWidget):
         self._details_read_size = False
         self._details_read_crs = False
         self._details_read_count = False
-        self._details_size_paths: Set[str] = set()
         self._details_action_source = "Уточнение данных"
         self._details_size_changed = False
         self._details_timer = QTimer(self)
@@ -1881,7 +1883,6 @@ class ZGeoPanel(QDockWidget):
         read_size: bool,
         read_crs: bool,
         read_count: bool,
-        size_paths: Optional[Set[str]] = None,
         action: str = "Уточнение данных",
     ) -> None:
         self._cancel_details()
@@ -1894,11 +1895,6 @@ class ZGeoPanel(QDockWidget):
         self._details_read_size = read_size
         self._details_read_crs = read_crs
         self._details_read_count = read_count
-        self._details_size_paths = (
-            {str(geo_file.path) for geo_file in files}
-            if size_paths is None
-            else set(size_paths)
-        )
         self._details_action_source = action
         self._details_size_changed = False
         self._size_index_cache = {}
@@ -1923,7 +1919,6 @@ class ZGeoPanel(QDockWidget):
         self._details_read_size = False
         self._details_read_crs = False
         self._details_read_count = False
-        self._details_size_paths = set()
         self._details_action_source = "Уточнение данных"
         self._details_size_changed = False
         self._size_index_cache = {}
@@ -1999,10 +1994,7 @@ class ZGeoPanel(QDockWidget):
                 summary = LayerSummary("—", None)
 
         refined = geo_file
-        if (
-            self._details_read_size
-            and path_key in self._details_size_paths
-        ):
+        if self._details_read_size:
             try:
                 detail = measure_geo_file_cached(
                     geo_file, self._size_index_cache
@@ -2195,16 +2187,11 @@ class ZGeoPanel(QDockWidget):
         ]
 
         if read_size:
-            detail_files = list(self._files)
-            size_paths = {
-                str(geo_file.path) for geo_file in detail_files
-            }
             self._start_details(
-                detail_files,
+                self._files,
                 read_size=True,
                 read_crs=False,
                 read_count=False,
-                size_paths=size_paths,
                 action="Уточнение размера",
             )
         elif not problem_checks:
@@ -2688,6 +2675,42 @@ class ZGeoPanel(QDockWidget):
                         issue,
                         check=CHECK_GEOMETRY_COORDINATES,
                     )
+                )
+
+        if CHECK_METADATA_CRS in checks:
+            descriptors = [
+                layer.crs_descriptor
+                for layer in vector_layers
+                if layer.spatial
+            ]
+            descriptors.extend(
+                layer.crs_descriptor for layer in raster_layers
+            )
+            if (
+                descriptors
+                or geo_file.extension == ".shp"
+                or geo_file.category == RASTER
+            ):
+                applicable = True
+
+            has_crs = any(
+                descriptor.valid for descriptor in descriptors
+            )
+            for issue in metadata_sidecar_issues(
+                geo_file,
+                files,
+                has_crs=has_crs,
+                include_cpg=CHECK_DATASET_INTEGRITY not in checks,
+            ):
+                issues.append(
+                    replace(issue, check=CHECK_METADATA_CRS)
+                )
+            for issue in crs_metadata_issues(
+                descriptors,
+                include_missing=CHECK_CRS_QUALITY not in checks,
+            ):
+                issues.append(
+                    replace(issue, check=CHECK_METADATA_CRS)
                 )
 
         return issues, applicable

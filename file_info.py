@@ -16,6 +16,7 @@ from qgis.core import (
 
 from .attribute_check import has_non_latin_characters
 from .i18n import tr
+from .quality_check import CrsDescriptor
 from .scanner import OTHER, RASTER, TABLE, VECTOR, GeoFile
 
 _LAYER_TYPE = getattr(Qgis, "LayerType", None)
@@ -38,6 +39,8 @@ class VectorLayerInfo:
     name: str
     uri: str
     crs: str
+    crs_descriptor: CrsDescriptor
+    spatial: bool
     feature_count: int
     geometry: str
     extent: str
@@ -50,6 +53,7 @@ class RasterLayerInfo:
     name: str
     uri: str
     crs: str
+    crs_descriptor: CrsDescriptor
     width: int
     height: int
     band_count: int
@@ -319,10 +323,13 @@ def _should_inspect_raster(
 
 def _vector_layer_info(layer: QgsVectorLayer) -> VectorLayerInfo:
     fields = tuple(_field_info(field) for field in layer.fields())
+    crs = layer.crs()
     return VectorLayerInfo(
         name=layer.name(),
         uri=layer.source(),
-        crs=_crs_text(layer),
+        crs=_crs_text(crs),
+        crs_descriptor=_crs_descriptor(crs, layer.name()),
+        spatial=layer.isSpatial(),
         feature_count=layer.featureCount(),
         geometry=_geometry_text(layer),
         extent=_extent_text(layer.extent()),
@@ -339,10 +346,12 @@ def _raster_layer_info(layer: QgsRasterLayer) -> RasterLayerInfo:
     else:
         pixel_size = "{:g} × {:g}".format(pixel_x, pixel_y)
 
+    crs = layer.crs()
     return RasterLayerInfo(
         name=layer.name(),
         uri=layer.source(),
-        crs=_crs_text(layer),
+        crs=_crs_text(crs),
+        crs_descriptor=_crs_descriptor(crs, layer.name()),
         width=layer.width(),
         height=layer.height(),
         band_count=layer.bandCount(),
@@ -363,8 +372,7 @@ def _field_info(field) -> FieldInfo:
     )
 
 
-def _crs_text(layer) -> str:
-    crs = layer.crs()
+def _crs_text(crs) -> str:
     if crs is None or not crs.isValid():
         return tr("Не определена")
     authid = crs.authid()
@@ -372,6 +380,104 @@ def _crs_text(layer) -> str:
     if authid and description:
         return "{} — {}".format(authid, description)
     return authid or description or tr("Не определена")
+
+
+def _crs_descriptor(crs, layer_name: str) -> CrsDescriptor:
+    """Собрать сведения о CRS с учётом различий версий QGIS."""
+
+    valid = False
+    if crs is not None:
+        try:
+            valid = bool(crs.isValid())
+        except Exception:
+            valid = False
+
+    authid = ""
+    description = ""
+    geographic = False
+    deprecated = False
+    units = "Unknown"
+    axis_inverted = False
+
+    if valid:
+        try:
+            authid = crs.authid() or ""
+        except Exception:
+            authid = ""
+        try:
+            description = crs.description() or ""
+        except Exception:
+            description = ""
+        try:
+            geographic = bool(crs.isGeographic())
+        except Exception:
+            geographic = False
+        try:
+            deprecated = bool(crs.isDeprecated())
+        except Exception:
+            deprecated = False
+        try:
+            units = _distance_unit_name(crs.mapUnits())
+        except Exception:
+            units = "Unknown"
+        try:
+            axis_inverted = bool(crs.hasAxisInverted())
+        except Exception:
+            axis_inverted = False
+
+    return CrsDescriptor(
+        layer=layer_name,
+        authid=authid,
+        description=description,
+        valid=valid,
+        geographic=geographic,
+        projected=_is_projected(crs) if valid else False,
+        deprecated=deprecated,
+        units=units,
+        axis_inverted=axis_inverted,
+    )
+
+
+def _is_projected(crs) -> bool:
+    """Проверить проекционную CRS с учётом разных версий QGIS."""
+
+    method = getattr(crs, "isProjected", None)
+    if callable(method):
+        try:
+            return bool(method())
+        except Exception:
+            pass
+
+    crs_type = getattr(Qgis, "CrsType", None)
+    type_method = getattr(crs, "type", None)
+    if crs_type is not None and callable(type_method):
+        try:
+            value = type_method()
+            return value in (
+                crs_type.Projected,
+                crs_type.DerivedProjected,
+            )
+        except Exception:
+            pass
+
+    try:
+        return crs.isValid() and not crs.isGeographic()
+    except Exception:
+        return False
+
+
+def _distance_unit_name(units) -> str:
+    """Вернуть имя единицы измерения CRS без привязки к версии QGIS."""
+
+    distance_unit = getattr(Qgis, "DistanceUnit", None)
+    if distance_unit is None:
+        distance_unit = getattr(Qgis, "UnitType", None)
+    if distance_unit is not None:
+        try:
+            return distance_unit(units).name
+        except Exception:
+            pass
+    return "Unknown"
 
 
 def _geometry_text(layer: QgsVectorLayer) -> str:

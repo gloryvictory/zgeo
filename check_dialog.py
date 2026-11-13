@@ -31,6 +31,7 @@ CHECK_CRS_QUALITY = "crs_quality"
 CHECK_COUNT_QUALITY = "count_quality"
 CHECK_FIELD_NAMES = "field_names"
 CHECK_DATASET_INTEGRITY = "dataset_integrity"
+CHECK_METADATA_CRS = "metadata_crs"
 CHECK_GEOMETRY_COORDINATES = "geometry_coordinates"
 
 PROBLEM_CHECKS = frozenset(
@@ -39,6 +40,7 @@ PROBLEM_CHECKS = frozenset(
         CHECK_COUNT_QUALITY,
         CHECK_FIELD_NAMES,
         CHECK_DATASET_INTEGRITY,
+        CHECK_METADATA_CRS,
         CHECK_GEOMETRY_COORDINATES,
     }
 )
@@ -48,6 +50,7 @@ LAYER_PROBLEM_CHECKS = frozenset(
         CHECK_CRS_QUALITY,
         CHECK_COUNT_QUALITY,
         CHECK_FIELD_NAMES,
+        CHECK_METADATA_CRS,
         CHECK_GEOMETRY_COORDINATES,
     }
 )
@@ -111,6 +114,17 @@ def check_definitions(
             description=tr(
                 "Проверяет обязательные файлы набора, наличие .cpg и "
                 "корректность указанной кодировки DBF."
+            ),
+            checked=False,
+        ),
+        CheckDefinition(
+            key=CHECK_METADATA_CRS,
+            label=tr("Проверка метаданных и CRS"),
+            description=tr(
+                "Проверяет наличие .prj и .cpg у SHP, .aux.xml и .ovr "
+                "у растров, файла привязки .tfw/.tifw/.wld при "
+                "отсутствии CRS, а также устаревшие CRS, единицы и "
+                "порядок осей."
             ),
             checked=False,
         ),

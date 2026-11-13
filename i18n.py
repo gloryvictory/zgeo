@@ -160,8 +160,6 @@ EN_TRANSLATIONS = {
     "Прерывание сканирования…": "Cancelling scan…",
     "Уточнение данных": "Data refinement",
     "Уточнение размера": "Size refinement",
-    "Уточнение размера SHP": "SHP size refinement",
-    "Уточнение размера MIF/MID": "MIF/MID size refinement",
     "Уточнение системы координат": "CRS refinement",
     "Уточнение количества элементов": "Feature count refinement",
     "{}: 0 из {}": "{}: 0 of {}",
@@ -215,10 +213,10 @@ EN_TRANSLATIONS = {
     "Проблем не найдено.": "No problems found.",
     "Идёт проверка…": "Check in progress…",
     "Прервать проверки": "Cancel checks",
-    "Проверки: уточнить размер (в том числе отдельно для SHP и MIF/MID), систему координат и количество элементов, проверить JSON, имена полей, набор данных, геометрии и координаты.": (
-        "Checks: refine size (including separately for SHP and MIF/MID), "
-        "CRS and feature count, validate JSON, field names, dataset "
-        "integrity, geometries and coordinates."
+    "Проверки: уточнить размер, систему координат и количество элементов, проверить JSON, имена полей, набор данных, метаданные и CRS, геометрии и координаты.": (
+        "Checks: refine size, CRS and feature count, validate JSON, field "
+        "names, dataset integrity, metadata and CRS, geometries and "
+        "coordinates."
     ),
     "Выберите проверки": "Select checks",
     "Отметьте проверки, которые нужно выполнить для найденных файлов.": (
@@ -227,16 +225,6 @@ EN_TRANSLATIONS = {
     "Уточнить размер": "Refine size",
     "Считает полный размер каждого набора данных с учётом сопутствующих файлов.": (
         "Calculates the full size of each dataset, including sidecar files."
-    ),
-    "Уточнить размер SHP": "Refine SHP size",
-    "Считает полный размер только наборов ESRI Shapefile с учётом сопутствующих файлов.": (
-        "Calculates the full size of ESRI Shapefile datasets only, including "
-        "sidecar files."
-    ),
-    "Уточнить размер MIF/MID": "Refine MIF/MID size",
-    "Считает полный размер только наборов MapInfo MIF/MID с учётом файлов .mif и .mid.": (
-        "Calculates the full size of MapInfo MIF/MID datasets only, "
-        "including the .mif and .mid files."
     ),
     "Уточнить систему координат": "Refine CRS",
     "Читает систему координат слоёв и обновляет колонку «Система координат».": (
@@ -332,6 +320,33 @@ EN_TRANSLATIONS = {
         "The .cpg file is empty: DBF encoding is not specified"
     ),
     "Неизвестная кодировка в .cpg: {}": "Unknown encoding in .cpg: {}",
+    "В наборе отсутствует файл метаданных: {}": (
+        "Dataset is missing a metadata file: {}"
+    ),
+    "Нет вспомогательных метаданных: {}": (
+        "No auxiliary metadata: {}"
+    ),
+    "Нет файла привязки .tfw/.tifw/.wld: растровая привязка не найдена": (
+        "No .tfw/.tifw/.wld world file: raster georeferencing not found"
+    ),
+    "Слой «{}»: система координат не определена": (
+        "Layer “{}”: coordinate system is not defined"
+    ),
+    "Слой «{}»: устаревшая система координат {} — {}": (
+        "Layer “{}”: deprecated coordinate system {} — {}"
+    ),
+    "Слой «{}»: система координат без кода EPSG/авторитета": (
+        "Layer “{}”: coordinate system has no EPSG/authority code"
+    ),
+    "Слой «{}»: не метрические единицы CRS: {}": (
+        "Layer “{}”: non-metric CRS units: {}"
+    ),
+    "Слой «{}»: для географической CRS ожидаются градусы, указано: {}": (
+        "Layer “{}”: geographic CRS expects degrees, got: {}"
+    ),
+    "Слой «{}»: нестандартный порядок осей CRS (YX)": (
+        "Layer “{}”: non-standard CRS axis order (YX)"
+    ),
     "Поле «{}»: длина {} больше {} символов (ограничение DBF)": (
         "Field “{}”: length {} exceeds {} characters (DBF limit)"
     ),
@@ -380,6 +395,12 @@ EN_TRANSLATIONS = {
     "Проверяет обязательные файлы набора, наличие .cpg и корректность указанной кодировки DBF.": (
         "Checks required dataset files, the presence of .cpg and the "
         "specified DBF encoding."
+    ),
+    "Проверка метаданных и CRS": "Metadata and CRS check",
+    "Проверяет наличие .prj и .cpg у SHP, .aux.xml и .ovr у растров, файла привязки .tfw/.tifw/.wld при отсутствии CRS, а также устаревшие CRS, единицы и порядок осей.": (
+        "Checks for .prj and .cpg on SHP, .aux.xml and .ovr on rasters, "
+        "a .tfw/.tifw/.wld world file when no CRS is present, and also "
+        "deprecated CRS, units and axis order."
     ),
     "Проверка геометрий и координат": "Geometry and coordinate check",
     "Ищет самопересечения, незамкнутые кольца, пустые и null-геометрии, NaN/Inf, слишком большие координаты, перепутанные широту и долготу и выход за диапазон CRS.": (

@@ -12,8 +12,26 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
+from .scanner import RASTER
+
 DBF_FIELD_NAME_LIMIT = 10
 MAX_ABS_COORDINATE = 1e9
+
+METRIC_UNITS = frozenset(
+    {"Meters", "Kilometers", "Centimeters", "Millimeters"}
+)
+UNIT_SYMBOLS = {
+    "Meters": "m",
+    "Kilometers": "km",
+    "Centimeters": "cm",
+    "Millimeters": "mm",
+    "Feet": "ft",
+    "FeetUSSurvey": "ftUS",
+    "Degrees": "°",
+    "Unknown": "?",
+}
+RASTER_AUXILIARY_METADATA = (".aux.xml", ".ovr")
+WORLD_FILE_EXTENSIONS = (".tfw", ".tifw", ".wld")
 
 REQUIRED_SIDECARS: Dict[str, Tuple[str, ...]] = {
     ".shp": (".dbf", ".shx"),
@@ -37,6 +55,21 @@ class QualityIssue:
     feature_id: Optional[int] = None
     location: str = ""
     detail_only: bool = False
+
+
+@dataclass(frozen=True)
+class CrsDescriptor:
+    """Сведения о системе координат слоя для проверки метаданных."""
+
+    layer: str
+    authid: str
+    description: str
+    valid: bool
+    geographic: bool
+    projected: bool
+    deprecated: bool
+    units: str
+    axis_inverted: bool
 
 
 def directory_files(
@@ -145,6 +178,76 @@ def dbf_encoding_issues(
                 "Неизвестная кодировка в .cpg: {}",
                 (content,),
                 location=".cpg",
+            )
+        )
+
+    return issues
+
+
+def metadata_sidecar_issues(
+    geo_file,
+    files: Mapping[str, Path],
+    *,
+    has_crs: bool = True,
+    include_cpg: bool = True,
+) -> List[QualityIssue]:
+    """Проверить наличие обязательных и вспомогательных файлов метаданных."""
+
+    issues: List[QualityIssue] = []
+    base = geo_file.path.stem.casefold()
+
+    if geo_file.extension == ".shp":
+        if not any(
+            base + extension in files
+            for extension in (".prj", ".qpj")
+        ):
+            issues.append(
+                QualityIssue(
+                    "metadata_crs",
+                    "В наборе отсутствует файл метаданных: {}",
+                    (".prj",),
+                    location=".prj",
+                )
+            )
+        if include_cpg and base + ".cpg" not in files:
+            issues.append(
+                QualityIssue(
+                    "metadata_crs",
+                    "В наборе отсутствует файл метаданных: {}",
+                    (".cpg",),
+                    location=".cpg",
+                )
+            )
+        return issues
+
+    if geo_file.category != RASTER:
+        return issues
+
+    missing = [
+        extension
+        for extension in RASTER_AUXILIARY_METADATA
+        if base + extension not in files
+    ]
+    if missing:
+        issues.append(
+            QualityIssue(
+                "metadata_crs",
+                "Нет вспомогательных метаданных: {}",
+                (", ".join(missing),),
+                location=", ".join(missing),
+            )
+        )
+
+    if not has_crs and not any(
+        base + extension in files
+        for extension in WORLD_FILE_EXTENSIONS
+    ):
+        issues.append(
+            QualityIssue(
+                "metadata_crs",
+                "Нет файла привязки .tfw/.tifw/.wld: "
+                "растровая привязка не найдена",
+                location=".tfw",
             )
         )
 
@@ -326,6 +429,98 @@ def crs_issues(values: Sequence[str]) -> List[QualityIssue]:
                 location="Система координат",
             )
         )
+
+    return issues
+
+
+def crs_metadata_issues(
+    descriptors: Sequence[CrsDescriptor],
+    *,
+    include_missing: bool = True,
+) -> List[QualityIssue]:
+    """Проверить устаревшие CRS, единицы и порядок осей."""
+
+    issues: List[QualityIssue] = []
+
+    for descriptor in descriptors:
+        layer = descriptor.layer
+        if not descriptor.valid:
+            if include_missing:
+                issues.append(
+                    QualityIssue(
+                        "metadata_crs",
+                        "Слой «{}»: система координат не определена",
+                        (layer,),
+                        layer=layer,
+                        location="Система координат",
+                    )
+                )
+            continue
+
+        if descriptor.deprecated:
+            issues.append(
+                QualityIssue(
+                    "metadata_crs",
+                    "Слой «{}»: устаревшая система координат {} — {}",
+                    (
+                        layer,
+                        descriptor.authid or "—",
+                        descriptor.description or "—",
+                    ),
+                    layer=layer,
+                    location="Система координат",
+                )
+            )
+
+        if not descriptor.authid:
+            issues.append(
+                QualityIssue(
+                    "metadata_crs",
+                    "Слой «{}»: система координат без кода EPSG/авторитета",
+                    (layer,),
+                    layer=layer,
+                    location="Система координат",
+                )
+            )
+
+        unit_label = UNIT_SYMBOLS.get(
+            descriptor.units, descriptor.units
+        )
+        if descriptor.projected and descriptor.units not in METRIC_UNITS:
+            issues.append(
+                QualityIssue(
+                    "metadata_crs",
+                    "Слой «{}»: не метрические единицы CRS: {}",
+                    (layer, unit_label),
+                    layer=layer,
+                    location="Единицы CRS",
+                )
+            )
+        elif (
+            descriptor.geographic
+            and descriptor.units != "Degrees"
+        ):
+            issues.append(
+                QualityIssue(
+                    "metadata_crs",
+                    "Слой «{}»: для географической CRS ожидаются "
+                    "градусы, указано: {}",
+                    (layer, unit_label),
+                    layer=layer,
+                    location="Единицы CRS",
+                )
+            )
+
+        if descriptor.projected and descriptor.axis_inverted:
+            issues.append(
+                QualityIssue(
+                    "metadata_crs",
+                    "Слой «{}»: нестандартный порядок осей CRS (YX)",
+                    (layer,),
+                    layer=layer,
+                    location="Порядок осей",
+                )
+            )
 
     return issues
 

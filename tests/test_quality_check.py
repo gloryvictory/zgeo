@@ -8,14 +8,17 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from zgeo.quality_check import (
+    CrsDescriptor,
     completeness_issues,
     coordinate_problem,
     crs_issues,
+    crs_metadata_issues,
     dbf_encoding_issues,
     directory_files,
     empty_layer_issues,
     field_name_issues,
     is_known_encoding,
+    metadata_sidecar_issues,
     truncated_duplicate_issues,
 )
 
@@ -263,6 +266,228 @@ class CrsTests(unittest.TestCase):
                 ["EPSG:4326 — WGS 84", "EPSG:4326 — WGS 84"]
             ),
             [],
+        )
+
+
+class MetadataSidecarTests(unittest.TestCase):
+    def test_shapefile_missing_prj_and_cpg(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "roads.shp").write_bytes(b"shp")
+            files = directory_files(root, {})
+            issues = metadata_sidecar_issues(
+                geo_file(root / "roads.shp"), files
+            )
+            messages = [
+                issue.message.format(*issue.args) for issue in issues
+            ]
+            self.assertTrue(any(".prj" in message for message in messages))
+            self.assertTrue(any(".cpg" in message for message in messages))
+
+    def test_shapefile_cpg_can_be_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "roads.shp").write_bytes(b"shp")
+            (root / "roads.prj").write_bytes(b"prj")
+            files = directory_files(root, {})
+            issues = metadata_sidecar_issues(
+                geo_file(root / "roads.shp"),
+                files,
+                include_cpg=False,
+            )
+            self.assertEqual(issues, [])
+
+    def test_shapefile_accepts_qpj_projection_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "roads.shp").write_bytes(b"shp")
+            (root / "roads.qpj").write_bytes(b"qpj")
+            (root / "roads.cpg").write_bytes(b"UTF-8")
+            files = directory_files(root, {})
+            self.assertEqual(
+                metadata_sidecar_issues(
+                    geo_file(root / "roads.shp"), files
+                ),
+                [],
+            )
+
+    def test_shapefile_complete_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "roads.shp").write_bytes(b"shp")
+            (root / "roads.prj").write_bytes(b"prj")
+            (root / "roads.cpg").write_bytes(b"UTF-8")
+            files = directory_files(root, {})
+            self.assertEqual(
+                metadata_sidecar_issues(
+                    geo_file(root / "roads.shp"), files
+                ),
+                [],
+            )
+
+    def test_raster_missing_auxiliary_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raster = SimpleNamespace(
+                path=root / "dem.tif",
+                extension=".tif",
+                category="raster",
+            )
+            issues = metadata_sidecar_issues(raster, {}, has_crs=True)
+            self.assertEqual(len(issues), 1)
+            message = issues[0].message.format(*issues[0].args)
+            self.assertIn(".aux.xml", message)
+            self.assertIn(".ovr", message)
+
+    def test_raster_without_crs_requires_world_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "dem.aux.xml").write_bytes(b"aux")
+            (root / "dem.ovr").write_bytes(b"ovr")
+            raster = SimpleNamespace(
+                path=root / "dem.tif",
+                extension=".tif",
+                category="raster",
+            )
+            files = directory_files(root, {})
+            issues = metadata_sidecar_issues(
+                raster, files, has_crs=False
+            )
+            self.assertEqual(len(issues), 1)
+            self.assertIn(".tfw", issues[0].message)
+
+    def test_raster_with_world_file_is_complete(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "dem.tif").write_bytes(b"tif")
+            (root / "dem.aux.xml").write_bytes(b"aux")
+            (root / "dem.ovr").write_bytes(b"ovr")
+            (root / "dem.tfw").write_bytes(b"tfw")
+            raster = SimpleNamespace(
+                path=root / "dem.tif",
+                extension=".tif",
+                category="raster",
+            )
+            files = directory_files(root, {})
+            self.assertEqual(
+                metadata_sidecar_issues(
+                    raster, files, has_crs=False
+                ),
+                [],
+            )
+
+    def test_non_raster_is_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            vector = SimpleNamespace(
+                path=root / "data.geojson",
+                extension=".geojson",
+                category="vector",
+            )
+            self.assertEqual(
+                metadata_sidecar_issues(vector, {}),
+                [],
+            )
+
+
+class CrsMetadataTests(unittest.TestCase):
+    def descriptor(self, **overrides) -> CrsDescriptor:
+        values = {
+            "layer": "layer",
+            "authid": "EPSG:3857",
+            "description": "WGS 84 / Pseudo-Mercator",
+            "valid": True,
+            "geographic": False,
+            "projected": True,
+            "deprecated": False,
+            "units": "Meters",
+            "axis_inverted": False,
+        }
+        values.update(overrides)
+        return CrsDescriptor(**values)
+
+    def messages(self, descriptor: CrsDescriptor) -> list[str]:
+        return [
+            issue.message.format(*issue.args)
+            for issue in crs_metadata_issues([descriptor])
+        ]
+
+    def test_valid_projected_crs_has_no_issues(self) -> None:
+        self.assertEqual(
+            crs_metadata_issues([self.descriptor()]), []
+        )
+
+    def test_deprecated_crs(self) -> None:
+        messages = self.messages(self.descriptor(deprecated=True))
+        self.assertTrue(
+            any("устаревшая" in message for message in messages),
+            messages,
+        )
+
+    def test_crs_without_authority_code(self) -> None:
+        messages = self.messages(self.descriptor(authid=""))
+        self.assertTrue(
+            any("без кода EPSG" in message for message in messages),
+            messages,
+        )
+
+    def test_non_metric_units(self) -> None:
+        messages = self.messages(
+            self.descriptor(units="FeetUSSurvey")
+        )
+        self.assertTrue(
+            any("не метрические" in message for message in messages),
+            messages,
+        )
+
+    def test_geographic_crs_with_degrees(self) -> None:
+        self.assertEqual(
+            crs_metadata_issues(
+                [
+                    self.descriptor(
+                        authid="EPSG:4326",
+                        description="WGS 84",
+                        geographic=True,
+                        projected=False,
+                        units="Degrees",
+                        axis_inverted=True,
+                    )
+                ]
+            ),
+            [],
+        )
+
+    def test_geographic_crs_with_wrong_units(self) -> None:
+        messages = self.messages(
+            self.descriptor(
+                geographic=True,
+                projected=False,
+                units="Meters",
+            )
+        )
+        self.assertTrue(
+            any("ожидаются градусы" in message for message in messages),
+            messages,
+        )
+
+    def test_projected_crs_with_inverted_axes(self) -> None:
+        messages = self.messages(
+            self.descriptor(axis_inverted=True)
+        )
+        self.assertTrue(
+            any("порядок осей" in message for message in messages),
+            messages,
+        )
+
+    def test_missing_crs_can_be_skipped(self) -> None:
+        missing = self.descriptor(valid=False)
+        self.assertEqual(
+            crs_metadata_issues([missing], include_missing=False),
+            [],
+        )
+        self.assertEqual(
+            len(crs_metadata_issues([missing], include_missing=True)),
+            1,
         )
 
 
