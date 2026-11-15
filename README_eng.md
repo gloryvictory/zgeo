@@ -4,7 +4,7 @@
 
 A QGIS plugin for quickly browsing the contents of a spatial data folder.
 
-Plugin version: **1.27.0**
+Plugin version: **1.30.0**
 
 The plugin adds a dedicated **“ZGeo”** toolbar to QGIS with a **“ZGeo Catalog”** button that opens a floating panel. The panel provides:
 
@@ -21,7 +21,7 @@ The plugin adds a dedicated **“ZGeo”** toolbar to QGIS with a **“ZGeo Cata
 - the status bar is at the bottom of the window: the current operation is shown on the left, and **“Selected: N of M”** is shown on the right; during scanning and checks, a full-width progress bar with the current and total file counts is shown below the status bar, with the current check name above it;
 - the list can be filtered by name, format, path or issues;
 - the **“Settings”** tab lets you select the formats to scan; the **“Select all”**, **“Clear all”**, **“Vector only”** and **“Raster only”** buttons are available at the top; **Excel** is disabled by default;
-- the **“Files”** tab has the **“Information”**, **“Open in Explorer”**, **“Export to Excel”** and **“Checks”** buttons at the bottom;
+- the **“Files”** tab has the **“Information”**, **“Open in Explorer”**, **“Copy to …”**, **“Export”** and **“Checks”** buttons at the bottom; **“Export”** opens a choice of Excel or HTML;
 - **“Checks”** opens the **“Checks”** window with 8 checks: **“Refine size”**, **“Refine CRS and check it”**, **“Refine feature count and check empty layers”**, **“Check JSON for GeoJSON format”**, **“Field name check”**, **“Dataset integrity check”**, **“Metadata and CRS check”** and **“Geometry and coordinate check”**; checks are enabled with checkboxes, and an **“i”** button to the right of each check shows its description on hover; by default, **“Refine size”**, **“Refine CRS and check it”**, **“Refine feature count and check empty layers”**, the JSON check and the field name check are selected;
 - the JSON check appears when the list contains `.json` or `.geojson` files; it validates the document by its `type` field and excludes files that are not GeoJSON;
 - problems found are shown in the **“Issues”** column with the values **“Yes”**, **“No”** or **“—”**; details are available in the cell tooltip;
@@ -29,8 +29,9 @@ The plugin adds a dedicated **“ZGeo”** toolbar to QGIS with a **“ZGeo Cata
 - data refinement, the JSON check and problem checks can be interrupted with the cancel button;
 - for a selected file, the panel shows the CRS, feature count, geometry, extent and an attribute field table with names, aliases, types, lengths, precision and comments;
 - **“Open in Explorer”** opens Windows Explorer with the file selected; files from different folders open in separate Explorer windows;
+- **“Copy to …”** copies the selected datasets together with their sidecar files to a chosen folder, shows progress and can be cancelled; if the folder already contains files with the same names, the plugin asks for confirmation before replacing them, and after a successful copy it opens Explorer in the destination folder;
 - the **“Statistics”** tab shows charts by file size and type, followed by a statistics table by format; after size refinement, full dataset sizes are used;
-- the file list, statistics table and attribute field table can be exported to Excel; when exporting the list, format statistics are added as a separate worksheet, totals are added to the list and statistics, and Explorer opens with the selected file after saving; if the **“Issues”** column has been added, it is included in the export as well;
+- the file list, statistics table and attribute field table can be exported to Excel, and the full file-list report can also be exported to standalone HTML; the format is selected in the **“Export”** menu; when exporting the list, format statistics are added as a separate worksheet, totals are added to the list and statistics, and Explorer opens with the selected file after saving; if the **“Issues”** column has been added, it is included in the export as well; for completed checks, the report also includes operation time and throughput in files per second and per minute;
 - the refresh button rescans the current folder.
 
 QGIS 3.16 and newer are supported, including QGIS 4 / Qt 6.
@@ -98,20 +99,21 @@ After updating the plugin, close QGIS completely and start it again. If the **�
 8. Click **“Checks”** and select the required checks in the **“Checks”** window. Available checks include size refinement, CRS refinement and checking, feature count refinement with empty-layer checking, and the JSON, field name, dataset integrity, geometry and coordinate checks. The description of each check is shown when you hover over the **“i”** button. If the list contains `.json` or `.geojson`, the JSON check excludes files that are not GeoJSON. After the checks, the **“Problem files: N”** line and the **“Issues”** column appear, and the **“Only problem files”** filter becomes available.
 9. Select a file and click **“Information”** at the bottom of the list.
 10. Click **“Open in Explorer”** to show the file in Windows Explorer.
-11. Click **“Export to Excel”** to export the found files with a total row and a separate statistics worksheet. After saving, Explorer opens with the selected `.xlsx`.
-12. Open the **“Statistics”** tab to view the charts.
+11. If needed, select one or more files and click **“Copy to …”** to copy the datasets with their sidecar files to another folder.
+12. Click **“Export”** and choose **Excel** or **HTML** to export the found files with a total row and statistics. After saving, Explorer opens with the selected `.xlsx` or `.html`.
+13. Open the **“Statistics”** tab to view the charts.
 
 The last selected folder is remembered and used as the starting folder next time.
 
 ## Status bar
 
-The status bar is at the bottom of the window. The current operation is shown on the left: scanning, size, CRS or feature count refinement, JSON check, problem checks, retrieving information, opening Explorer, Excel export, cancellation messages and errors. The number of selected rows is always shown on the right: **“Selected: N of M”**. The counter is updated when files are selected and when the list is filtered.
+The status bar is at the bottom of the window. The current operation is shown on the left: scanning, size, CRS or feature count refinement, JSON check, problem checks, retrieving information, opening Explorer, copying files, Excel or HTML export, cancellation messages and errors. The number of selected rows is always shown on the right: **“Selected: N of M”**. The counter is updated when files are selected and when the list is filtered.
 
 During scanning and long-running checks, a full-width progress bar appears below the status bar: while scanning it shows indeterminate progress, and during checks it shows how many files have been processed out of the total. The current check or operation name is displayed above the progress bar. The progress bar and its title are hidden when the operation finishes.
 
 ## Interface language
 
-The **“EN” / “RU”** button in the top-right corner of the panel switches all labels, tooltips, status bar messages, table headers, dialogs and Excel worksheet names. The selected language is saved in QGIS settings and applied on the next launch. You can switch languages during scanning, data refinement or problem checks — the current operation is not interrupted.
+The **“EN” / “RU”** button in the top-right corner of the panel switches all labels, tooltips, status bar messages, table headers, dialogs, Excel worksheet names and HTML section titles. The selected language is saved in QGIS settings and applied on the next launch. You can switch languages during scanning, data refinement or problem checks — the current operation is not interrupted.
 
 ## Scanning
 
@@ -174,13 +176,17 @@ Checks can be interrupted with the cancel button next to **“Checks”**. After
 
 ## File list export
 
-The **“Export to Excel”** button at the bottom of the **“Files”** tab saves the current list to `.xlsx`. The file contains the **“File”**, **“Format”**, **“CRS”**, **“Features”** and **“Size”** columns. If the **“Issues”** column has been added, it is exported as well. If a filter is enabled, only visible rows are exported to the **“Files”** worksheet.
+The **“Export”** button at the bottom of the **“Files”** tab opens a menu with two options: **“Export to Excel”** (`.xlsx`) and **“Export to HTML”** (`.html`). The report contains the **“File”**, **“Format”**, **“CRS”**, **“Features”** and **“Size”** columns. If the **“Issues”** column has been added, it is exported as well. If a filter is enabled, only visible rows are exported.
 
 A blank row and a total are added at the end of the table: **“Total files: N”**, the total feature count and the total size. If the feature count for some files has not been refined yet or is undefined, the total cell shows **“—”**.
 
 A separate **“Statistics”** worksheet is created in the same workbook with the **“Format”**, **“Count”** and **“Full size”** columns. It is built from all found files, like the table on the **“Statistics”** tab, and ends with an **“Total”** row containing the total file count and size. After a successful save, Windows Explorer opens with the selected `.xlsx` file.
 
-If checks were run before exporting, additional worksheets named after the checks are added. Each such worksheet contains a table with the columns **“Full path”**, **“File”**, **“Feature ID”**, **“Where”** and **“Error description”**. For geometry and coordinate checks the feature ID and the vertex/error location are included; for field checks the layer and field name are included. The last worksheet is **“Check statistics”**, with the number of files with issues and the number of errors for each check.
+If checks were run before exporting, additional worksheets named after the checks are added. Each such worksheet contains a table with the columns **“Full path”**, **“File”**, **“Feature ID”**, **“Where”** and **“Error description”**. For geometry and coordinate checks the feature ID and the vertex/error location are included; for field checks the layer and field name are included. The **“Check statistics”** worksheet contains the number of files with issues and the number of errors for each check.
+
+A **“Check timing”** worksheet is also added for completed checks, with the columns **“Operation”**, **“Files”**, **“Time, s”**, **“Files/s”**, **“Files/min”** and **“Status”**. Time is measured separately for each operation (JSON, problem checks, size refinement), and the **“Folder total”** row shows the overall time and throughput based on the number of files in the folder. If an operation was interrupted, the **“Status”** column shows **“Interrupted”**.
+
+Choosing **“Export to HTML”** creates a single standalone HTML file with the same content as the Excel workbook: the file table with its total row, format statistics, a separate section for every executed check, check statistics and check timing. The report has a linked table of contents at the top, scrollable and print-friendly tables, and requires neither external libraries nor an internet connection. After saving, Explorer opens with the selected `.html` file.
 
 ## Full dataset size
 
@@ -197,6 +203,14 @@ During processing, the status bar shows the number of processed files and the cu
 ## Opening in Explorer
 
 The **“Open in Explorer”** button is available for one or more selected files. Windows Explorer opens with the file selected. If the selected files are in different folders, a separate Explorer window opens for each folder. If several files in the same folder are selected, the window opens with the first one.
+
+## Copying selected files
+
+The **“Copy to …”** button at the bottom of the **“Files”** tab is available when one or more files are selected. It opens a destination folder picker and copies the selected datasets together with their sidecar files: for Shapefile this includes `.shp`, `.dbf`, `.shx`, `.prj`, `.cpg` and other dataset files, for MIF it includes `.mif` and `.mid`, and for rasters it includes world files, `.aux.xml` and `.ovr`. The copied dataset therefore remains usable instead of losing its attributes or projection.
+
+While copying, the plugin shows progress by size and the current file name; the operation can be cancelled. An unfinished file does not damage an existing file in the destination folder: data is first written to a temporary file and replaces the target only after the copy completes successfully.
+
+If the destination folder already contains files with the same names, the plugin asks for confirmation before replacing them. If several selected datasets have identical names, copying does not start — copy those files separately. The destination folder is remembered for the next copy operation. After a successful copy, Explorer opens in the destination folder automatically.
 
 ## Statistics
 
@@ -245,9 +259,12 @@ zgeo/
 ├── info_dialog.py       # Information dialog
 ├── check_dialog.py      # check selection window and descriptions
 ├── explorer.py          # opening files in Explorer
+├── copy_files.py        # copying datasets with sidecar files
+├── check_timing.py      # check timing and file throughput
 ├── formatting.py        # size formatting
 ├── excel_export.py      # writing tables to .xlsx without external dependencies
-├── table_export.py      # Excel table save dialog
+├── html_export.py       # writing a standalone HTML report
+├── table_export.py      # Excel and HTML table save dialogs
 ├── icon.svg             # plugin icon
 ├── img/
 │   ├── screen_1.png     # Files tab screenshot
@@ -258,11 +275,14 @@ zgeo/
 └── tests/
     ├── test_scanner.py        # scanner tests
     ├── test_dataset_size.py   # full dataset size
+    ├── test_copy_files.py     # dataset copying
+    ├── test_check_timing.py   # check timing and throughput
     ├── test_stats.py          # statistics aggregation tests
     ├── test_explorer.py       # grouping files by folder
     ├── test_formatting.py     # size formatting
     ├── test_attribute_check.py # field name check
     ├── test_excel_export.py   # XLSX generation
+    ├── test_html_export.py    # HTML report generation
     ├── test_geojson_check.py  # JSON compliance with GeoJSON
     ├── test_quality_check.py  # attribute and dataset quality checks
     ├── test_metadata.py       # plugin metadata
@@ -282,7 +302,7 @@ python -m unittest discover -s tests -t .. -v
 Syntax check:
 
 ```powershell
-python -m py_compile __init__.py plugin.py panel.py i18n.py scanner.py scan_task.py dataset_size.py stats.py charts.py attribute_check.py file_info.py quality_check.py geometry_check.py geojson_check.py info_dialog.py check_dialog.py explorer.py formatting.py excel_export.py table_export.py version.py
+python -m py_compile __init__.py plugin.py panel.py i18n.py scanner.py scan_task.py dataset_size.py copy_files.py check_timing.py stats.py charts.py attribute_check.py file_info.py quality_check.py geometry_check.py geojson_check.py info_dialog.py check_dialog.py explorer.py formatting.py excel_export.py html_export.py table_export.py version.py
 ```
 
 Scanning runs in a background thread. For very large directories on network drives, the list may fill gradually, but the interface remains responsive and the scan can be interrupted.

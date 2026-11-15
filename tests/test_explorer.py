@@ -1,7 +1,8 @@
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from zgeo.explorer import group_files_by_folder
+from zgeo.explorer import group_files_by_folder, open_folder
 
 
 class GroupFilesByFolderTests(unittest.TestCase):
@@ -30,3 +31,37 @@ class GroupFilesByFolderTests(unittest.TestCase):
 
     def test_empty_iterable(self):
         self.assertEqual(group_files_by_folder([]), {})
+
+
+class OpenFolderTests(unittest.TestCase):
+    def test_opens_folder_with_platform_command(self) -> None:
+        folder = Path("C:/data/out")
+        cases = (
+            ("win32", ["explorer.exe", str(folder)]),
+            ("darwin", ["open", str(folder)]),
+            ("linux", ["xdg-open", str(folder)]),
+        )
+
+        for platform, expected in cases:
+            with self.subTest(platform=platform):
+                with patch(
+                    "zgeo.explorer.subprocess.Popen"
+                ) as popen, patch(
+                    "zgeo.explorer.sys.platform", platform
+                ):
+                    errors = open_folder(folder)
+
+                self.assertEqual(errors, [])
+                self.assertEqual(popen.call_args.args[0], expected)
+
+    def test_open_folder_error_is_reported(self) -> None:
+        folder = Path("C:/data/out")
+        with patch(
+            "zgeo.explorer.subprocess.Popen",
+            side_effect=OSError("boom"),
+        ), patch("zgeo.explorer.sys.platform", "win32"):
+            errors = open_folder(folder)
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn(str(folder), errors[0])
+        self.assertIn("boom", errors[0])

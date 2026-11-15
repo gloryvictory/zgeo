@@ -126,7 +126,42 @@ EN_TRANSLATIONS = {
         "Show only files with problems found by checks"
     ),
     "Открыть в проводнике": "Open in Explorer",
+    "Скопировать в …": "Copy to …",
+    "Скопировать выбранные файлы и сопутствующие файлы в папку": (
+        "Copy selected files and sidecar files to a folder"
+    ),
+    "Выберите папку для копирования": "Select a destination folder",
+    "Копирование файлов…": "Copying files…",
+    "Копирование: {}\n{} из {}": "Copying: {}\n{} of {}",
+    "Копирование отменено": "Copy cancelled",
+    "Копирование отменено: {} из {}": "Copy cancelled: {} of {}",
+    "Файлы уже находятся в выбранной папке": (
+        "The files are already in the selected folder"
+    ),
+    "В выбранных файлах есть совпадающие имена:\n{}\n\nСкопируйте их по отдельности.": (
+        "The selected files contain duplicate names:\n{}\n\n"
+        "Copy them separately."
+    ),
+    "В папке назначения уже есть файлы:\n{}\n\nЗаменить их?": (
+        "The destination folder already contains files:\n{}\n\n"
+        "Replace them?"
+    ),
+    "Не удалось скопировать файлы:\n\n{}": (
+        "Could not copy files:\n\n{}"
+    ),
+    "Не удалось открыть папку:\n\n{}": (
+        "Could not open the folder:\n\n{}"
+    ),
+    "Скопировано файлов: {}": "Files copied: {}",
+    "Скопировано файлов: {}; ошибок: {}": (
+        "Files copied: {}; errors: {}"
+    ),
+    "Экспорт": "Export",
     "Экспорт в Excel": "Export to Excel",
+    "Экспорт в HTML": "Export to HTML",
+    "Экспортировать список в Excel или HTML": (
+        "Export the list to Excel or HTML"
+    ),
     "Проверки": "Checks",
     "Прервать длительную операцию": "Cancel long operation",
     "Ход выполнения": "Progress",
@@ -430,6 +465,19 @@ EN_TRANSLATIONS = {
     "Проверка": "Check",
     "Файлов с проблемами": "Files with issues",
     "Ошибок": "Issues",
+    "Время проверки": "Check timing",
+    "Операция": "Operation",
+    "Файлов": "Files",
+    "Время, с": "Time, s",
+    "Файлов/с": "Files/s",
+    "Файлов/мин": "Files/min",
+    "Статус": "Status",
+    "Завершено": "Completed",
+    "Прервано": "Interrupted",
+    "Итого по папке": "Folder total",
+    "Проверка JSON на формат GeoJSON": (
+        "Check JSON for GeoJSON format"
+    ),
     "Проверки: {}": "Checks: {}",
     "Текущая проверка": "Current check",
     # Информация о файле
@@ -487,8 +535,13 @@ EN_TRANSLATIONS = {
     "Файлов: 0 · 0 Б": "Files: 0 · 0 B",
     "Экспорт списка в Excel…": "Exporting list to Excel…",
     "{}_файлы.xlsx": "{}_files.xlsx",
+    "Экспорт списка в HTML…": "Exporting list to HTML…",
+    "{}_файлы.html": "{}_files.html",
     "Список экспортирован: {}": "List exported: {}",
     "Экспорт списка отменён": "List export cancelled",
+    "ZGeo — экспорт данных": "ZGeo — data export",
+    "Сформировано: {}": "Generated: {}",
+    "Строк: {}": "Rows: {}",
     # Диаграммы
     "Столбчатая диаграмма": "Bar chart",
     "Диаграмма по размеру": "Chart by size",

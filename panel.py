@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections import deque
 from dataclasses import replace
 from pathlib import Path
@@ -31,8 +32,10 @@ from qgis.PyQt.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMenu,
     QMessageBox,
     QProgressBar,
+    QProgressDialog,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -50,6 +53,8 @@ from qgis.PyQt.QtWidgets import (
 )
 
 from .charts import BarChart, BarDatum
+from .check_timing import TimingRecord, build_timing_rows
+from .copy_files import build_copy_plan, copy_plan
 from .check_dialog import (
     CHECK_CRS_QUALITY,
     CHECK_COUNT_QUALITY,
@@ -67,7 +72,7 @@ from .check_dialog import (
 from .attribute_check import has_non_latin_characters
 from .dataset_size import DirectoryIndex, measure_geo_file_cached
 from .excel_export import SheetSpec
-from .explorer import reveal_files
+from .explorer import open_folder, reveal_files
 from .geojson_check import JSON_EXTENSIONS, check_json_file
 from .file_info import (
     LayerSummary,
@@ -112,11 +117,13 @@ from .scanner import (
 from .stats import build_size_distribution, build_type_distribution
 from .table_export import (
     export_rows_with_dialog,
+    export_rows_with_html_dialog,
     export_table_with_dialog,
 )
 from .version import get_plugin_version
 
 LAST_FOLDER_KEY = "zgeo/last_folder"
+LAST_COPY_FOLDER_KEY = "zgeo/last_copy_folder"
 DISABLED_FORMATS_KEY = "zgeo/disabled_formats"
 ICON_PATH = Path(__file__).with_name("icon.svg")
 CHECKS_TOOLTIP = (
@@ -199,6 +206,15 @@ class ZGeoPanel(QDockWidget):
         self._problem_selected: Tuple[str, ...] = ()
         self._problem_checks_run: Set[str] = set()
         self._problem_file_cache: Dict[str, Dict[str, Path]] = {}
+        self._check_timing_active = False
+        self._check_timing_started_at = 0.0
+        self._check_timing_seconds = 0.0
+        self._check_timing_completed = True
+        self._check_timing_initial_files = 0
+        self._check_timings: List[TimingRecord] = []
+        self._json_timing_started_at: Optional[float] = None
+        self._problem_timing_started_at: Optional[float] = None
+        self._details_timing_started_at: Optional[float] = None
         self._empty_title_source = "Геоданные не выбраны"
         self._empty_hint_source = (
             "Нажмите «Выбрать папку», чтобы найти шейпфайлы, GeoPackage "
@@ -506,21 +522,25 @@ class ZGeoPanel(QDockWidget):
         self.explorer_button.clicked.connect(self._open_in_explorer)
         buttons.addWidget(self.explorer_button)
 
-        self.export_list_button = QToolButton()
-        self.export_list_button.setIcon(
+        self.copy_button = QToolButton()
+        self.copy_button.setIcon(
             self.style().standardIcon(
-                QStyle.StandardPixmap.SP_DialogSaveButton
+                QStyle.StandardPixmap.SP_DirIcon
             )
         )
-        self.export_list_button.setIconSize(QSize(18, 18))
-        self.export_list_button.setAutoRaise(True)
-        self.export_list_button.setFixedSize(30, 30)
-        self.export_list_button.setToolTip(tr("Экспорт в Excel"))
-        self.export_list_button.setAccessibleName(
-            tr("Экспорт в Excel")
+        self.copy_button.setIconSize(QSize(18, 18))
+        self.copy_button.setAutoRaise(True)
+        self.copy_button.setFixedSize(30, 30)
+        self.copy_button.setToolTip(
+            tr(
+                "Скопировать выбранные файлы и сопутствующие файлы "
+                "в папку"
+            )
         )
-        self.export_list_button.clicked.connect(self._export_file_list)
-        buttons.addWidget(self.export_list_button)
+        self.copy_button.setAccessibleName(tr("Скопировать в …"))
+        self.copy_button.clicked.connect(self._copy_selected_files)
+        self.copy_button.setEnabled(False)
+        buttons.addWidget(self.copy_button)
 
         self.check_attributes_button = QToolButton()
         self.check_attributes_button.setIcon(
@@ -564,6 +584,35 @@ class ZGeoPanel(QDockWidget):
         buttons.addWidget(self.cancel_task_button)
 
         buttons.addStretch(1)
+
+        self.export_menu = QMenu(self)
+        self.export_excel_action = self.export_menu.addAction(
+            tr("Экспорт в Excel")
+        )
+        self.export_excel_action.triggered.connect(
+            self._export_file_list
+        )
+        self.export_html_action = self.export_menu.addAction(
+            tr("Экспорт в HTML")
+        )
+        self.export_html_action.triggered.connect(
+            self._export_file_list_html
+        )
+
+        self.export_button = QPushButton(tr("Экспорт"))
+        self.export_button.setIcon(
+            self.style().standardIcon(
+                QStyle.StandardPixmap.SP_DialogSaveButton
+            )
+        )
+        self.export_button.setMenu(self.export_menu)
+        self.export_button.setMinimumHeight(30)
+        self.export_button.setToolTip(
+            tr("Экспортировать список в Excel или HTML")
+        )
+        self.export_button.setAccessibleName(tr("Экспорт"))
+        self.export_button.setEnabled(False)
+        buttons.addWidget(self.export_button)
 
         layout.addLayout(buttons)
         return container
@@ -1626,7 +1675,8 @@ class ZGeoPanel(QDockWidget):
         enabled = not self._busy
         self.info_button.setEnabled(len(selected) == 1 and enabled)
         self.explorer_button.setEnabled(bool(selected) and enabled)
-        self.export_list_button.setEnabled(
+        self.copy_button.setEnabled(bool(selected) and enabled)
+        self.export_button.setEnabled(
             self._has_visible_files() and enabled
         )
         self.check_attributes_button.setEnabled(
@@ -1698,6 +1748,181 @@ class ZGeoPanel(QDockWidget):
             tr("Проводник открыт: {}", len(selected))
         )
 
+    def _copy_selected_files(self) -> None:
+        selected = self._selected_files()
+        if not selected:
+            return
+
+        last_copy = self._settings.value(
+            LAST_COPY_FOLDER_KEY, "", type=str
+        )
+        if last_copy and Path(last_copy).is_dir():
+            start_folder = last_copy
+        elif self._folder is not None:
+            start_folder = str(self._folder)
+        else:
+            start_folder = str(selected[0].path.parent)
+
+        destination_text = QFileDialog.getExistingDirectory(
+            self,
+            tr("Выберите папку для копирования"),
+            start_folder,
+            QFileDialog.Option.ShowDirsOnly,
+        )
+        if not destination_text:
+            self._set_status(tr("Копирование отменено"))
+            return
+
+        destination = Path(destination_text)
+        self._settings.setValue(LAST_COPY_FOLDER_KEY, str(destination))
+        self._settings.sync()
+
+        plan = build_copy_plan(selected, destination)
+        if plan.duplicate_names:
+            self._set_status(tr("Копирование отменено"))
+            QMessageBox.warning(
+                self,
+                "ZGeo",
+                tr(
+                    "В выбранных файлах есть совпадающие имена:\n{}\n\n"
+                    "Скопируйте их по отдельности.",
+                    "\n".join(plan.duplicate_names),
+                ),
+            )
+            return
+
+        if not plan.items:
+            self._set_status(
+                tr("Файлы уже находятся в выбранной папке")
+            )
+            QMessageBox.information(
+                self,
+                "ZGeo",
+                tr("Файлы уже находятся в выбранной папке"),
+            )
+            return
+
+        existing = [
+            item.destination.name
+            for item in plan.items
+            if item.destination.exists()
+        ]
+        if existing:
+            answer = QMessageBox.question(
+                self,
+                "ZGeo",
+                tr(
+                    "В папке назначения уже есть файлы:\n{}\n\n"
+                    "Заменить их?",
+                    "\n".join(existing),
+                ),
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                self._set_status(tr("Копирование отменено"))
+                return
+
+        progress_total = plan.total_size or len(plan.items)
+        progress = QProgressDialog(
+            tr("Копирование файлов…"),
+            tr("Отмена"),
+            0,
+            max(progress_total, 1),
+            self,
+        )
+        progress.setWindowTitle("ZGeo")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setAutoClose(False)
+        progress.setAutoReset(False)
+        progress.setValue(0)
+
+        last_update = [0.0]
+        use_bytes = plan.total_size > 0
+
+        def on_progress(
+            done: int, total: int, source: Path
+        ) -> None:
+            now = time.monotonic()
+            if now - last_update[0] < 0.05 and done < total:
+                return
+            last_update[0] = now
+            if use_bytes:
+                detail = tr(
+                    "Копирование: {}\n{} из {}",
+                    source.name,
+                    format_size(done),
+                    format_size(total),
+                )
+            else:
+                detail = tr(
+                    "Копирование: {}\n{} из {}",
+                    source.name,
+                    done,
+                    total,
+                )
+            progress.setLabelText(detail)
+            progress.setValue(min(done, total))
+            QApplication.processEvents()
+
+        self._set_status(tr("Копирование файлов…"))
+        try:
+            result = copy_plan(
+                plan,
+                progress_callback=on_progress,
+                should_cancel=progress.wasCanceled,
+            )
+        finally:
+            progress.close()
+
+        if result.cancelled:
+            self._set_status(
+                tr(
+                    "Копирование отменено: {} из {}",
+                    len(result.copied),
+                    len(plan.items),
+                )
+            )
+            return
+
+        if result.errors:
+            self._set_status(
+                tr(
+                    "Скопировано файлов: {}; ошибок: {}",
+                    len(result.copied),
+                    len(result.errors),
+                )
+            )
+            lines = [
+                "{}: {}".format(source, message)
+                for source, message in result.errors
+            ]
+            QMessageBox.warning(
+                self,
+                "ZGeo",
+                tr(
+                    "Не удалось скопировать файлы:\n\n{}",
+                    "\n".join(lines),
+                ),
+            )
+            return
+
+        self._set_status(
+            tr("Скопировано файлов: {}", len(result.copied))
+        )
+        folder_errors = open_folder(destination)
+        if folder_errors:
+            QMessageBox.warning(
+                self,
+                "ZGeo",
+                tr(
+                    "Не удалось открыть папку:\n\n{}",
+                    "\n".join(folder_errors),
+                ),
+            )
+
     def _statistics_sheet_data(self):
         """Подготовить лист со статистикой по форматам для экспорта списка."""
 
@@ -1723,7 +1948,8 @@ class ZGeoPanel(QDockWidget):
     ) -> List[SheetSpec]:
         """Подготовить листы с ошибками и статистикой проверок."""
 
-        if not self._problem_checks_run:
+        timing_sheet = self._timing_sheet_data()
+        if not self._problem_checks_run and timing_sheet is None:
             return []
 
         issues_by_check: Dict[
@@ -1796,6 +2022,8 @@ class ZGeoPanel(QDockWidget):
                     stats_rows,
                 )
             )
+        if timing_sheet is not None:
+            sheets.append(timing_sheet)
         return sheets
 
     @staticmethod
@@ -1807,10 +2035,12 @@ class ZGeoPanel(QDockWidget):
         ]
         return " · ".join(parts) if parts else "—"
 
-    def _export_file_list(self) -> None:
+    def _file_list_export_data(self):
+        """Подготовить строки и дополнительные листы для экспорта."""
+
         files = self._visible_files()
         if not files:
-            return
+            return None
 
         include_attributes = self._has_problems_column()
         headers = self._tree_headers(include_attributes)
@@ -1853,6 +2083,18 @@ class ZGeoPanel(QDockWidget):
         rows.append(total_row)
 
         folder_name = self._folder.name if self._folder else "zgeo"
+        extra_sheets = [
+            self._statistics_sheet_data(),
+            *self._problem_sheets_data(files),
+        ]
+        return headers, rows, extra_sheets, folder_name
+
+    def _export_file_list(self) -> None:
+        data = self._file_list_export_data()
+        if data is None:
+            return
+
+        headers, rows, extra_sheets, folder_name = data
         self._set_status(tr("Экспорт списка в Excel…"))
         exported = export_rows_with_dialog(
             self,
@@ -1860,10 +2102,30 @@ class ZGeoPanel(QDockWidget):
             rows,
             tr("{}_файлы.xlsx", folder_name or "zgeo"),
             tr("Файлы"),
-            extra_sheets=[
-                self._statistics_sheet_data(),
-                *self._problem_sheets_data(files),
-            ],
+            extra_sheets=extra_sheets,
+        )
+        if exported is not None:
+            self._set_status(
+                tr("Список экспортирован: {}", exported.name)
+            )
+        else:
+            self._set_status(tr("Экспорт списка отменён"))
+
+    def _export_file_list_html(self) -> None:
+        data = self._file_list_export_data()
+        if data is None:
+            return
+
+        headers, rows, extra_sheets, folder_name = data
+        self._set_status(tr("Экспорт списка в HTML…"))
+        exported = export_rows_with_html_dialog(
+            self,
+            headers,
+            rows,
+            tr("{}_файлы.html", folder_name or "zgeo"),
+            tr("Файлы"),
+            extra_sheets=extra_sheets,
+            title=tr("ZGeo — {}", folder_name or "zgeo"),
         )
         if exported is not None:
             self._set_status(
@@ -1931,6 +2193,12 @@ class ZGeoPanel(QDockWidget):
         processed = self._details_processed
         total = self._details_total
         action = self._details_action_source
+        self._finish_operation_timing(
+            "_details_timing_started_at",
+            tr(action),
+            processed,
+            False,
+        )
         self._cancel_details()
         self._update_controls()
         self._set_status(
@@ -1941,6 +2209,7 @@ class ZGeoPanel(QDockWidget):
                 total,
             )
         )
+        self._maybe_finish_check_timing()
 
     def _pause_details(self) -> None:
         if not self._details_queue:
@@ -1965,6 +2234,12 @@ class ZGeoPanel(QDockWidget):
         if self._details_paused:
             return
         if not self._details_queue:
+            self._finish_operation_timing(
+                "_details_timing_started_at",
+                tr(self._details_action_source),
+                self._details_processed,
+                True,
+            )
             if self._details_total:
                 self._apply_filter()
                 if self._details_size_changed:
@@ -1977,10 +2252,12 @@ class ZGeoPanel(QDockWidget):
                         self._details_total,
                     )
                 )
+            self._maybe_finish_check_timing()
             return
 
         geo_file = self._details_queue.popleft()
         self._details_processed += 1
+        self._start_operation_timing("_details_timing_started_at")
         self._show_progress(
             self._details_processed, self._details_total
         )
@@ -2054,6 +2331,13 @@ class ZGeoPanel(QDockWidget):
                     self._details_total,
                 )
             )
+            self._finish_operation_timing(
+                "_details_timing_started_at",
+                tr(self._details_action_source),
+                self._details_processed,
+                True,
+            )
+            self._maybe_finish_check_timing()
 
     @staticmethod
     def _update_item_crs(item: QTreeWidgetItem, crs: str) -> None:
@@ -2154,6 +2438,7 @@ class ZGeoPanel(QDockWidget):
         if not checks:
             return
 
+        self._begin_check_timing()
         remaining = [
             check for check in checks if check != CHECK_JSON_GEOJSON
         ]
@@ -2170,6 +2455,7 @@ class ZGeoPanel(QDockWidget):
                 self._set_status(
                     tr("Нет JSON-файлов для проверки")
                 )
+                self._finish_check_timing(True)
                 return
 
         self._run_checks_after_json(remaining)
@@ -2179,6 +2465,7 @@ class ZGeoPanel(QDockWidget):
 
         if not checks:
             self._update_controls()
+            self._maybe_finish_check_timing()
             return
 
         read_size = CHECK_SIZE in checks
@@ -2198,10 +2485,118 @@ class ZGeoPanel(QDockWidget):
             self._set_status(
                 tr("Нет файлов для выбранных проверок")
             )
+            self._maybe_finish_check_timing()
             return
 
         if problem_checks:
             self._start_problem_check(problem_checks)
+        else:
+            self._maybe_finish_check_timing()
+
+    # ------------------------------------------------------------------
+    # Учёт времени выполнения проверок
+    # ------------------------------------------------------------------
+
+    def _begin_check_timing(self) -> None:
+        self._check_timing_active = True
+        self._check_timing_started_at = time.monotonic()
+        self._check_timing_seconds = 0.0
+        self._check_timing_completed = True
+        self._check_timing_initial_files = len(self._files)
+        self._check_timings = []
+        self._json_timing_started_at = None
+        self._problem_timing_started_at = None
+        self._details_timing_started_at = None
+
+    def _reset_check_timing(self) -> None:
+        self._check_timing_active = False
+        self._check_timing_started_at = 0.0
+        self._check_timing_seconds = 0.0
+        self._check_timing_completed = True
+        self._check_timing_initial_files = 0
+        self._check_timings = []
+        self._json_timing_started_at = None
+        self._problem_timing_started_at = None
+        self._details_timing_started_at = None
+
+    def _finish_check_timing(self, completed: bool = True) -> None:
+        if not self._check_timing_active:
+            return
+        self._check_timing_seconds = max(
+            0.0, time.monotonic() - self._check_timing_started_at
+        )
+        self._check_timing_completed = (
+            completed and self._check_timing_completed
+        )
+        self._check_timing_active = False
+
+    def _maybe_finish_check_timing(self) -> None:
+        if not self._check_timing_active:
+            return
+        if (
+            self._json_running
+            or self._problem_running
+            or bool(self._details_queue)
+            or self._details_timer.isActive()
+        ):
+            return
+        self._finish_check_timing(True)
+
+    def _start_operation_timing(self, attribute: str) -> None:
+        if not self._check_timing_active:
+            return
+        if getattr(self, attribute) is None:
+            setattr(self, attribute, time.monotonic())
+
+    def _finish_operation_timing(
+        self,
+        attribute: str,
+        operation: str,
+        files: int,
+        completed: bool = True,
+    ) -> None:
+        started = getattr(self, attribute)
+        if started is None:
+            return
+        setattr(self, attribute, None)
+        self._check_timings.append(
+            TimingRecord(
+                operation,
+                files,
+                max(0.0, time.monotonic() - started),
+                completed,
+            )
+        )
+        if not completed:
+            self._check_timing_completed = False
+
+    def _timing_sheet_data(self) -> Optional[SheetSpec]:
+        if not self._check_timings:
+            return None
+
+        active = self._check_timing_active
+        rows = build_timing_rows(
+            self._check_timings,
+            total_files=(
+                None if active else self._check_timing_initial_files
+            ),
+            total_seconds=(
+                None if active else self._check_timing_seconds
+            ),
+            completed=self._check_timing_completed,
+        )
+        return (
+            tr("Время проверки"),
+            [
+                tr("Операция"),
+                tr("Файлов"),
+                tr("Время, с"),
+                tr("Файлов/с"),
+                tr("Файлов/мин"),
+                tr("Статус"),
+            ],
+            rows,
+        )
 
     # ------------------------------------------------------------------
     # Проверка JSON на соответствие GeoJSON
@@ -2220,6 +2615,7 @@ class ZGeoPanel(QDockWidget):
         self._json_removed = []
         self._json_after_checks = list(after_checks)
         self._json_running = True
+        self._start_operation_timing("_json_timing_started_at")
         self._set_status(
             tr(
                 "Проверка JSON на формат GeoJSON: 0 из {}",
@@ -2269,6 +2665,12 @@ class ZGeoPanel(QDockWidget):
     def _finish_json_check(self) -> None:
         total = self._json_total
         removed = len(self._json_removed)
+        self._finish_operation_timing(
+            "_json_timing_started_at",
+            tr("Проверка JSON на формат GeoJSON"),
+            self._json_processed,
+            True,
+        )
         self._json_timer.stop()
         self._json_queue.clear()
         self._json_running = False
@@ -2304,6 +2706,7 @@ class ZGeoPanel(QDockWidget):
             self._run_checks_after_json(after_checks)
         else:
             self._update_controls()
+        self._maybe_finish_check_timing()
 
     def _abort_json_check(self) -> None:
         if not self._json_running:
@@ -2312,6 +2715,12 @@ class ZGeoPanel(QDockWidget):
         processed = self._json_processed
         total = self._json_total
         removed = len(self._json_removed)
+        self._finish_operation_timing(
+            "_json_timing_started_at",
+            tr("Проверка JSON на формат GeoJSON"),
+            processed,
+            False,
+        )
         self._json_timer.stop()
         self._json_queue.clear()
         self._json_running = False
@@ -2332,6 +2741,7 @@ class ZGeoPanel(QDockWidget):
                 removed,
             )
         )
+        self._maybe_finish_check_timing()
 
     def _cancel_json_check(self) -> None:
         self._json_timer.stop()
@@ -2499,6 +2909,7 @@ class ZGeoPanel(QDockWidget):
             )
             self._update_file_actions()
             self._update_cancel_button()
+            self._maybe_finish_check_timing()
             return
 
         self._problem_queue = deque(candidates)
@@ -2506,6 +2917,7 @@ class ZGeoPanel(QDockWidget):
         self._problem_processed = 0
         self._problem_issue_count = 0
         self._problem_running = True
+        self._start_operation_timing("_problem_timing_started_at")
         self._set_progress_title(self._problem_progress_title())
         self._show_progress(0, self._problem_total)
         self.check_attributes_button.setToolTip(
@@ -2785,6 +3197,12 @@ class ZGeoPanel(QDockWidget):
     def _finish_problem_check(self) -> None:
         total = self._problem_total
         issues = self._problem_issue_count
+        self._finish_operation_timing(
+            "_problem_timing_started_at",
+            self._problem_progress_title(),
+            self._problem_processed,
+            True,
+        )
         self._problem_running = False
         self._problem_checked = True
         self._problem_interrupted = False
@@ -2816,6 +3234,7 @@ class ZGeoPanel(QDockWidget):
                     total,
                 )
             )
+        self._maybe_finish_check_timing()
 
     def _abort_problem_check(self) -> None:
         if not self._problem_running:
@@ -2824,6 +3243,12 @@ class ZGeoPanel(QDockWidget):
         processed = self._problem_processed
         total = self._problem_total
         issues = self._problem_issue_count
+        self._finish_operation_timing(
+            "_problem_timing_started_at",
+            self._problem_progress_title(),
+            processed,
+            False,
+        )
         self._problem_timer.stop()
         self._problem_queue.clear()
         self._problem_running = False
@@ -2847,6 +3272,7 @@ class ZGeoPanel(QDockWidget):
                 issues,
             )
         )
+        self._maybe_finish_check_timing()
 
     def _cancel_problem_check(self) -> None:
         self._problem_timer.stop()
@@ -2870,6 +3296,7 @@ class ZGeoPanel(QDockWidget):
                 tr(CHECKS_TOOLTIP)
             )
         self._update_cancel_button()
+        self._reset_check_timing()
 
     def _set_problems_filter_available(self, available: bool) -> None:
         if not hasattr(self, "problems_only_checkbox"):
@@ -3289,10 +3716,20 @@ class ZGeoPanel(QDockWidget):
         self.explorer_button.setAccessibleName(
             tr("Открыть в проводнике")
         )
-        self.export_list_button.setToolTip(tr("Экспорт в Excel"))
-        self.export_list_button.setAccessibleName(
-            tr("Экспорт в Excel")
+        self.copy_button.setToolTip(
+            tr(
+                "Скопировать выбранные файлы и сопутствующие файлы "
+                "в папку"
+            )
         )
+        self.copy_button.setAccessibleName(tr("Скопировать в …"))
+        self.export_button.setText(tr("Экспорт"))
+        self.export_button.setToolTip(
+            tr("Экспортировать список в Excel или HTML")
+        )
+        self.export_button.setAccessibleName(tr("Экспорт"))
+        self.export_excel_action.setText(tr("Экспорт в Excel"))
+        self.export_html_action.setText(tr("Экспорт в HTML"))
         self.check_attributes_button.setAccessibleName(
             tr("Проверки")
         )

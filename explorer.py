@@ -36,6 +36,38 @@ def reveal_files(paths: Iterable[Path]) -> List[str]:
     return errors
 
 
+def open_folder(path: Path) -> List[str]:
+    """Открыть папку в системном файловом менеджере."""
+
+    path = Path(path)
+    try:
+        _open_folder(path)
+    except OSError as error:
+        return ["{}: {}".format(path, error)]
+    return []
+
+
+def _open_folder(path: Path) -> None:
+    if sys.platform.startswith("win"):
+        subprocess.Popen(
+            ["explorer.exe", str(path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    elif sys.platform == "darwin":
+        subprocess.Popen(
+            ["open", str(path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        subprocess.Popen(
+            ["xdg-open", str(path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+
 def _reveal_file(path: Path) -> None:
     if sys.platform.startswith("win"):
         subprocess.Popen(
