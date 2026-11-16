@@ -6,6 +6,8 @@ A QGIS plugin for quickly browsing the contents of a spatial data folder.
 
 Plugin version: **1.32.0**
 
+> **Tested:** the plugin has been tested in QGIS on Windows. It has not been tested on other operating systems (macOS, Linux).
+
 The plugin adds a dedicated **“ZGeo”** toolbar to QGIS with a **“ZGeo Catalog”** button that opens a floating panel. The panel provides:
 
 - the plugin version is shown at the top;
@@ -57,6 +59,12 @@ Charts by file size and type, plus the statistics table by format.
 Format selection for scanning and quick-selection buttons.
 
 <img src="img/screen_3.png" alt="Settings tab" width="720">
+
+### HTML report
+
+A standalone HTML report with check tabs, format statistics and check timing.
+
+<img src="img/screen_4.png" alt="ZGeo HTML report" width="720">
 
 ## Installing in QGIS
 
@@ -269,7 +277,8 @@ zgeo/
 ├── img/
 │   ├── screen_1.png     # Files tab screenshot
 │   ├── screen_2.png     # Statistics tab screenshot
-│   └── screen_3.png     # Settings tab screenshot
+│   ├── screen_3.png     # Settings tab screenshot
+│   └── screen_4.png     # HTML report screenshot
 ├── scripts/
 │   └── build_zip.ps1    # builds the installation ZIP
 └── tests/
