@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import html
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QFont, QIcon
@@ -14,8 +15,10 @@ from qgis.PyQt.QtWidgets import (
     QDialogButtonBox,
     QFrame,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
     QScrollArea,
+    QTextBrowser,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -64,6 +67,8 @@ class CheckDefinition:
     label: str
     description: str
     checked: bool = True
+    details: Tuple[str, ...] = ()
+    examples: Tuple[str, ...] = ()
 
 
 def check_definitions(
@@ -79,6 +84,32 @@ def check_definitions(
                 "Считает полный размер каждого набора данных с учётом "
                 "сопутствующих файлов."
             ),
+            details=(
+                tr(
+                    "Для каждого файла ZGeo складывает размер основного "
+                    "файла и всех связанных файлов набора в той же папке. "
+                    "Значения берутся из файловой системы и заменяют "
+                    "приблизительный размер, показанный после сканирования."
+                ),
+                tr(
+                    "В колонке «Размер» и в отчётах показывается полный "
+                    "объём набора. Если связанный файл отсутствует, "
+                    "учитываются только существующие файлы."
+                ),
+            ),
+            examples=(
+                tr(
+                    "roads.shp + roads.shx + roads.dbf + roads.prj + "
+                    "roads.cpg — полный размер Shapefile."
+                ),
+                tr(
+                    "roads.mif + roads.mid — полный размер MapInfo MIF/MID."
+                ),
+                tr(
+                    "dem.tif + dem.tif.aux.xml + dem.tif.ovr + dem.tfw — "
+                    "полный размер растрового набора."
+                ),
+            ),
         ),
         CheckDefinition(
             key=CHECK_CRS_QUALITY,
@@ -87,6 +118,36 @@ def check_definitions(
                 "Читает систему координат слоёв, обновляет колонку "
                 "«Система координат» и отмечает отсутствующую, неизвестную "
                 "или смешанную СК."
+            ),
+            details=(
+                tr(
+                    "ZGeo открывает каждый слой через провайдеры QGIS, "
+                    "читает его систему координат и записывает название в "
+                    "колонку «Система координат»."
+                ),
+                tr(
+                    "Проверка отмечает файлы, у которых система координат "
+                    "не определена или неизвестна, а также файлы, в "
+                    "которых слои используют разные системы координат."
+                ),
+                tr(
+                    "Для растров система координат читается из метаданных "
+                    "растра; если её нет, значение остаётся неопределённым."
+                ),
+            ),
+            examples=(
+                tr(
+                    "EPSG:3857 — WGS 84 / Pseudo-Mercator: проблема не "
+                    "найдена."
+                ),
+                tr(
+                    "Пустое значение или «Не определена»: файл помечается "
+                    "как проблемный."
+                ),
+                tr(
+                    "Два слоя GeoPackage с EPSG:3857 и EPSG:4326: "
+                    "отмечается смешанная система координат."
+                ),
             ),
         ),
         CheckDefinition(
@@ -98,6 +159,32 @@ def check_definitions(
                 "Считает количество элементов, обновляет колонку "
                 "«Элементов» и отмечает пустые слои и файлы без объектов."
             ),
+            details=(
+                tr(
+                    "Для каждого слоя ZGeo считает объекты через "
+                    "провайдеры QGIS и обновляет колонку «Элементов»."
+                ),
+                tr(
+                    "Пустой слой отмечается отдельно. Если в файле нет ни "
+                    "одного объекта, файл помечается как не содержащий "
+                    "объектов."
+                ),
+                tr(
+                    "Для растров количество элементов не подсчитывается."
+                ),
+            ),
+            examples=(
+                tr(
+                    "Слой roads: 1 245 объектов — проблема не найдена."
+                ),
+                tr(
+                    "Слой buildings: 0 объектов — отмечается пустой слой."
+                ),
+                tr(
+                    "GeoPackage из двух пустых слоёв: файл помечается как "
+                    "не содержащий объектов."
+                ),
+            ),
         ),
         CheckDefinition(
             key=CHECK_FIELD_NAMES,
@@ -106,6 +193,33 @@ def check_definitions(
                 "Проверяет нелатинские символы, длину имени (не более "
                 "10 символов DBF), пробелы, недопустимые символы и дубли "
                 "после усечения."
+            ),
+            details=(
+                tr(
+                    "Для векторных слоёв ZGeo читает имена атрибутивных "
+                    "полей и проверяет нелатинские символы, длину больше "
+                    "10 символов (ограничение DBF), пробелы и символы, "
+                    "кроме букв, цифр и подчёркивания."
+                ),
+                tr(
+                    "Отдельно ищутся имена, которые совпадают после "
+                    "усечения до 10 символов."
+                ),
+                tr("Для растров проверка не применяется."),
+            ),
+            examples=(
+                tr(
+                    "Поле «Наименование»: нелатинские символы — "
+                    "отмечается."
+                ),
+                tr(
+                    "Поле very_long_field_name: длина больше 10 символов — "
+                    "отмечается."
+                ),
+                tr(
+                    "Поля population_2024 и population_2025: после "
+                    "усечения до 10 символов совпадают — отмечается дубль."
+                ),
             ),
         ),
         CheckDefinition(
@@ -116,6 +230,35 @@ def check_definitions(
                 "корректность указанной кодировки DBF."
             ),
             checked=False,
+            details=(
+                tr(
+                    "ZGeo проверяет обязательные файлы набора: для SHP — "
+                    ".dbf и .shx, для MIF — .mid, для TAB — .dat, .map и "
+                    ".id."
+                ),
+                tr(
+                    "Для SHP дополнительно проверяется наличие .cpg и "
+                    "корректность указанной в нём кодировки DBF."
+                ),
+                tr(
+                    "Проверка не меняет список файлов и ищет "
+                    "сопутствующие файлы в той же папке."
+                ),
+            ),
+            examples=(
+                tr(
+                    "roads.shp без roads.dbf и roads.shx — отмечается "
+                    "отсутствие файлов набора."
+                ),
+                tr(
+                    "roads.shp + roads.dbf + roads.shx без roads.cpg — "
+                    "отмечается отсутствие .cpg."
+                ),
+                tr(
+                    "roads.cpg с текстом UTF-8 — кодировка распознана; с "
+                    "текстом x-unknown — отмечается неизвестная кодировка."
+                ),
+            ),
         ),
         CheckDefinition(
             key=CHECK_METADATA_CRS,
@@ -127,6 +270,35 @@ def check_definitions(
                 "порядок осей."
             ),
             checked=False,
+            details=(
+                tr(
+                    "Для SHP проверяется наличие .prj (или .qpj) и .cpg. "
+                    "Для растров проверяется наличие .aux.xml и .ovr, а "
+                    "если система координат не определена — файла "
+                    "привязки .tfw, .tifw или .wld."
+                ),
+                tr(
+                    "Для слоёв проверяются устаревшие системы координат, "
+                    "отсутствие кода EPSG или другого авторитета, "
+                    "неметрические единицы у проекционных систем, не "
+                    "градусы у географических систем и нестандартный "
+                    "порядок осей YX."
+                ),
+            ),
+            examples=(
+                tr(
+                    "roads.shp без roads.prj — отмечается отсутствие "
+                    "метаданных системы координат."
+                ),
+                tr(
+                    "dem.tif без dem.tif.aux.xml и dem.tif.ovr — "
+                    "отмечаются отсутствующие вспомогательные метаданные."
+                ),
+                tr(
+                    "Слой в EPSG:3857 с единицами «футы» — отмечаются "
+                    "неметрические единицы."
+                ),
+            ),
         ),
         CheckDefinition(
             key=CHECK_GEOMETRY_COORDINATES,
@@ -137,6 +309,40 @@ def check_definitions(
                 "перепутанные широту и долготу и выход за диапазон CRS."
             ),
             checked=False,
+            details=(
+                tr(
+                    "Для каждого векторного слоя ZGeo перебирает объекты "
+                    "и проверяет геометрию: null и пустые геометрии, "
+                    "незамкнутые кольца, самопересечения и прочие ошибки "
+                    "валидности."
+                ),
+                tr(
+                    "Затем проверяются координаты вершин: NaN/Inf, "
+                    "абсолютные значения больше 1e9, перепутанные широта "
+                    "и долгота, выход за диапазон CRS, а для проекционных "
+                    "систем — корректность преобразования в WGS 84 и "
+                    "попадание в границы системы координат."
+                ),
+                tr(
+                    "Итоги группируются по слою, а для найденных ошибок "
+                    "сохраняются номер объекта и вершины; подробно "
+                    "описывается до 1000 ошибок на слой."
+                ),
+            ),
+            examples=(
+                tr(
+                    "Полигон с самопересечением — отмечается "
+                    "«Самопересечение»."
+                ),
+                tr(
+                    "Координата (500, 95) в географической системе — "
+                    "отмечается «Похоже на перепутанные широту и долготу»."
+                ),
+                tr(
+                    "Вершина с координатой NaN — отмечается «Координата "
+                    "NaN/Inf»."
+                ),
+            ),
         ),
     ]
 
@@ -154,6 +360,35 @@ def check_definitions(
                 description=tr(
                     "Проверяет файлы .json и .geojson по полю type. "
                     "Файлы, не являющиеся GeoJSON, исключаются из списка."
+                ),
+                details=(
+                    tr(
+                        "ZGeo читает каждый файл .json и .geojson и "
+                        "проверяет структуру по полю type: допустимые типы "
+                        "геометрий, Feature, FeatureCollection и "
+                        "GeometryCollection, а также обязательные "
+                        "вложенные поля features и geometries."
+                    ),
+                    tr(
+                        "Содержимое координат не анализируется. Файлы, "
+                        "которые не читаются как JSON или не являются "
+                        "GeoJSON, исключаются из списка и не участвуют в "
+                        "остальных проверках."
+                    ),
+                ),
+                examples=(
+                    tr(
+                        '{"type": "FeatureCollection", "features": [...]} '
+                        "— GeoJSON, файл остаётся в списке."
+                    ),
+                    tr(
+                        '{"type": "Feature", "geometry": {...}, '
+                        '"properties": {...}} — GeoJSON, файл остаётся.'
+                    ),
+                    tr(
+                        '{"name": "settings", "values": [...]} — не '
+                        "GeoJSON, файл исключается."
+                    ),
                 ),
             ),
         )
@@ -195,7 +430,8 @@ class ChecksDialog(QDialog):
         hint = QLabel(
             tr(
                 "Отметьте проверки, которые нужно выполнить для "
-                "найденных файлов."
+                "найденных файлов. Нажмите «i» справа, чтобы открыть "
+                "подробное описание с примерами."
             )
         )
         hint.setWordWrap(True)
@@ -232,6 +468,11 @@ class ChecksDialog(QDialog):
             info_font.setPointSizeF(max(10.0, info_font.pointSizeF() + 2.0))
             info_font.setBold(True)
             info_button.setFont(info_font)
+            info_button.clicked.connect(
+                lambda _checked=False, key=definition.key: (
+                    self._show_details_for(key)
+                )
+            )
             self._info_buttons[definition.key] = info_button
             grid.addWidget(
                 info_button,
@@ -244,7 +485,17 @@ class ChecksDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setWidget(grid_host)
-        layout.addWidget(scroll, 1)
+
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(14)
+        body.addWidget(scroll, 1)
+
+        self._details_panel = self._build_details_panel()
+        self._details_panel.setVisible(False)
+        body.addWidget(self._details_panel)
+
+        layout.addLayout(body, 1)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok
@@ -263,6 +514,115 @@ class ChecksDialog(QDialog):
         layout.addWidget(buttons)
 
         self._update_run_button()
+
+    def _build_details_panel(self) -> QFrame:
+        """Создать панель подробного описания проверки."""
+
+        panel = QFrame()
+        panel.setObjectName("zgeoCheckDetailsPanel")
+        panel.setFrameShape(QFrame.Shape.StyledPanel)
+        panel.setMinimumWidth(320)
+        panel.setMaximumWidth(430)
+        panel.setAccessibleName(tr("Подробное описание проверки"))
+
+        panel_layout = QVBoxLayout(panel)
+        panel_layout.setContentsMargins(12, 10, 12, 12)
+        panel_layout.setSpacing(6)
+
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(4)
+
+        header_label = QLabel(tr("Подробное описание"))
+        self._set_font(header_label, -1, bold=True)
+        header.addWidget(header_label)
+        header.addStretch(1)
+
+        close_button = QToolButton()
+        close_button.setObjectName("zgeoCheckDetailsCloseButton")
+        close_button.setText("×")
+        close_button.setAutoRaise(True)
+        close_button.setFixedSize(24, 24)
+        close_button.setToolTip(tr("Закрыть описание"))
+        close_button.setAccessibleName(tr("Закрыть описание"))
+        close_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_button.clicked.connect(self._hide_details)
+        header.addWidget(close_button)
+
+        panel_layout.addLayout(header)
+
+        self._details_browser = QTextBrowser()
+        self._details_browser.setObjectName("zgeoCheckDetailsText")
+        self._details_browser.setFrameShape(QFrame.Shape.NoFrame)
+        self._details_browser.setOpenExternalLinks(False)
+        self._details_browser.setReadOnly(True)
+        self._details_browser.setAccessibleName(
+            tr("Подробное описание проверки")
+        )
+        self._details_browser.setStyleSheet(
+            "QTextBrowser { background: transparent; }"
+        )
+        panel_layout.addWidget(self._details_browser, 1)
+        return panel
+
+    def _show_details_for(self, key: str) -> None:
+        """Показать подробное описание проверки по её ключу."""
+
+        for definition in self._definitions:
+            if definition.key == key:
+                self._show_details(definition)
+                return
+
+    def _show_details(self, definition: CheckDefinition) -> None:
+        """Заполнить и открыть панель подробного описания."""
+
+        self._details_browser.setHtml(self._details_html(definition))
+        self._details_browser.verticalScrollBar().setValue(0)
+        was_hidden = not self._details_panel.isVisible()
+        self._details_panel.setVisible(True)
+        if was_hidden and self.isVisible():
+            self.resize(max(self.width(), 960), max(self.height(), 580))
+
+    def _hide_details(self) -> None:
+        """Закрыть панель подробного описания."""
+
+        self._details_panel.setVisible(False)
+        if self.isVisible():
+            self.resize(640, max(self.height(), 480))
+
+    def _details_html(self, definition: CheckDefinition) -> str:
+        """Собрать HTML для панели подробного описания."""
+
+        parts = [
+            '<h3 style="margin-top: 0;">{}</h3>'.format(
+                html.escape(definition.label)
+            ),
+            "<p>{}</p>".format(html.escape(definition.description)),
+        ]
+
+        if definition.details:
+            parts.append(
+                "<p><b>{}</b></p>".format(
+                    html.escape(tr("Что будет сделано"))
+                )
+            )
+            parts.extend(
+                "<p>{}</p>".format(html.escape(paragraph))
+                for paragraph in definition.details
+            )
+
+        if definition.examples:
+            parts.append(
+                "<p><b>{}</b></p>".format(html.escape(tr("Примеры")))
+            )
+            parts.append("<ul>")
+            parts.extend(
+                "<li><tt>{}</tt></li>".format(html.escape(example))
+                for example in definition.examples
+            )
+            parts.append("</ul>")
+
+        return "".join(parts)
 
     def selected_checks(self) -> List[str]:
         """Вернуть ключи отмеченных проверок в порядке списка."""

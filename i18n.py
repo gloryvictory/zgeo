@@ -254,8 +254,9 @@ EN_TRANSLATIONS = {
         "coordinates."
     ),
     "Выберите проверки": "Select checks",
-    "Отметьте проверки, которые нужно выполнить для найденных файлов.": (
-        "Select the checks to run on the found files."
+    "Отметьте проверки, которые нужно выполнить для найденных файлов. Нажмите «i» справа, чтобы открыть подробное описание с примерами.": (
+        "Select the checks to run on the found files. Click “i” on the "
+        "right to open a detailed description with examples."
     ),
     "Уточнить размер": "Refine size",
     "Считает полный размер каждого набора данных с учётом сопутствующих файлов.": (
@@ -338,6 +339,197 @@ EN_TRANSLATIONS = {
         "Finds empty layers and files with zero features."
     ),
     "Описание проверки: {}": "Check description: {}",
+    "Подробное описание": "Detailed description",
+    "Подробное описание проверки": "Detailed check description",
+    "Закрыть описание": "Close description",
+    "Что будет сделано": "What will be done",
+    "Примеры": "Examples",
+    "Для каждого файла ZGeo складывает размер основного файла и всех связанных файлов набора в той же папке. Значения берутся из файловой системы и заменяют приблизительный размер, показанный после сканирования.": (
+        "For each file, ZGeo adds the size of the main file and all related "
+        "dataset files in the same folder. The values come from the file "
+        "system and replace the approximate size shown after scanning."
+    ),
+    "В колонке «Размер» и в отчётах показывается полный объём набора. Если связанный файл отсутствует, учитываются только существующие файлы.": (
+        "The “Size” column and reports show the full dataset size. If a "
+        "related file is missing, only the existing files are counted."
+    ),
+    "roads.shp + roads.shx + roads.dbf + roads.prj + roads.cpg — полный размер Shapefile.": (
+        "roads.shp + roads.shx + roads.dbf + roads.prj + roads.cpg — full "
+        "Shapefile size."
+    ),
+    "roads.mif + roads.mid — полный размер MapInfo MIF/MID.": (
+        "roads.mif + roads.mid — full MapInfo MIF/MID size."
+    ),
+    "dem.tif + dem.tif.aux.xml + dem.tif.ovr + dem.tfw — полный размер растрового набора.": (
+        "dem.tif + dem.tif.aux.xml + dem.tif.ovr + dem.tfw — full raster "
+        "dataset size."
+    ),
+    "ZGeo открывает каждый слой через провайдеры QGIS, читает его систему координат и записывает название в колонку «Система координат».": (
+        "ZGeo opens each layer through QGIS providers, reads its coordinate "
+        "system and writes the name to the “CRS” column."
+    ),
+    "Проверка отмечает файлы, у которых система координат не определена или неизвестна, а также файлы, в которых слои используют разные системы координат.": (
+        "The check flags files with an undefined or unknown coordinate "
+        "system, as well as files whose layers use different coordinate "
+        "systems."
+    ),
+    "Для растров система координат читается из метаданных растра; если её нет, значение остаётся неопределённым.": (
+        "For rasters, the coordinate system is read from the raster "
+        "metadata; if it is missing, the value remains undefined."
+    ),
+    "EPSG:3857 — WGS 84 / Pseudo-Mercator: проблема не найдена.": (
+        "EPSG:3857 — WGS 84 / Pseudo-Mercator: no problem found."
+    ),
+    "Пустое значение или «Не определена»: файл помечается как проблемный.": (
+        "An empty value or “Undefined”: the file is flagged as a problem."
+    ),
+    "Два слоя GeoPackage с EPSG:3857 и EPSG:4326: отмечается смешанная система координат.": (
+        "Two GeoPackage layers with EPSG:3857 and EPSG:4326: mixed "
+        "coordinate system is flagged."
+    ),
+    "Для каждого слоя ZGeo считает объекты через провайдеры QGIS и обновляет колонку «Элементов».": (
+        "For each layer, ZGeo counts features through QGIS providers and "
+        "updates the “Features” column."
+    ),
+    "Пустой слой отмечается отдельно. Если в файле нет ни одного объекта, файл помечается как не содержащий объектов.": (
+        "An empty layer is flagged separately. If a file has no features at "
+        "all, the file is flagged as containing no features."
+    ),
+    "Для растров количество элементов не подсчитывается.": (
+        "Feature counts are not calculated for rasters."
+    ),
+    "Слой roads: 1 245 объектов — проблема не найдена.": (
+        "roads layer: 1,245 features — no problem found."
+    ),
+    "Слой buildings: 0 объектов — отмечается пустой слой.": (
+        "buildings layer: 0 features — empty layer is flagged."
+    ),
+    "GeoPackage из двух пустых слоёв: файл помечается как не содержащий объектов.": (
+        "A GeoPackage with two empty layers: the file is flagged as "
+        "containing no features."
+    ),
+    "Для векторных слоёв ZGeo читает имена атрибутивных полей и проверяет нелатинские символы, длину больше 10 символов (ограничение DBF), пробелы и символы, кроме букв, цифр и подчёркивания.": (
+        "For vector layers, ZGeo reads attribute field names and checks for "
+        "non-Latin characters, names longer than 10 characters (the DBF "
+        "limit), spaces, and characters other than letters, digits and "
+        "underscores."
+    ),
+    "Отдельно ищутся имена, которые совпадают после усечения до 10 символов.": (
+        "Names that collide after truncation to 10 characters are also "
+        "checked."
+    ),
+    "Для растров проверка не применяется.": (
+        "The check does not apply to rasters."
+    ),
+    "Поле «Наименование»: нелатинские символы — отмечается.": (
+        "Field “Наименование” (Name): non-Latin characters — flagged."
+    ),
+    "Поле very_long_field_name: длина больше 10 символов — отмечается.": (
+        "Field very_long_field_name: longer than 10 characters — flagged."
+    ),
+    "Поля population_2024 и population_2025: после усечения до 10 символов совпадают — отмечается дубль.": (
+        "Fields population_2024 and population_2025: they collide after "
+        "truncation to 10 characters — duplicate is flagged."
+    ),
+    "ZGeo проверяет обязательные файлы набора: для SHP — .dbf и .shx, для MIF — .mid, для TAB — .dat, .map и .id.": (
+        "ZGeo checks the required dataset files: .dbf and .shx for SHP, "
+        ".mid for MIF, and .dat, .map and .id for TAB."
+    ),
+    "Для SHP дополнительно проверяется наличие .cpg и корректность указанной в нём кодировки DBF.": (
+        "For SHP, the presence of .cpg and the validity of the DBF encoding "
+        "specified in it are also checked."
+    ),
+    "Проверка не меняет список файлов и ищет сопутствующие файлы в той же папке.": (
+        "The check does not change the file list and looks for related "
+        "files in the same folder."
+    ),
+    "roads.shp без roads.dbf и roads.shx — отмечается отсутствие файлов набора.": (
+        "roads.shp without roads.dbf and roads.shx — missing dataset files "
+        "are flagged."
+    ),
+    "roads.shp + roads.dbf + roads.shx без roads.cpg — отмечается отсутствие .cpg.": (
+        "roads.shp + roads.dbf + roads.shx without roads.cpg — missing "
+        ".cpg is flagged."
+    ),
+    "roads.cpg с текстом UTF-8 — кодировка распознана; с текстом x-unknown — отмечается неизвестная кодировка.": (
+        "roads.cpg containing UTF-8 — encoding recognized; containing "
+        "x-unknown — unknown encoding is flagged."
+    ),
+    "Для SHP проверяется наличие .prj (или .qpj) и .cpg. Для растров проверяется наличие .aux.xml и .ovr, а если система координат не определена — файла привязки .tfw, .tifw или .wld.": (
+        "For SHP, the presence of .prj (or .qpj) and .cpg is checked. For "
+        "rasters, the presence of .aux.xml and .ovr is checked, and if the "
+        "coordinate system is undefined, a .tfw, .tifw or .wld world file "
+        "is checked."
+    ),
+    "Для слоёв проверяются устаревшие системы координат, отсутствие кода EPSG или другого авторитета, неметрические единицы у проекционных систем, не градусы у географических систем и нестандартный порядок осей YX.": (
+        "Layers are checked for deprecated coordinate systems, missing "
+        "EPSG or other authority codes, non-metric units in projected "
+        "systems, non-degree units in geographic systems, and non-standard "
+        "YX axis order."
+    ),
+    "roads.shp без roads.prj — отмечается отсутствие метаданных системы координат.": (
+        "roads.shp without roads.prj — missing coordinate system metadata "
+        "is flagged."
+    ),
+    "dem.tif без dem.tif.aux.xml и dem.tif.ovr — отмечаются отсутствующие вспомогательные метаданные.": (
+        "dem.tif without dem.tif.aux.xml and dem.tif.ovr — missing "
+        "auxiliary metadata is flagged."
+    ),
+    "Слой в EPSG:3857 с единицами «футы» — отмечаются неметрические единицы.": (
+        "A layer in EPSG:3857 with “feet” units — non-metric units are "
+        "flagged."
+    ),
+    "Для каждого векторного слоя ZGeo перебирает объекты и проверяет геометрию: null и пустые геометрии, незамкнутые кольца, самопересечения и прочие ошибки валидности.": (
+        "For each vector layer, ZGeo iterates over features and checks the "
+        "geometry: null and empty geometries, unclosed rings, "
+        "self-intersections and other validity errors."
+    ),
+    "Затем проверяются координаты вершин: NaN/Inf, абсолютные значения больше 1e9, перепутанные широта и долгота, выход за диапазон CRS, а для проекционных систем — корректность преобразования в WGS 84 и попадание в границы системы координат.": (
+        "Vertex coordinates are then checked: NaN/Inf, absolute values "
+        "greater than 1e9, swapped latitude and longitude, coordinates "
+        "outside the CRS range, and for projected systems, correct "
+        "transformation to WGS 84 and containment within the coordinate "
+        "system bounds."
+    ),
+    "Итоги группируются по слою, а для найденных ошибок сохраняются номер объекта и вершины; подробно описывается до 1000 ошибок на слой.": (
+        "Results are grouped by layer, and the feature and vertex numbers "
+        "are saved for the found errors; up to 1,000 errors per layer are "
+        "described in detail."
+    ),
+    "Полигон с самопересечением — отмечается «Самопересечение».": (
+        "A polygon with a self-intersection — “Self-intersection” is "
+        "flagged."
+    ),
+    "Координата (500, 95) в географической системе — отмечается «Похоже на перепутанные широту и долготу».": (
+        "Coordinate (500, 95) in a geographic system — “Possibly swapped "
+        "latitude and longitude” is flagged."
+    ),
+    "Вершина с координатой NaN — отмечается «Координата NaN/Inf».": (
+        "A vertex with a NaN coordinate — “NaN/Inf coordinate” is flagged."
+    ),
+    "ZGeo читает каждый файл .json и .geojson и проверяет структуру по полю type: допустимые типы геометрий, Feature, FeatureCollection и GeometryCollection, а также обязательные вложенные поля features и geometries.": (
+        "ZGeo reads every .json and .geojson file and validates the "
+        "structure by the type field: valid geometry types, Feature, "
+        "FeatureCollection and GeometryCollection, as well as the required "
+        "nested features and geometries fields."
+    ),
+    "Содержимое координат не анализируется. Файлы, которые не читаются как JSON или не являются GeoJSON, исключаются из списка и не участвуют в остальных проверках.": (
+        "Coordinate contents are not analyzed. Files that cannot be read "
+        "as JSON or are not GeoJSON are excluded from the list and do not "
+        "participate in other checks."
+    ),
+    '{"type": "FeatureCollection", "features": [...]} — GeoJSON, файл остаётся в списке.': (
+        '{"type": "FeatureCollection", "features": [...]} — GeoJSON, the '
+        "file remains in the list."
+    ),
+    '{"type": "Feature", "geometry": {...}, "properties": {...}} — GeoJSON, файл остаётся.': (
+        '{"type": "Feature", "geometry": {...}, "properties": {...}} — '
+        "GeoJSON, the file remains."
+    ),
+    '{"name": "settings", "values": [...]} — не GeoJSON, файл исключается.': (
+        '{"name": "settings", "values": [...]} — not GeoJSON, the file is '
+        "excluded."
+    ),
     "Проблемы": "Issues",
     "Да — найдены проблемы; Нет — проблем не найдено; — — проверка не применима.": (
         "Yes — problems found; No — no problems found; — — check is not "

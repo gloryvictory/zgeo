@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import ast
+from pathlib import Path
 import unittest
 
 from zgeo.formatting import format_size
 from zgeo.i18n import (
+    EN_TRANSLATIONS,
     LANGUAGE_EN,
     LANGUAGE_RU,
     category_label,
@@ -47,7 +50,7 @@ class I18nTests(unittest.TestCase):
         sources = (
             "Проверки",
             "Выберите проверки",
-            "Отметьте проверки, которые нужно выполнить для найденных файлов.",
+            "Отметьте проверки, которые нужно выполнить для найденных файлов. Нажмите «i» справа, чтобы открыть подробное описание с примерами.",
             "Уточнить размер",
             "Считает полный размер каждого набора данных с учётом "
             "сопутствующих файлов.",
@@ -239,6 +242,30 @@ class I18nTests(unittest.TestCase):
             ),
             "Check description: Refine size",
         )
+
+    def test_check_dialog_sources_have_english_translations(self) -> None:
+        path = Path(__file__).resolve().parents[1] / "check_dialog.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        sources = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            function = node.func
+            if not isinstance(function, ast.Name) or function.id != "tr":
+                continue
+            if not node.args:
+                continue
+            argument = node.args[0]
+            if isinstance(argument, ast.Constant) and isinstance(
+                argument.value, str
+            ):
+                sources.add(argument.value)
+        missing = sorted(
+            source
+            for source in sources
+            if source not in EN_TRANSLATIONS
+        )
+        self.assertEqual(missing, [])
 
     def test_category_labels(self) -> None:
         self.assertEqual(category_label("vector"), "Векторные данные")
