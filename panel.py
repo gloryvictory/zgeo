@@ -64,7 +64,6 @@ from .check_dialog import (
     CHECK_JSON_GEOJSON,
     CHECK_METADATA_CRS,
     CHECK_SIZE,
-    LAYER_PROBLEM_CHECKS,
     PROBLEM_CHECKS,
     ChecksDialog,
     check_definitions,
@@ -75,6 +74,7 @@ from .excel_export import SheetSpec
 from .explorer import open_folder, reveal_files
 from .geojson_check import JSON_EXTENSIONS, check_json_file
 from .file_info import (
+    FileInfo,
     LayerSummary,
     inspect_geofile,
     inspect_layer_summary,
@@ -196,16 +196,20 @@ class ZGeoPanel(QDockWidget):
         self._problem_running = False
         self._problem_checked = False
         self._problem_queue: Deque[GeoFile] = deque()
+        self._problem_check_queue: Deque[str] = deque()
+        self._problem_current_check: Optional[str] = None
         self._problem_total = 0
         self._problem_processed = 0
         self._problem_issue_count = 0
         self._problem_issues: Dict[str, Tuple[QualityIssue, ...]] = {}
         self._problem_checked_paths: Set[str] = set()
+        self._problem_paths_with_issues: Set[str] = set()
         self._problem_candidate_paths: Set[str] = set()
         self._problem_interrupted = False
         self._problem_selected: Tuple[str, ...] = ()
         self._problem_checks_run: Set[str] = set()
         self._problem_file_cache: Dict[str, Dict[str, Path]] = {}
+        self._problem_info_cache: Dict[str, Optional[FileInfo]] = {}
         self._check_timing_active = False
         self._check_timing_started_at = 0.0
         self._check_timing_seconds = 0.0
@@ -2499,7 +2503,7 @@ class ZGeoPanel(QDockWidget):
 
     def _begin_check_timing(self) -> None:
         self._check_timing_active = True
-        self._check_timing_started_at = time.monotonic()
+        self._check_timing_started_at = time.perf_counter()
         self._check_timing_seconds = 0.0
         self._check_timing_completed = True
         self._check_timing_initial_files = len(self._files)
@@ -2523,7 +2527,7 @@ class ZGeoPanel(QDockWidget):
         if not self._check_timing_active:
             return
         self._check_timing_seconds = max(
-            0.0, time.monotonic() - self._check_timing_started_at
+            0.0, time.perf_counter() - self._check_timing_started_at
         )
         self._check_timing_completed = (
             completed and self._check_timing_completed
@@ -2546,7 +2550,7 @@ class ZGeoPanel(QDockWidget):
         if not self._check_timing_active:
             return
         if getattr(self, attribute) is None:
-            setattr(self, attribute, time.monotonic())
+            setattr(self, attribute, time.perf_counter())
 
     def _finish_operation_timing(
         self,
@@ -2563,7 +2567,7 @@ class ZGeoPanel(QDockWidget):
             TimingRecord(
                 operation,
                 files,
-                max(0.0, time.monotonic() - started),
+                max(0.0, time.perf_counter() - started),
                 completed,
             )
         )
@@ -2590,7 +2594,7 @@ class ZGeoPanel(QDockWidget):
             [
                 tr("Операция"),
                 tr("Файлов"),
-                tr("Время, с"),
+                tr("Время"),
                 tr("Файлов/с"),
                 tr("Файлов/мин"),
                 tr("Статус"),
@@ -2823,20 +2827,41 @@ class ZGeoPanel(QDockWidget):
 
         self._update_controls()
 
-    def _problem_progress_title(self) -> str:
+    def _problem_check_label(self, check: Optional[str] = None) -> str:
+        """Вернуть название текущей проверки без списка остальных."""
+
+        check = check or self._problem_current_check
+        if not check:
+            return tr("Проверки")
         labels = {
             definition.key: definition.label
             for definition in check_definitions()
         }
-        names = [
-            labels.get(check, check)
-            for check in self._problem_selected
+        return labels.get(check, check)
+
+    def _problem_progress_title(self) -> str:
+        return self._problem_check_label()
+
+    def _problem_candidates_for_check(self, check: str) -> List[GeoFile]:
+        """Вернуть файлы, к которым применима конкретная проверка."""
+
+        if check == CHECK_DATASET_INTEGRITY:
+            return [
+                geo_file
+                for geo_file in self._files
+                if geo_file.extension in (".shp", ".mif", ".tab")
+            ]
+
+        if check in (CHECK_CRS_QUALITY, CHECK_METADATA_CRS):
+            allowed = {VECTOR, TABLE, OTHER, RASTER}
+        else:
+            allowed = {VECTOR, TABLE, OTHER}
+
+        return [
+            geo_file
+            for geo_file in self._files
+            if geo_file.category in allowed
         ]
-        if not names:
-            return tr("Проверки")
-        if len(names) == 1:
-            return names[0]
-        return tr("Проверки: {}", ", ".join(names))
 
     def _start_problem_check(self, checks: List[str]) -> None:
         if self._problem_running or not self._files:
@@ -2861,30 +2886,13 @@ class ZGeoPanel(QDockWidget):
                 item, "…", tr("Проверка выполняется…")
             )
 
-        needs_layers = any(
-            check in LAYER_PROBLEM_CHECKS for check in checks
-        )
-        if needs_layers:
-            allowed = {VECTOR, TABLE, OTHER}
-            if CHECK_CRS_QUALITY in checks:
-                allowed.add(RASTER)
-            candidates = [
-                geo_file
-                for geo_file in self._files
-                if geo_file.category in allowed
-            ]
-        else:
-            candidates = [
-                geo_file
-                for geo_file in self._files
-                if CHECK_DATASET_INTEGRITY in checks
-                and geo_file.extension in (".shp", ".mif", ".tab")
-            ]
-
-        candidate_paths = {
-            str(geo_file.path) for geo_file in candidates
-        }
-        self._problem_candidate_paths = set(candidate_paths)
+        candidate_paths: Set[str] = set()
+        for check in checks:
+            candidate_paths.update(
+                str(geo_file.path)
+                for geo_file in self._problem_candidates_for_check(check)
+            )
+        self._problem_candidate_paths = candidate_paths
         for geo_file in self._files:
             if str(geo_file.path) in candidate_paths:
                 continue
@@ -2897,8 +2905,10 @@ class ZGeoPanel(QDockWidget):
                     False,
                 )
 
-        if not candidates:
+        if not candidate_paths:
             self._problem_checked = True
+            self._problem_check_queue.clear()
+            self._problem_current_check = None
             self._hide_progress()
             self._update_problems_summary()
             self.problems_label.setToolTip("")
@@ -2912,14 +2922,14 @@ class ZGeoPanel(QDockWidget):
             self._maybe_finish_check_timing()
             return
 
-        self._problem_queue = deque(candidates)
-        self._problem_total = len(candidates)
+        self._problem_check_queue = deque(checks)
+        self._problem_queue.clear()
+        self._problem_total = 0
         self._problem_processed = 0
         self._problem_issue_count = 0
+        self._problem_paths_with_issues.clear()
+        self._problem_info_cache = {}
         self._problem_running = True
-        self._start_operation_timing("_problem_timing_started_at")
-        self._set_progress_title(self._problem_progress_title())
-        self._show_progress(0, self._problem_total)
         self.check_attributes_button.setToolTip(
             tr("Проверки выполняются…")
         )
@@ -2927,13 +2937,45 @@ class ZGeoPanel(QDockWidget):
         self._apply_filter()
         self._update_file_actions()
         self._update_cancel_button()
-        self._set_status(
-            tr("Проверки: 0 из {}", self._problem_total)
-        )
-        self._problem_timer.start(0)
+        self._start_next_problem_check()
+
+    def _start_next_problem_check(self) -> None:
+        """Запустить следующую выбранную проверку."""
+
+        if not self._problem_running:
+            return
+
+        while self._problem_check_queue:
+            check = self._problem_check_queue.popleft()
+            candidates = self._problem_candidates_for_check(check)
+            if not candidates:
+                continue
+
+            self._problem_current_check = check
+            self._problem_queue = deque(candidates)
+            self._problem_total = len(candidates)
+            self._problem_processed = 0
+            self._start_operation_timing("_problem_timing_started_at")
+            label = self._problem_check_label(check)
+            self._set_progress_title(label)
+            self._show_progress(0, self._problem_total)
+            self._set_status(
+                tr("{}: 0 из {}", label, self._problem_total)
+            )
+            self._problem_timer.start(0)
+            return
+
+        self._finish_problem_check()
 
     def _process_next_problem_check(self) -> None:
+        if not self._problem_running:
+            return
         if not self._problem_queue:
+            self._finish_current_problem_check()
+            return
+
+        check = self._problem_current_check
+        if check is None:
             self._finish_problem_check()
             return
 
@@ -2944,26 +2986,38 @@ class ZGeoPanel(QDockWidget):
         )
 
         try:
-            issues, applicable = self._inspect_problems(geo_file)
+            issues, applicable = self._inspect_problem_check(
+                geo_file, check
+            )
         except Exception:
             issues, applicable = [], False
 
         path_key = str(geo_file.path)
-        self._problem_issues[path_key] = tuple(issues)
+        if issues:
+            existing = list(self._problem_issues.get(path_key, ()))
+            existing.extend(issues)
+            self._problem_issues[path_key] = tuple(existing)
+            if path_key not in self._problem_paths_with_issues:
+                self._problem_paths_with_issues.add(path_key)
+                self._problem_issue_count = len(
+                    self._problem_paths_with_issues
+                )
+                self._update_problems_summary()
         if applicable:
             self._problem_checked_paths.add(path_key)
         item = self._item_by_path.get(path_key)
         if item is not None:
-            self._update_item_problems(item, issues, applicable)
-
-        if issues:
-            self._problem_issue_count += 1
-            self._update_problems_summary()
+            self._update_item_problems(
+                item,
+                list(self._problem_issues.get(path_key, ())),
+                path_key in self._problem_checked_paths,
+            )
 
         if self._problem_queue:
             self._set_status(
                 tr(
-                    "Проверки: {} из {} · {}",
+                    "{}: {} из {} · {}",
+                    self._problem_check_label(check),
                     self._problem_processed,
                     self._problem_total,
                     geo_file.path.name,
@@ -2971,54 +3025,101 @@ class ZGeoPanel(QDockWidget):
             )
             self._problem_timer.start(0)
         else:
-            self._finish_problem_check()
+            self._finish_current_problem_check()
 
-    def _inspect_problems(
+    def _finish_current_problem_check(self) -> None:
+        """Завершить текущую проверку и перейти к следующей."""
+
+        check = self._problem_current_check
+        if check is not None:
+            self._finish_operation_timing(
+                "_problem_timing_started_at",
+                self._problem_check_label(check),
+                self._problem_processed,
+                True,
+            )
+        self._problem_timer.stop()
+        self._problem_queue.clear()
+        self._problem_current_check = None
+        self._start_next_problem_check()
+
+    def _inspect_problem_check(
+        self, geo_file: GeoFile, check: str
+    ) -> Tuple[List[QualityIssue], bool]:
+        """Выполнить одну проверку для одного файла."""
+
+        if check == CHECK_DATASET_INTEGRITY:
+            return self._inspect_dataset_integrity(geo_file)
+
+        file_info = self._problem_file_info(geo_file)
+        if file_info is None:
+            return [], False
+
+        if check == CHECK_FIELD_NAMES:
+            return self._inspect_field_names(file_info)
+        if check == CHECK_CRS_QUALITY:
+            return self._inspect_crs_quality(geo_file, file_info)
+        if check == CHECK_COUNT_QUALITY:
+            return self._inspect_count_quality(geo_file, file_info)
+        if check == CHECK_GEOMETRY_COORDINATES:
+            return self._inspect_geometry_coordinates(
+                geo_file, file_info
+            )
+        if check == CHECK_METADATA_CRS:
+            return self._inspect_metadata_crs(geo_file, file_info)
+        return [], False
+
+    def _problem_file_info(
+        self, geo_file: GeoFile
+    ) -> Optional[FileInfo]:
+        """Прочитать сведения о слоях один раз для всех проверок."""
+
+        path_key = str(geo_file.path)
+        if path_key not in self._problem_info_cache:
+            try:
+                self._problem_info_cache[path_key] = inspect_geofile(
+                    geo_file
+                )
+            except Exception:
+                self._problem_info_cache[path_key] = None
+        return self._problem_info_cache[path_key]
+
+    def _inspect_dataset_integrity(
         self, geo_file: GeoFile
     ) -> Tuple[List[QualityIssue], bool]:
-        checks = self._problem_selected
         issues: List[QualityIssue] = []
         applicable = False
-
         files = directory_files(
             geo_file.path.parent, self._problem_file_cache
         )
 
-        if CHECK_DATASET_INTEGRITY in checks:
-            if geo_file.extension in (".shp", ".mif", ".tab"):
+        if geo_file.extension in (".shp", ".mif", ".tab"):
+            applicable = True
+            for issue in completeness_issues(geo_file, files):
+                issues.append(
+                    replace(issue, check=CHECK_DATASET_INTEGRITY)
+                )
+        if geo_file.extension == ".shp":
+            dbf_name = geo_file.path.stem.casefold() + ".dbf"
+            if dbf_name in files:
                 applicable = True
-                for issue in completeness_issues(geo_file, files):
+                for issue in dbf_encoding_issues(geo_file, files):
                     issues.append(
                         replace(
                             issue,
                             check=CHECK_DATASET_INTEGRITY,
                         )
                     )
-            if geo_file.extension == ".shp":
-                dbf_name = geo_file.path.stem.casefold() + ".dbf"
-                if dbf_name in files:
-                    applicable = True
-                    for issue in dbf_encoding_issues(geo_file, files):
-                        issues.append(
-                            replace(
-                                issue,
-                                check=CHECK_DATASET_INTEGRITY,
-                            )
-                        )
+        return issues, applicable
 
-        needs_layers = any(
-            check in LAYER_PROBLEM_CHECKS for check in checks
-        )
-        if not needs_layers:
-            return issues, applicable
-
-        try:
-            file_info = inspect_geofile(geo_file)
-        except Exception:
-            return issues, applicable
-
+    def _inspect_field_names(
+        self, file_info: FileInfo
+    ) -> Tuple[List[QualityIssue], bool]:
         vector_layers = file_info.vector_layers
-        raster_layers = file_info.raster_layers
+        if not vector_layers:
+            return [], False
+
+        issues: List[QualityIssue] = []
         layer_fields = [
             (
                 layer.name,
@@ -3026,106 +3127,123 @@ class ZGeoPanel(QDockWidget):
             )
             for layer in vector_layers
         ]
+        for layer_name, names in layer_fields:
+            for name in names:
+                if has_non_latin_characters(name):
+                    issues.append(
+                        QualityIssue(
+                            CHECK_FIELD_NAMES,
+                            "Нелатинское имя поля: {}",
+                            (name,),
+                            layer=layer_name,
+                            location=name,
+                        )
+                    )
+        for issue in field_name_issues(layer_fields):
+            issues.append(replace(issue, check=CHECK_FIELD_NAMES))
+        for issue in truncated_duplicate_issues(layer_fields):
+            issues.append(replace(issue, check=CHECK_FIELD_NAMES))
+        return issues, True
+
+    def _inspect_crs_quality(
+        self, geo_file: GeoFile, file_info: FileInfo
+    ) -> Tuple[List[QualityIssue], bool]:
+        vector_layers = file_info.vector_layers
+        raster_layers = file_info.raster_layers
+        if not (vector_layers or raster_layers):
+            return [], False
+
+        values = [layer.crs for layer in vector_layers]
+        values.extend(layer.crs for layer in raster_layers)
+        issues = list(crs_issues(values))
+        self._apply_crs_summary(geo_file, values)
+        return issues, True
+
+    def _inspect_count_quality(
+        self, geo_file: GeoFile, file_info: FileInfo
+    ) -> Tuple[List[QualityIssue], bool]:
+        vector_layers = file_info.vector_layers
+        if not vector_layers:
+            return [], False
+
         layer_counts = [
             (layer.name, layer.feature_count)
             for layer in vector_layers
         ]
-        crs_values = [layer.crs for layer in vector_layers]
-        crs_values.extend(layer.crs for layer in raster_layers)
+        issues = [
+            replace(issue, check=CHECK_COUNT_QUALITY)
+            for issue in empty_layer_issues(layer_counts)
+        ]
+        self._apply_count_summary(geo_file, layer_counts)
+        return issues, True
 
-        if CHECK_FIELD_NAMES in checks and vector_layers:
-            applicable = True
-            for layer_name, names in layer_fields:
-                for name in names:
-                    if has_non_latin_characters(name):
-                        issues.append(
-                            QualityIssue(
-                                CHECK_FIELD_NAMES,
-                                "Нелатинское имя поля: {}",
-                                (name,),
-                                layer=layer_name,
-                                location=name,
-                            )
-                        )
-            for issue in field_name_issues(layer_fields):
-                issues.append(
-                    replace(issue, check=CHECK_FIELD_NAMES)
-                )
-            for issue in truncated_duplicate_issues(layer_fields):
-                issues.append(
-                    replace(issue, check=CHECK_FIELD_NAMES)
-                )
+    def _inspect_geometry_coordinates(
+        self, geo_file: GeoFile, file_info: FileInfo
+    ) -> Tuple[List[QualityIssue], bool]:
+        if not file_info.vector_layers:
+            return [], False
 
-        if CHECK_CRS_QUALITY in checks and (
-            vector_layers or raster_layers
-        ):
-            applicable = True
-            issues.extend(crs_issues(crs_values))
-            self._apply_crs_summary(geo_file, crs_values)
-
-        if CHECK_COUNT_QUALITY in checks and vector_layers:
-            applicable = True
-            for issue in empty_layer_issues(layer_counts):
-                issues.append(
-                    replace(issue, check=CHECK_COUNT_QUALITY)
-                )
-            self._apply_count_summary(geo_file, layer_counts)
-
-        if CHECK_GEOMETRY_COORDINATES in checks and vector_layers:
-            geometry_issues, geometry_applicable = (
-                inspect_geometry_and_coordinates(
-                    geo_file,
-                    check_geometry=True,
-                    check_coordinates=True,
-                )
+        geometry_issues, applicable = inspect_geometry_and_coordinates(
+            geo_file,
+            check_geometry=True,
+            check_coordinates=True,
+        )
+        issues = [
+            replace(
+                issue,
+                check=CHECK_GEOMETRY_COORDINATES,
             )
-            if geometry_applicable:
-                applicable = True
-            for issue in geometry_issues:
-                issues.append(
-                    replace(
-                        issue,
-                        check=CHECK_GEOMETRY_COORDINATES,
-                    )
-                )
-
-        if CHECK_METADATA_CRS in checks:
-            descriptors = [
-                layer.crs_descriptor
-                for layer in vector_layers
-                if layer.spatial
-            ]
-            descriptors.extend(
-                layer.crs_descriptor for layer in raster_layers
-            )
-            if (
-                descriptors
-                or geo_file.extension == ".shp"
-                or geo_file.category == RASTER
-            ):
-                applicable = True
-
-            has_crs = any(
-                descriptor.valid for descriptor in descriptors
-            )
-            for issue in metadata_sidecar_issues(
-                geo_file,
-                files,
-                has_crs=has_crs,
-                include_cpg=CHECK_DATASET_INTEGRITY not in checks,
-            ):
-                issues.append(
-                    replace(issue, check=CHECK_METADATA_CRS)
-                )
-            for issue in crs_metadata_issues(
-                descriptors,
-                include_missing=CHECK_CRS_QUALITY not in checks,
-            ):
-                issues.append(
-                    replace(issue, check=CHECK_METADATA_CRS)
-                )
-
+            for issue in geometry_issues
+        ]
         return issues, applicable
+
+    def _inspect_metadata_crs(
+        self, geo_file: GeoFile, file_info: FileInfo
+    ) -> Tuple[List[QualityIssue], bool]:
+        descriptors = [
+            layer.crs_descriptor
+            for layer in file_info.vector_layers
+            if layer.spatial
+        ]
+        descriptors.extend(
+            layer.crs_descriptor for layer in file_info.raster_layers
+        )
+        applicable = (
+            bool(descriptors)
+            or geo_file.extension == ".shp"
+            or geo_file.category == RASTER
+        )
+        if not applicable:
+            return [], False
+
+        files = directory_files(
+            geo_file.path.parent, self._problem_file_cache
+        )
+        has_crs = any(
+            descriptor.valid for descriptor in descriptors
+        )
+        issues: List[QualityIssue] = []
+        for issue in metadata_sidecar_issues(
+            geo_file,
+            files,
+            has_crs=has_crs,
+            include_cpg=(
+                CHECK_DATASET_INTEGRITY not in self._problem_selected
+            ),
+        ):
+            issues.append(
+                replace(issue, check=CHECK_METADATA_CRS)
+            )
+        for issue in crs_metadata_issues(
+            descriptors,
+            include_missing=(
+                CHECK_CRS_QUALITY not in self._problem_selected
+            ),
+        ):
+            issues.append(
+                replace(issue, check=CHECK_METADATA_CRS)
+            )
+        return issues, True
 
     def _apply_crs_summary(
         self, geo_file: GeoFile, values: List[str]
@@ -3195,18 +3313,21 @@ class ZGeoPanel(QDockWidget):
             item.setData(5, Qt.ItemDataRole.UserRole, False)
 
     def _finish_problem_check(self) -> None:
-        total = self._problem_total
-        issues = self._problem_issue_count
-        self._finish_operation_timing(
-            "_problem_timing_started_at",
-            self._problem_progress_title(),
-            self._problem_processed,
-            True,
+        total = len(self._problem_candidate_paths)
+        self._problem_issue_count = len(
+            self._problem_paths_with_issues
         )
+        issues = self._problem_issue_count
         self._problem_running = False
         self._problem_checked = True
         self._problem_interrupted = False
+        self._problem_total = total
+        self._problem_processed = total
+        self._problem_current_check = None
+        self._problem_check_queue.clear()
         self._problem_queue.clear()
+        self._problem_info_cache = {}
+        self._problem_file_cache = {}
         self.check_attributes_button.setToolTip(
             tr(CHECKS_TOOLTIP)
         )
@@ -3242,6 +3363,9 @@ class ZGeoPanel(QDockWidget):
 
         processed = self._problem_processed
         total = self._problem_total
+        self._problem_issue_count = len(
+            self._problem_paths_with_issues
+        )
         issues = self._problem_issue_count
         self._finish_operation_timing(
             "_problem_timing_started_at",
@@ -3251,9 +3375,13 @@ class ZGeoPanel(QDockWidget):
         )
         self._problem_timer.stop()
         self._problem_queue.clear()
+        self._problem_check_queue.clear()
+        self._problem_current_check = None
         self._problem_running = False
-        self._problem_checked = processed > 0
+        self._problem_checked = bool(self._problem_checked_paths)
         self._problem_interrupted = self._problem_checked
+        self._problem_info_cache = {}
+        self._problem_file_cache = {}
         self.check_attributes_button.setToolTip(
             tr(CHECKS_TOOLTIP)
         )
@@ -3277,6 +3405,8 @@ class ZGeoPanel(QDockWidget):
     def _cancel_problem_check(self) -> None:
         self._problem_timer.stop()
         self._problem_queue.clear()
+        self._problem_check_queue.clear()
+        self._problem_current_check = None
         self._problem_running = False
         self._problem_total = 0
         self._problem_processed = 0
@@ -3285,10 +3415,12 @@ class ZGeoPanel(QDockWidget):
         self._problem_interrupted = False
         self._problem_issues.clear()
         self._problem_checked_paths.clear()
+        self._problem_paths_with_issues.clear()
         self._problem_candidate_paths.clear()
         self._problem_selected = ()
         self._problem_checks_run.clear()
         self._problem_file_cache = {}
+        self._problem_info_cache = {}
         self._reset_problems_filter()
         self._hide_progress()
         if hasattr(self, "check_attributes_button"):
@@ -4030,7 +4162,8 @@ class ZGeoPanel(QDockWidget):
         elif self._problem_running:
             self._set_status(
                 tr(
-                    "Проверки: {} из {}",
+                    "{}: {} из {}",
+                    self._problem_progress_title(),
                     self._problem_processed,
                     self._problem_total,
                 )

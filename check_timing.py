@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, List, Optional
 
-from .i18n import tr
+from .i18n import LANGUAGE_EN, get_language, tr
 
 
 @dataclass(frozen=True)
@@ -37,6 +37,70 @@ class TimingRecord:
         """Вернуть локализованный статус операции."""
 
         return tr("Завершено") if self.completed else tr("Прервано")
+
+
+def format_duration(seconds: float) -> str:
+    """Вернуть длительность в человекочитаемом виде."""
+
+    seconds = max(0.0, float(seconds))
+    if 0.0 < seconds < 1.0:
+        return tr("менее 1 секунды")
+
+    total = int(seconds + 0.5)
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+
+    parts = []
+    if hours:
+        parts.append(
+            _duration_part(
+                hours,
+                tr("час"),
+                tr("часа"),
+                tr("часов"),
+            )
+        )
+    if minutes:
+        parts.append(
+            _duration_part(
+                minutes,
+                tr("минута"),
+                tr("минуты"),
+                tr("минут"),
+            )
+        )
+    if secs or not parts:
+        parts.append(
+            _duration_part(
+                secs,
+                tr("секунда"),
+                tr("секунды"),
+                tr("секунд"),
+            )
+        )
+    return " ".join(parts)
+
+
+def _duration_part(
+    value: int,
+    one: str,
+    few: str,
+    many: str,
+) -> str:
+    if get_language() == LANGUAGE_EN:
+        word = one if value == 1 else many
+    else:
+        word = _russian_plural(value, one, few, many)
+    return f"{value} {word}"
+
+
+def _russian_plural(value: int, one: str, few: str, many: str) -> str:
+    value = abs(int(value))
+    if value % 10 == 1 and value % 100 != 11:
+        return one
+    if 2 <= value % 10 <= 4 and not 12 <= value % 100 <= 14:
+        return few
+    return many
 
 
 def build_timing_rows(
@@ -75,7 +139,7 @@ def _record_row(record: TimingRecord) -> List[object]:
     return [
         record.operation,
         files,
-        round(seconds, 3),
+        format_duration(seconds),
         _speed(files, seconds),
         _speed(files * 60.0, seconds),
         record.status,
