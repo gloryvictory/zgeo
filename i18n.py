@@ -110,6 +110,7 @@ EN_TRANSLATIONS = {
     "Просматриваем файлы, включая вложенные папки.": (
         "Scanning files, including subfolders."
     ),
+    "Путь": "Path",
     "Имя файла": "File name",
     "Найдено": "Found",
     "Прервать": "Cancel",
@@ -248,10 +249,10 @@ EN_TRANSLATIONS = {
     "Проблем не найдено.": "No problems found.",
     "Идёт проверка…": "Check in progress…",
     "Прервать проверки": "Cancel checks",
-    "Проверки: уточнить размер, систему координат и количество элементов, проверить JSON, имена полей, набор данных, метаданные и CRS, геометрии и координаты.": (
+    "Проверки: уточнить размер, систему координат и количество элементов, проверить JSON, имена полей, имена и пути файлов, набор данных, метаданные и CRS, .prj, геометрии, дубли, координаты.": (
         "Checks: refine size, CRS and feature count, validate JSON, field "
-        "names, dataset integrity, metadata and CRS, geometries and "
-        "coordinates."
+        "names, file names and paths, dataset integrity, metadata and CRS, "
+        ".prj, geometries, duplicates, coordinates."
     ),
     "Выберите проверки": "Select checks",
     "Отметьте проверки, которые нужно выполнить для найденных файлов. Нажмите «i» справа, чтобы открыть подробное описание с примерами.": (
@@ -325,9 +326,97 @@ EN_TRANSLATIONS = {
     "Ищет файлы без системы координат, с неизвестной или смешанной системой координат.": (
         "Finds files without a CRS, with an unknown CRS or with mixed CRSs."
     ),
+    "Проверка .prj-файла": "PRJ file check",
+    "Проверяет наличие файла .prj, его читаемость и согласованность с системой координат слоя.": (
+        "Checks that the .prj file exists, is readable and matches the "
+        "CRS of the layer."
+    ),
+    "ZGeo ищет файл .prj рядом с набором данных и разбирает его содержимое как WKT: проверяются наличие, кодировка, пустой файл, парность скобок и корневой тип системы координат.": (
+        "ZGeo looks for the .prj file next to the dataset and parses its "
+        "content as WKT: presence, encoding, an empty file, balanced "
+        "brackets and the root CRS type are checked."
+    ),
+    "Затем сведения из .prj сравниваются с системой координат слоя: тип (географическая или проекционная) и код EPSG, если он указан в .prj.": (
+        "The .prj content is then compared with the CRS of the layer: the "
+        "type (geographic or projected) and the EPSG code, when the .prj "
+        "contains one."
+    ),
+    "Если файла .prj нет, но есть .qpj, замечание не выводится: QGIS использует .qpj как замену.": (
+        "If the .prj file is missing but a .qpj file is present, no issue "
+        "is reported: QGIS uses .qpj as a replacement."
+    ),
+    "roads.prj с WKT EPSG:3857 и слой в EPSG:3857 — проблема не найдена.": (
+        "roads.prj with WKT EPSG:3857 and a layer in EPSG:3857 — no issue "
+        "is found."
+    ),
+    "Пустой roads.prj — отмечается «Файл .prj пуст».": (
+        "An empty roads.prj — “The .prj file is empty” is flagged."
+    ),
+    "В .prj географическая система, а слой в проекционной — отмечается несовпадение типа CRS.": (
+        "The .prj holds a geographic CRS while the layer is projected — a "
+        "CRS type mismatch is flagged."
+    ),
+    "Нет файла .prj: система координат слоя не закреплена": (
+        "No .prj file: the layer CRS is not fixed in a file"
+    ),
+    "Не удалось прочитать файл .prj: {}": "Could not read the .prj file: {}",
+    "Файл .prj пуст: система координат не указана": (
+        "The .prj file is empty: no CRS is specified"
+    ),
+    "Файл .prj не содержит корректного WKT: {}": (
+        "The .prj file does not contain valid WKT: {}"
+    ),
+    "Тип системы координат в .prj не совпадает с CRS слоя: в .prj {}, у слоя {}": (
+        "The CRS type in the .prj does not match the layer CRS: the .prj "
+        "is {}, the layer is {}"
+    ),
+    "Файл .prj не соответствует CRS слоя: в .prj EPSG:{}, у слоя {}": (
+        "The .prj file does not match the layer CRS: the .prj is EPSG:{}, "
+        "the layer is {}"
+    ),
+    "географическая": "geographic",
+    "проекционная": "projected",
+    "иная": "other",
     "Проверка валидности геометрий": "Geometry validity check",
     "Ищет самопересечения, незамкнутые кольца, пустые и null-геометрии.": (
         "Finds self-intersections, unclosed rings, empty and null geometries."
+    ),
+    "Проверка дублей объектов": "Duplicate features check",
+    "Ищет объекты с полностью совпадающей геометрией.": (
+        "Finds features with completely identical geometry."
+    ),
+    "Для каждого векторного слоя ZGeo сравнивает геометрию объектов побайтово: в ключ входит тип геометрии, число вершин и все координаты, включая Z.": (
+        "For each vector layer ZGeo compares feature geometries byte by "
+        "byte: the key includes the geometry type, the vertex count and "
+        "all coordinates, including Z."
+    ),
+    "Пустые и null-геометрии не сравниваются. Для групп совпадений показывается первый объект и номера его дублей; подробно описывается до 1000 дублей на слой.": (
+        "Empty and null geometries are not compared. For each group of "
+        "matches the first feature and the numbers of its duplicates are "
+        "shown; up to 1,000 duplicates per layer are described in detail."
+    ),
+    "Объекты с одинаковыми координатами, но разными атрибутами тоже считаются дублями геометрии: ZGeo сравнивает только геометрию.": (
+        "Features with identical coordinates but different attributes are "
+        "also treated as geometry duplicates: ZGeo compares the geometry "
+        "only."
+    ),
+    "Два полигона с одинаковым набором вершин — второй отмечается как «Дубль геометрии объекта 1».": (
+        "Two polygons with the same vertex set — the second is flagged as "
+        "“Duplicate geometry of feature 1”."
+    ),
+    "Объекты с одинаковым контуром, но разными атрибутами — тоже дубль геометрии.": (
+        "Features with the same outline but different attributes are also "
+        "geometry duplicates."
+    ),
+    "Объекты с совпадающими координатами, но разным порядком вершин — не дубли.": (
+        "Features with matching coordinates but a different vertex order "
+        "are not duplicates."
+    ),
+    "Дубль геометрии объекта {} — совпадает с объектом {}": (
+        "Duplicate geometry of feature {} — matches feature {}"
+    ),
+    "Слой «{}»: дублей по геометрии: {}, групп: {}": (
+        "Layer “{}”: geometry duplicates: {}, groups: {}"
     ),
     "Проверка координат": "Coordinate check",
     "Ищет NaN/Inf, слишком большие координаты, перепутанные широту и долготу и выход за допустимый диапазон CRS.": (
@@ -484,13 +573,6 @@ EN_TRANSLATIONS = {
         "geometry: null and empty geometries, unclosed rings, "
         "self-intersections and other validity errors."
     ),
-    "Затем проверяются координаты вершин: NaN/Inf, абсолютные значения больше 1e9, перепутанные широта и долгота, выход за диапазон CRS, а для проекционных систем — корректность преобразования в WGS 84 и попадание в границы системы координат.": (
-        "Vertex coordinates are then checked: NaN/Inf, absolute values "
-        "greater than 1e9, swapped latitude and longitude, coordinates "
-        "outside the CRS range, and for projected systems, correct "
-        "transformation to WGS 84 and containment within the coordinate "
-        "system bounds."
-    ),
     "Итоги группируются по слою, а для найденных ошибок сохраняются номер объекта и вершины; подробно описывается до 1000 ошибок на слой.": (
         "Results are grouped by layer, and the feature and vertex numbers "
         "are saved for the found errors; up to 1,000 errors per layer are "
@@ -599,6 +681,57 @@ EN_TRANSLATIONS = {
     ),
     "Файл не содержит объектов": "File contains no features",
     "Слой «{}» не содержит объектов": "Layer “{}” contains no features",
+    "Проверка имён и путей файлов": "File name and path check",
+    "Проверяет длину пути, недопустимые символы и зарезервированные имена, совпадения имён без учёта регистра и осиротевшие сопутствующие файлы.": (
+        "Checks the path length, invalid characters and reserved names, "
+        "case-insensitive name collisions and orphaned sidecar files."
+    ),
+    "Для каждого найденного файла проверяются длина полного пути (больше 260 символов — ограничение Windows), символы <>:\"|?* и управляющие символы в имени, зарезервированные имена (CON, PRN, AUX, NUL, COM1-9, LPT1-9) и завершение имени пробелом или точкой.": (
+        "Every found file is checked for the full path length (more than "
+        "260 characters is a Windows limit), the characters <>:\"|?* and "
+        "control characters in the name, reserved names (CON, PRN, AUX, "
+        "NUL, COM1-9, LPT1-9) and a name that ends with a space or a dot."
+    ),
+    "В каждой папке ZGeo ищет файлы, имена которых различаются только регистром, а также осиротевшие сопутствующие файлы: roads.dbf, roads.prj, dem.tif.aux.xml и подобные без основного файла набора.": (
+        "In every folder ZGeo looks for files whose names differ only by "
+        "case, and for orphaned sidecar files: roads.dbf, roads.prj, "
+        "dem.tif.aux.xml and similar without a main dataset file."
+    ),
+    "Проверка только сообщает о проблемах и не переименовывает файлы. Результаты по папке показываются один раз — у первого файла папки.": (
+        "The check only reports problems and never renames files. Folder "
+        "results are shown once, on the first file of the folder."
+    ),
+    "Путь в 275 символов — отмечается превышение ограничения Windows.": (
+        "A path of 275 characters — exceeding the Windows limit is "
+        "flagged."
+    ),
+    "В папке есть roads.dbf без roads.shp — отмечается осиротевший сопутствующий файл.": (
+        "The folder contains roads.dbf without roads.shp — an orphaned "
+        "sidecar file is flagged."
+    ),
+    "Файлы Roads.shp и roads.shp различаются только регистром — отмечается совпадение имён.": (
+        "The files Roads.shp and roads.shp differ only by case — a name "
+        "collision is flagged."
+    ),
+    "Длина полного пути {} символов — больше {} (ограничение Windows)": (
+        "The full path is {} characters long — more than {} (Windows "
+        "limit)"
+    ),
+    "Недопустимые символы в имени файла: {}": (
+        "Invalid characters in the file name: {}"
+    ),
+    "Имя файла зарезервировано в Windows: {}": (
+        "The file name is reserved in Windows: {}"
+    ),
+    "Имя файла заканчивается пробелом или точкой": (
+        "The file name ends with a space or a dot"
+    ),
+    "Имена файлов различаются только регистром: {}": (
+        "File names differ only by case: {}"
+    ),
+    "Осиротевший сопутствующий файл: {} — основной файл не найден": (
+        "Orphaned sidecar file: {} — the main file was not found"
+    ),
     "Уточнить систему координат и проверить СК": (
         "Refine CRS and check it"
     ),
@@ -629,11 +762,37 @@ EN_TRANSLATIONS = {
         "a .tfw/.tifw/.wld world file when no CRS is present, and also "
         "deprecated CRS, units and axis order."
     ),
-    "Проверка геометрий и координат": "Geometry and coordinate check",
-    "Ищет самопересечения, незамкнутые кольца, пустые и null-геометрии, NaN/Inf, слишком большие координаты, перепутанные широту и долготу и выход за диапазон CRS.": (
-        "Finds self-intersections, unclosed rings, empty and null "
-        "geometries, NaN/Inf, excessively large coordinates, swapped "
-        "latitude and longitude, and coordinates outside the CRS range."
+    "Кольцо, у которого первая и последняя вершины не совпадают — отмечается «Незамкнутое кольцо».": (
+        "A ring whose first and last vertices do not coincide — “Unclosed "
+        "ring” is flagged."
+    ),
+    "Объект без геометрии — отмечается «Геометрия отсутствует (null)».": (
+        "A feature without geometry — “Geometry is missing (null)” is "
+        "flagged."
+    ),
+    "Итоги группируются по слою, а для найденных ошибок сохраняются номер объекта и место ошибки; подробно описывается до 1000 ошибок на слой.": (
+        "Results are grouped by layer, and the feature number and the "
+        "location of the error are saved for the found errors; up to "
+        "1,000 errors per layer are described in detail."
+    ),
+    "Ищет NaN/Inf, слишком большие значения, перепутанные широту и долготу и координаты вне допустимого диапазона CRS.": (
+        "Finds NaN/Inf, excessively large values, swapped latitude and "
+        "longitude and coordinates outside the valid CRS range."
+    ),
+    "Для каждой вершины объекта координаты проверяются на NaN и бесконечность, на абсолютные значения больше 1e9, на перепутанные широту и долготу и на выход за диапазон CRS.": (
+        "Every feature vertex is checked for NaN and infinity, for "
+        "absolute values greater than 1e9, for swapped latitude and "
+        "longitude, and for coordinates outside the CRS range."
+    ),
+    "Для географических систем координат долгота должна быть в пределах от -180 до 180, широта — от -90 до 90. Для проекционных систем вершина преобразуется в WGS 84 и проверяется попадание в границы системы координат.": (
+        "For geographic coordinate systems the longitude must be within "
+        "-180 to 180 and the latitude within -90 to 90. For projected "
+        "systems the vertex is transformed to WGS 84 and checked against "
+        "the bounds of the coordinate system."
+    ),
+    "Координата с абсолютным значением больше 1e9 — отмечается «Слишком большая координата».": (
+        "A coordinate with an absolute value greater than 1e9 — "
+        "“Excessively large coordinate” is flagged."
     ),
     "Нелатинское имя поля: {}": "Non-Latin field name: {}",
     "Геометрия отсутствует (null)": "Geometry is missing (null)",

@@ -1,6 +1,170 @@
 ZGeo change log
 ===============
 
+Version 1.36.0 — 2026-11-16
+Previous GitHub release: v1.35.0 (2026-11-16)
+
+Overview
+--------
+ZGeo 1.36.0 adds a "File name and path check": path length,
+invalid and reserved names, case-insensitive collisions and orphaned
+sidecar files.
+
+Changes in 1.36.0
+-----------------
+- Added the "File name and path check":
+  - a full path longer than 260 characters is flagged (Windows limit);
+  - the characters <>:"|?* and control characters in a file name are
+    flagged;
+  - reserved Windows names (CON, PRN, AUX, NUL, CLOCK$, COM1-9,
+    LPT1-9) and names ending with a space or a dot are flagged;
+  - files whose names differ only by case are reported once per
+    folder;
+  - orphaned sidecar files (roads.dbf, roads.prj, dem.tif.aux.xml and
+    similar without the main dataset file) are reported once per
+    folder.
+- The check only reports problems and never renames or moves files.
+- The check is optional and disabled by default and applies to all
+  file categories, including rasters.
+- Russian and English interface strings, README, metadata and tests
+  were updated.
+
+Compatibility
+-------------
+- QGIS 3.16 and newer, including QGIS 4 / Qt 6.
+- Python 3.9+.
+- Windows is the primary target; the plugin uses QGIS and PyQt APIs.
+
+Installation
+------------
+1. Download `zgeo-1.36.0.zip`.
+2. In QGIS open Plugins → Manage and Install Plugins → Install from ZIP.
+3. Select the downloaded archive and restart QGIS if it was running.
+
+Project
+-------
+https://github.com/gloryvictory/zgeo
+
+Version 1.35.0 — 2026-11-16
+Previous GitHub release: v1.34.0 (2026-11-16)
+
+Overview
+--------
+ZGeo 1.35.0 adds a "Duplicate features check" that finds features with
+completely identical geometry.
+
+Changes in 1.35.0
+-----------------
+- Added the "Duplicate features check":
+  - feature geometries are compared byte by byte (WKB), so only fully
+    identical geometries match;
+  - the key includes the geometry type, the vertex count and all
+    coordinates, including Z;
+  - null and empty geometries are skipped;
+  - each duplicate is reported with the feature id and the id of the
+    feature it matches;
+  - up to 1000 duplicates per layer are described in detail, the
+    summary shows the number of duplicates and groups.
+- The check is optional and disabled by default.
+- Russian and English interface strings, README, metadata and tests
+  were updated.
+
+Compatibility
+-------------
+- QGIS 3.16 and newer, including QGIS 4 / Qt 6.
+- Python 3.9+.
+- Windows is the primary target; the plugin uses QGIS and PyQt APIs.
+
+Installation
+------------
+1. Download `zgeo-1.35.0.zip`.
+2. In QGIS open Plugins → Manage and Install Plugins → Install from ZIP.
+3. Select the downloaded archive and restart QGIS if it was running.
+
+Project
+-------
+https://github.com/gloryvictory/zgeo
+
+Version 1.34.0 — 2026-11-16
+Previous GitHub release: v1.33.0 (2026-11-16)
+
+Overview
+--------
+ZGeo 1.34.0 adds a ".prj file check": it verifies that the projection
+file exists, can be read and matches the CRS of the layer.
+
+Changes in 1.34.0
+-----------------
+- Added the ".prj file check" for Shapefile datasets:
+  - a missing .prj (or .qpj) file is flagged;
+  - an unreadable, empty or non-WKT .prj is flagged;
+  - unbalanced brackets or an unknown WKT root are treated as broken
+    WKT;
+  - the CRS type (geographic or projected) from the .prj is compared
+    with the CRS of the layer;
+  - the EPSG code from the .prj, when present, is compared with the
+    layer CRS.
+- The check is optional and disabled by default.
+- The "Metadata and CRS" check no longer reports a missing .prj when
+  the new check is selected, so the same problem is reported once.
+- Russian and English interface strings, README, metadata and tests
+  were updated.
+
+Compatibility
+-------------
+- QGIS 3.16 and newer, including QGIS 4 / Qt 6.
+- Python 3.9+.
+- Windows is the primary target; the plugin uses QGIS and PyQt APIs.
+
+Installation
+------------
+1. Download `zgeo-1.34.0.zip`.
+2. In QGIS open Plugins → Manage and Install Plugins → Install from ZIP.
+3. Select the downloaded archive and restart QGIS if it was running.
+
+Project
+-------
+https://github.com/gloryvictory/zgeo
+
+Version 1.33.0 — 2026-11-16
+Previous GitHub release: v1.32.0 (2026-11-16)
+
+Overview
+--------
+ZGeo 1.33.0 adds a separate "Geometry validity check" and a separate
+coordinate check: NaN/Inf, excessively large values, swapped latitude
+and longitude, coordinates outside the valid CRS range.
+
+Changes in 1.33.0
+-----------------
+- The former "Geometry and coordinate check" is split into two checks:
+  - "Geometry validity check" — self-intersections, unclosed rings,
+    empty and null geometries;
+  - "Coordinate check" — NaN/Inf, excessively large values, swapped
+    latitude and longitude and coordinates outside the valid CRS range.
+- Both checks are optional, disabled by default and have their own
+  description panel with actions and examples.
+- Check statistics, Excel and HTML reports show the two checks as
+  separate sections and rows.
+- Russian and English interface strings, README, metadata and tests
+  were updated.
+
+Compatibility
+-------------
+- QGIS 3.16 and newer, including QGIS 4 / Qt 6.
+- Python 3.9+.
+- Windows is the primary target; the plugin uses QGIS and PyQt APIs.
+
+Installation
+------------
+1. Download `zgeo-1.33.0.zip`.
+2. In QGIS open Plugins → Manage and Install Plugins → Install from ZIP.
+3. Select the downloaded archive and restart QGIS if it was running.
+
+Project
+-------
+https://github.com/gloryvictory/zgeo
+
 Version 1.32.0 — 2026-11-16
 Previous GitHub release: v1.30.0 (2026-11-15)
 

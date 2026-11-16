@@ -18,10 +18,14 @@ from qgis.core import (
     QgsRectangle,
 )
 
-from .check_dialog import CHECK_GEOMETRY_COORDINATES
+from .check_dialog import CHECK_COORDINATES, CHECK_GEOMETRY
 from .file_info import vector_layers
 from .i18n import tr
-from .quality_check import QualityIssue, coordinate_problem
+from .quality_check import (
+    QualityIssue,
+    coordinate_problem,
+    duplicate_geometry_issues,
+)
 
 MAX_DETAIL_ISSUES = 1000
 
@@ -132,7 +136,58 @@ def inspect_geometry_and_coordinates(
     return issues, applicable
 
 
+def inspect_duplicate_geometries(
+    geo_file,
+) -> Tuple[List[QualityIssue], bool]:
+    """Найти объекты с полностью совпадающей геометрией."""
+
+    try:
+        layers = vector_layers(geo_file)
+    except Exception:
+        return [], False
+
+    issues: List[QualityIssue] = []
+    applicable = False
+
+    for layer in layers:
+        if not layer.isSpatial():
+            continue
+        applicable = True
+
+        entries: List[Tuple[int, bytes]] = []
+        try:
+            request = QgsFeatureRequest().setNoAttributes()
+            for feature_index, feature in enumerate(
+                layer.getFeatures(request), start=1
+            ):
+                try:
+                    geometry = feature.geometry()
+                    if (
+                        geometry is None
+                        or geometry.isNull()
+                        or geometry.isEmpty()
+                    ):
+                        continue
+                    feature_id = feature.id()
+                    if feature_id is None or feature_id < 0:
+                        feature_id = feature_index
+                    entries.append(
+                        (feature_id, bytes(geometry.asWkb()))
+                    )
+                except Exception:
+                    continue
+        except Exception:
+            continue
+
+        issues.extend(
+            duplicate_geometry_issues(layer.name(), entries)
+        )
+
+    return issues, applicable
+
+
 def _detail(
+    check: str,
     layer_name: str,
     feature_id: int,
     location: str,
@@ -140,7 +195,7 @@ def _detail(
     args: Tuple[object, ...] = (),
 ) -> QualityIssue:
     return QualityIssue(
-        CHECK_GEOMETRY_COORDINATES,
+        check,
         message,
         args,
         layer=layer_name,
@@ -162,6 +217,7 @@ def _inspect_geometry(
         stats.null += 1
         details.append(
             _detail(
+                CHECK_GEOMETRY,
                 layer_name,
                 feature_id,
                 "Геометрия",
@@ -174,6 +230,7 @@ def _inspect_geometry(
         stats.empty += 1
         details.append(
             _detail(
+                CHECK_GEOMETRY,
                 layer_name,
                 feature_id,
                 "Геометрия",
@@ -187,6 +244,7 @@ def _inspect_geometry(
         stats.unclosed_rings += 1
         details.append(
             _detail(
+                CHECK_GEOMETRY,
                 layer_name,
                 feature_id,
                 "Кольцо",
@@ -206,6 +264,7 @@ def _inspect_geometry(
                 stats.self_intersections += 1
                 details.append(
                     _detail(
+                        CHECK_GEOMETRY,
                         layer_name,
                         feature_id,
                         "Геометрия",
@@ -216,6 +275,7 @@ def _inspect_geometry(
                 stats.other_invalid += 1
                 details.append(
                     _detail(
+                        CHECK_GEOMETRY,
                         layer_name,
                         feature_id,
                         "Геометрия",
@@ -228,6 +288,7 @@ def _inspect_geometry(
         stats.other_invalid += 1
         details.append(
             _detail(
+                CHECK_GEOMETRY,
                 layer_name,
                 feature_id,
                 "Геометрия",
@@ -383,6 +444,7 @@ def _inspect_coordinates(
 
         details.append(
             _detail(
+                CHECK_COORDINATES,
                 layer_name,
                 feature_id,
                 tr("Вершина {}", vertex_index),
@@ -398,7 +460,7 @@ def _geometry_issues(stats: _LayerStats) -> List[QualityIssue]:
         return []
     return [
         QualityIssue(
-            CHECK_GEOMETRY_COORDINATES,
+            CHECK_GEOMETRY,
             "Слой «{}»: некорректных геометрий: {} "
             "(самопересечения: {}, незамкнутые кольца: {}, прочие: {}), "
             "пустых: {}, null-геометрий: {}",
@@ -425,7 +487,7 @@ def _coordinate_issues(stats: _LayerStats) -> List[QualityIssue]:
         return []
     return [
         QualityIssue(
-            CHECK_GEOMETRY_COORDINATES,
+            CHECK_COORDINATES,
             "Слой «{}»: координаты — NaN/Inf: {}, слишком большие: {}, "
             "вне диапазона CRS: {}, похоже на перепутанные широту и "
             "долготу: {}",

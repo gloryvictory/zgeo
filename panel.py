@@ -56,13 +56,17 @@ from .charts import BarChart, BarDatum
 from .check_timing import TimingRecord, build_timing_rows
 from .copy_files import build_copy_plan, copy_plan
 from .check_dialog import (
+    CHECK_COORDINATES,
     CHECK_CRS_QUALITY,
     CHECK_COUNT_QUALITY,
     CHECK_DATASET_INTEGRITY,
+    CHECK_DUPLICATES,
     CHECK_FIELD_NAMES,
-    CHECK_GEOMETRY_COORDINATES,
+    CHECK_FILE_PATHS,
+    CHECK_GEOMETRY,
     CHECK_JSON_GEOJSON,
     CHECK_METADATA_CRS,
+    CHECK_PRJ,
     CHECK_SIZE,
     PROBLEM_CHECKS,
     ChecksDialog,
@@ -80,7 +84,10 @@ from .file_info import (
     inspect_layer_summary,
 )
 from .formatting import format_size
-from .geometry_check import inspect_geometry_and_coordinates
+from .geometry_check import (
+    inspect_duplicate_geometries,
+    inspect_geometry_and_coordinates,
+)
 from .quality_check import (
     QualityIssue,
     completeness_issues,
@@ -88,9 +95,12 @@ from .quality_check import (
     crs_metadata_issues,
     dbf_encoding_issues,
     directory_files,
+    directory_names,
     empty_layer_issues,
     field_name_issues,
+    file_path_issues,
     metadata_sidecar_issues,
+    prj_file_issues,
     truncated_duplicate_issues,
 )
 from .i18n import (
@@ -128,8 +138,8 @@ DISABLED_FORMATS_KEY = "zgeo/disabled_formats"
 ICON_PATH = Path(__file__).with_name("icon.svg")
 CHECKS_TOOLTIP = (
     "Проверки: уточнить размер, систему координат и количество элементов, "
-    "проверить JSON, имена полей, набор данных, метаданные и CRS, "
-    "геометрии и координаты."
+    "проверить JSON, имена полей, имена и пути файлов, набор данных, "
+    "метаданные и CRS, .prj, геометрии, дубли, координаты."
 )
 SIZE_CHART_COLOR = "#0F766E"
 TYPE_CHART_COLORS = (
@@ -209,6 +219,8 @@ class ZGeoPanel(QDockWidget):
         self._problem_selected: Tuple[str, ...] = ()
         self._problem_checks_run: Set[str] = set()
         self._problem_file_cache: Dict[str, Dict[str, Path]] = {}
+        self._problem_name_cache: Dict[str, Tuple[str, ...]] = {}
+        self._problem_folder_owners: Dict[str, str] = {}
         self._problem_info_cache: Dict[str, Optional[FileInfo]] = {}
         self._check_timing_active = False
         self._check_timing_started_at = 0.0
@@ -2852,7 +2864,11 @@ class ZGeoPanel(QDockWidget):
                 if geo_file.extension in (".shp", ".mif", ".tab")
             ]
 
-        if check in (CHECK_CRS_QUALITY, CHECK_METADATA_CRS):
+        if check in (
+            CHECK_CRS_QUALITY,
+            CHECK_METADATA_CRS,
+            CHECK_FILE_PATHS,
+        ):
             allowed = {VECTOR, TABLE, OTHER, RASTER}
         else:
             allowed = {VECTOR, TABLE, OTHER}
@@ -2875,6 +2891,8 @@ class ZGeoPanel(QDockWidget):
         self._problem_selected = tuple(checks)
         self._problem_checks_run = set(checks)
         self._problem_file_cache = {}
+        self._problem_name_cache = {}
+        self._problem_folder_owners = {}
         self._set_problems_filter_available(False)
         self.problems_label.setText(tr("Проблемных файлов: 0"))
         self.problems_label.setToolTip(tr("Идёт проверка…"))
@@ -3050,6 +3068,12 @@ class ZGeoPanel(QDockWidget):
 
         if check == CHECK_DATASET_INTEGRITY:
             return self._inspect_dataset_integrity(geo_file)
+        if check == CHECK_PRJ:
+            return self._inspect_prj_file(geo_file)
+        if check == CHECK_DUPLICATES:
+            return self._inspect_duplicates(geo_file)
+        if check == CHECK_FILE_PATHS:
+            return self._inspect_file_paths(geo_file)
 
         file_info = self._problem_file_info(geo_file)
         if file_info is None:
@@ -3061,9 +3085,9 @@ class ZGeoPanel(QDockWidget):
             return self._inspect_crs_quality(geo_file, file_info)
         if check == CHECK_COUNT_QUALITY:
             return self._inspect_count_quality(geo_file, file_info)
-        if check == CHECK_GEOMETRY_COORDINATES:
+        if check in (CHECK_GEOMETRY, CHECK_COORDINATES):
             return self._inspect_geometry_coordinates(
-                geo_file, file_info
+                geo_file, file_info, check
             )
         if check == CHECK_METADATA_CRS:
             return self._inspect_metadata_crs(geo_file, file_info)
@@ -3177,25 +3201,100 @@ class ZGeoPanel(QDockWidget):
         self._apply_count_summary(geo_file, layer_counts)
         return issues, True
 
-    def _inspect_geometry_coordinates(
-        self, geo_file: GeoFile, file_info: FileInfo
+    def _inspect_file_paths(
+        self, geo_file: GeoFile
     ) -> Tuple[List[QualityIssue], bool]:
+        """Проверить длину пути, имя файла и сопутствующие файлы папки."""
+
+        folder = geo_file.path.parent
+        issues = [
+            replace(issue, check=CHECK_FILE_PATHS)
+            for issue in file_path_issues(
+                geo_file,
+                directory_files(folder, self._problem_file_cache),
+                names=directory_names(
+                    folder, self._problem_name_cache
+                ),
+                folder_owner=self._folder_owner(folder)
+                == str(geo_file.path),
+            )
+        ]
+        return issues, True
+
+    def _folder_owner(self, folder: Path) -> str:
+        """Вернуть первый файл папки — ему достаются замечания по папке."""
+
+        key = str(folder)
+        owner = self._problem_folder_owners.get(key)
+        if owner is None:
+            candidates = sorted(
+                (
+                    item.path
+                    for item in self._files
+                    if item.path.parent == folder
+                ),
+                key=lambda path: path.name.casefold(),
+            )
+            owner = str(candidates[0]) if candidates else ""
+            self._problem_folder_owners[key] = owner
+        return owner
+
+    def _inspect_duplicates(
+        self, geo_file: GeoFile
+    ) -> Tuple[List[QualityIssue], bool]:
+        """Найти объекты с полностью совпадающей геометрией."""
+
+        found, applicable = inspect_duplicate_geometries(geo_file)
+        issues = [
+            replace(issue, check=CHECK_DUPLICATES) for issue in found
+        ]
+        return issues, applicable
+
+
+    def _inspect_geometry_coordinates(
+        self, geo_file: GeoFile, file_info: FileInfo, check: str
+    ) -> Tuple[List[QualityIssue], bool]:
+        """Выполнить проверку геометрий или координат."""
+
         if not file_info.vector_layers:
             return [], False
 
-        geometry_issues, applicable = inspect_geometry_and_coordinates(
+        found, applicable = inspect_geometry_and_coordinates(
             geo_file,
-            check_geometry=True,
-            check_coordinates=True,
+            check_geometry=check == CHECK_GEOMETRY,
+            check_coordinates=check == CHECK_COORDINATES,
+        )
+        issues = [replace(issue, check=check) for issue in found]
+        return issues, applicable
+
+    def _inspect_prj_file(
+        self, geo_file: GeoFile
+    ) -> Tuple[List[QualityIssue], bool]:
+        """Проверить наличие, читаемость .prj и согласованность с CRS."""
+
+        if geo_file.extension != ".shp":
+            return [], False
+
+        files = directory_files(
+            geo_file.path.parent, self._problem_file_cache
+        )
+        file_info = self._problem_file_info(geo_file)
+        descriptors = (
+            [
+                layer.crs_descriptor
+                for layer in file_info.vector_layers
+                if layer.spatial
+            ]
+            if file_info is not None
+            else []
         )
         issues = [
-            replace(
-                issue,
-                check=CHECK_GEOMETRY_COORDINATES,
+            replace(issue, check=CHECK_PRJ)
+            for issue in prj_file_issues(
+                geo_file, files, descriptors
             )
-            for issue in geometry_issues
         ]
-        return issues, applicable
+        return issues, True
 
     def _inspect_metadata_crs(
         self, geo_file: GeoFile, file_info: FileInfo
@@ -3229,6 +3328,9 @@ class ZGeoPanel(QDockWidget):
             has_crs=has_crs,
             include_cpg=(
                 CHECK_DATASET_INTEGRITY not in self._problem_selected
+            ),
+            include_prj=(
+                CHECK_PRJ not in self._problem_selected
             ),
         ):
             issues.append(
@@ -3328,6 +3430,8 @@ class ZGeoPanel(QDockWidget):
         self._problem_queue.clear()
         self._problem_info_cache = {}
         self._problem_file_cache = {}
+        self._problem_name_cache = {}
+        self._problem_folder_owners = {}
         self.check_attributes_button.setToolTip(
             tr(CHECKS_TOOLTIP)
         )
@@ -3382,6 +3486,8 @@ class ZGeoPanel(QDockWidget):
         self._problem_interrupted = self._problem_checked
         self._problem_info_cache = {}
         self._problem_file_cache = {}
+        self._problem_name_cache = {}
+        self._problem_folder_owners = {}
         self.check_attributes_button.setToolTip(
             tr(CHECKS_TOOLTIP)
         )
@@ -3420,6 +3526,8 @@ class ZGeoPanel(QDockWidget):
         self._problem_selected = ()
         self._problem_checks_run.clear()
         self._problem_file_cache = {}
+        self._problem_name_cache = {}
+        self._problem_folder_owners = {}
         self._problem_info_cache = {}
         self._reset_problems_filter()
         self._hide_progress()

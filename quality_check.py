@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import codecs
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
-from .scanner import RASTER
+from .i18n import tr
+from .scanner import FORMATS, RASTER
 
 DBF_FIELD_NAME_LIMIT = 10
 MAX_ABS_COORDINATE = 1e9
@@ -32,6 +34,63 @@ UNIT_SYMBOLS = {
 }
 RASTER_AUXILIARY_METADATA = (".aux.xml", ".ovr")
 WORLD_FILE_EXTENSIONS = (".tfw", ".tifw", ".wld")
+PRJ_EXTENSIONS = (".prj", ".qpj")
+PRJ_ENCODINGS = ("utf-8-sig", "cp1251", "latin-1")
+WKT_GEOGRAPHIC_ROOTS = frozenset(
+    {"GEOGCS", "GEOGCRS", "GEODCRS", "GEOGRAPHICCRS"}
+)
+WKT_PROJECTED_ROOTS = frozenset(
+    {
+        "PROJCS",
+        "PROJCRS",
+        "PROJECTEDCRS",
+        "ENGCRS",
+        "ENGINEERINGCRS",
+        "LOCAL_CS",
+        "LOCALCRS",
+    }
+)
+WKT_ROOT_NAMES = WKT_GEOGRAPHIC_ROOTS | WKT_PROJECTED_ROOTS | frozenset(
+    {"COMPD_CS", "COMPOUNDCRS", "VERT_CS", "VERTCRS", "BOUNDCRS"}
+)
+EPSG_PATTERN = re.compile(
+    r"""(?:AUTHORITY|ID)\s*\[\s*["']EPSG["']\s*,\s*["']?(\d+)["']?\s*\]""",
+    re.IGNORECASE,
+)
+
+MAX_WINDOWS_PATH = 260
+INVALID_NAME_CHARACTERS = frozenset('<>:"|?*')
+RESERVED_NAME_STEMS = frozenset(
+    {"con", "prn", "aux", "nul", "clock$"}
+    | {"com{}".format(index) for index in range(1, 10)}
+    | {"lpt{}".format(index) for index in range(1, 10)}
+)
+STEM_SIDECAR_PRIMARIES: Dict[str, Tuple[str, ...]] = {
+    ".dbf": (".shp",),
+    ".shx": (".shp",),
+    ".qix": (".shp",),
+    ".sbn": (".shp",),
+    ".sbx": (".shp",),
+    ".fbn": (".shp",),
+    ".fbx": (".shp",),
+    ".ain": (".shp",),
+    ".aih": (".shp",),
+    ".atx": (".shp",),
+    ".ixs": (".shp",),
+    ".mxs": (".shp",),
+    ".fix": (".shp",),
+    ".mid": (".mif",),
+    ".dat": (".tab",),
+    ".map": (".tab",),
+    ".id": (".tab",),
+    ".ind": (".tab",),
+    ".csvt": (".csv",),
+    ".hdr": (".bil", ".bsq", ".bip"),
+}
+GENERIC_SIDECAR_EXTENSIONS = frozenset(
+    {".prj", ".cpg", ".tfw", ".wld", ".qml", ".sld"}
+)
+APPENDED_SIDECAR_SUFFIXES = (".aux.xml", ".ovr", ".xml")
 
 REQUIRED_SIDECARS: Dict[str, Tuple[str, ...]] = {
     ".shp": (".dbf", ".shx"),
@@ -70,6 +129,189 @@ class CrsDescriptor:
     deprecated: bool
     units: str
     axis_inverted: bool
+
+
+@dataclass(frozen=True)
+class PrjFileState:
+    """Результат разбора файла .prj/.qpj."""
+
+    status: str
+    text: str = ""
+    name: str = ""
+    kind: str = ""
+    epsg: str = ""
+    detail: str = ""
+
+
+def prj_kind_label(kind: str) -> str:
+    """Вернуть переведённую подпись типа системы координат."""
+
+    if kind == "geographic":
+        return tr("географическая")
+    if kind == "projected":
+        return tr("проекционная")
+    return tr("иная")
+
+
+def invalid_name_characters(name: str) -> str:
+    """Список недопустимых в Windows символов, найденных в имени."""
+
+    found = {
+        character
+        for character in name
+        if character in INVALID_NAME_CHARACTERS or ord(character) < 32
+    }
+    return "".join(sorted(found))
+
+
+def is_reserved_file_name(name: str) -> bool:
+    """Проверить зарезервированное в Windows имя файла."""
+
+    return Path(name).stem.casefold() in RESERVED_NAME_STEMS
+
+
+def has_trailing_space_or_dot(name: str) -> bool:
+    """Проверить завершение имени точкой или пробелом."""
+
+    return name.endswith((" ", "."))
+
+
+def orphan_sidecars(files: Mapping[str, Path]) -> List[str]:
+    """Вернуть сопутствующие файлы, у которых нет основного файла."""
+
+    names = {name.casefold() for name in files}
+    return [
+        name for name in sorted(names) if _is_orphan_sidecar(name, names)
+    ]
+
+
+def _is_orphan_sidecar(name: str, names: set) -> bool:
+    for suffix in APPENDED_SIDECAR_SUFFIXES:
+        if not name.endswith(suffix) or len(name) <= len(suffix):
+            continue
+        primary = name[: -len(suffix)]
+        if Path(primary).suffix in FORMATS:
+            return primary not in names
+
+    extension = Path(name).suffix
+    if extension in STEM_SIDECAR_PRIMARIES:
+        stem = name[: -len(extension)]
+        primaries = STEM_SIDECAR_PRIMARIES[extension]
+        return not any(stem + primary in names for primary in primaries)
+
+    if extension in GENERIC_SIDECAR_EXTENSIONS:
+        stem = name[: -len(extension)]
+        return not any(
+            Path(other).stem == stem and Path(other).suffix in FORMATS
+            for other in names
+        )
+
+    return False
+
+
+def file_path_issues(
+    geo_file,
+    files: Mapping[str, Path],
+    *,
+    names: Sequence[str] = (),
+    folder_owner: bool = False,
+) -> List[QualityIssue]:
+    """Проверить длину пути, имя файла, коллизии и осиротевшие спутники."""
+
+    path = geo_file.path
+    issues: List[QualityIssue] = []
+
+    length = len(str(path))
+    if length > MAX_WINDOWS_PATH:
+        issues.append(
+            QualityIssue(
+                "file_paths",
+                "Длина полного пути {} символов — больше {} "
+                "(ограничение Windows)",
+                (length, MAX_WINDOWS_PATH),
+                location="Путь",
+            )
+        )
+
+    invalid = invalid_name_characters(path.name)
+    if invalid:
+        issues.append(
+            QualityIssue(
+                "file_paths",
+                "Недопустимые символы в имени файла: {}",
+                (invalid,),
+                location="Имя файла",
+            )
+        )
+
+    if is_reserved_file_name(path.name):
+        issues.append(
+            QualityIssue(
+                "file_paths",
+                "Имя файла зарезервировано в Windows: {}",
+                (path.name,),
+                location="Имя файла",
+            )
+        )
+
+    if has_trailing_space_or_dot(path.name):
+        issues.append(
+            QualityIssue(
+                "file_paths",
+                "Имя файла заканчивается пробелом или точкой",
+                location="Имя файла",
+            )
+        )
+
+    group = sorted(
+        name for name in names if name.casefold() == path.name.casefold()
+    )
+    if len(group) > 1 and path.name == group[0]:
+        issues.append(
+            QualityIssue(
+                "file_paths",
+                "Имена файлов различаются только регистром: {}",
+                (", ".join(group),),
+                location="Имя файла",
+            )
+        )
+
+    if folder_owner:
+        for orphan in orphan_sidecars(files):
+            issues.append(
+                QualityIssue(
+                    "file_paths",
+                    "Осиротевший сопутствующий файл: {} — основной "
+                    "файл не найден",
+                    (orphan,),
+                    location=orphan,
+                    detail_only=True,
+                )
+            )
+
+    return issues
+
+
+def directory_names(
+    directory: Path, cache: Dict[str, Tuple[str, ...]]
+) -> Tuple[str, ...]:
+    """Вернуть имена файлов каталога в исходном регистре."""
+
+    key = str(directory)
+    names = cache.get(key)
+    if names is None:
+        try:
+            names = tuple(
+                sorted(
+                    entry.name
+                    for entry in directory.iterdir()
+                    if entry.is_file()
+                )
+            )
+        except OSError:
+            names = ()
+        cache[key] = names
+    return names
 
 
 def directory_files(
@@ -190,6 +432,7 @@ def metadata_sidecar_issues(
     *,
     has_crs: bool = True,
     include_cpg: bool = True,
+    include_prj: bool = True,
 ) -> List[QualityIssue]:
     """Проверить наличие обязательных и вспомогательных файлов метаданных."""
 
@@ -197,9 +440,9 @@ def metadata_sidecar_issues(
     base = geo_file.path.stem.casefold()
 
     if geo_file.extension == ".shp":
-        if not any(
+        if include_prj and not any(
             base + extension in files
-            for extension in (".prj", ".qpj")
+            for extension in PRJ_EXTENSIONS
         ):
             issues.append(
                 QualityIssue(
@@ -384,6 +627,243 @@ def truncated_duplicate_issues(
             )
 
     return issues
+
+
+def prj_state(path: Path) -> "PrjFileState":
+    """Прочитать .prj и разобрать WKT без привязки к QGIS."""
+
+    try:
+        raw = path.read_bytes()
+    except OSError as error:
+        return PrjFileState("unreadable", detail=str(error))
+
+    text = _decode_prj(raw)
+    stripped = text.strip()
+    if not stripped:
+        return PrjFileState("empty")
+
+    info = _wkt_info(stripped)
+    if info is None:
+        return PrjFileState("invalid", text=stripped, detail=_snippet(stripped))
+    kind, name, epsg = info
+    return PrjFileState(
+        "ok",
+        text=stripped,
+        name=name,
+        kind=kind,
+        epsg=epsg,
+    )
+
+
+def prj_file_issues(
+    geo_file,
+    files: Mapping[str, Path],
+    descriptors: Sequence[CrsDescriptor] = (),
+) -> List[QualityIssue]:
+    """Проверить наличие, читаемость .prj и согласованность с CRS слоёв."""
+
+    base = geo_file.path.stem.casefold()
+    prj_path = files.get(base + ".prj")
+    qpj_path = files.get(base + ".qpj")
+    path = prj_path or qpj_path
+
+    if path is None:
+        return [
+            QualityIssue(
+                "prj_file",
+                "Нет файла .prj: система координат слоя не закреплена",
+                location=".prj",
+            )
+        ]
+
+    state = prj_state(path)
+    if state.status == "unreadable":
+        return [
+            QualityIssue(
+                "prj_file",
+                "Не удалось прочитать файл .prj: {}",
+                (path.name,),
+                location=path.name,
+            )
+        ]
+    if state.status == "empty":
+        return [
+            QualityIssue(
+                "prj_file",
+                "Файл .prj пуст: система координат не указана",
+                location=path.name,
+            )
+        ]
+    if state.status == "invalid":
+        return [
+            QualityIssue(
+                "prj_file",
+                "Файл .prj не содержит корректного WKT: {}",
+                (state.detail,),
+                location=path.name,
+            )
+        ]
+
+    issues: List[QualityIssue] = []
+    comparable = [
+        descriptor
+        for descriptor in descriptors
+        if descriptor.valid and _crs_kind(descriptor)
+    ]
+
+    mismatched_kind = [
+        descriptor
+        for descriptor in comparable
+        if _crs_kind(descriptor) != state.kind
+    ]
+    if comparable and len(mismatched_kind) == len(comparable):
+        descriptor = mismatched_kind[0]
+        issues.append(
+            QualityIssue(
+                "prj_file",
+                "Тип системы координат в .prj не совпадает с CRS слоя: "
+                "в .prj {}, у слоя {}",
+                (
+                    prj_kind_label(state.kind),
+                    prj_kind_label(_crs_kind(descriptor)),
+                ),
+                layer=descriptor.layer,
+                location=path.name,
+            )
+        )
+
+    authid_layers = [
+        descriptor
+        for descriptor in descriptors
+        if descriptor.valid
+        and descriptor.authid.upper().startswith("EPSG:")
+    ]
+    if state.epsg and authid_layers:
+        code = state.epsg
+        mismatched_epsg = [
+            descriptor
+            for descriptor in authid_layers
+            if descriptor.authid.split(":", 1)[1].strip() != code
+        ]
+        if len(mismatched_epsg) == len(authid_layers):
+            descriptor = mismatched_epsg[0]
+            issues.append(
+                QualityIssue(
+                    "prj_file",
+                    "Файл .prj не соответствует CRS слоя: в .prj EPSG:{}, "
+                    "у слоя {}",
+                    (code, descriptor.authid),
+                    layer=descriptor.layer,
+                    location=path.name,
+                )
+            )
+
+    return issues
+
+
+def _decode_prj(raw: bytes) -> str:
+    for encoding in PRJ_ENCODINGS:
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
+def _snippet(text: str, limit: int = 60) -> str:
+    compact = " ".join(text.split())
+    if len(compact) <= limit:
+        return compact
+    return compact[: limit - 1] + "…"
+
+
+def _wkt_info(text: str) -> Optional[Tuple[str, str, str]]:
+    """Вернуть тип, имя и код EPSG из WKT или None, если WKT некорректен."""
+
+    if text.count("[") != text.count("]") or text.count("(") != text.count(")"):
+        return None
+    root = _wkt_root(text)
+    if root not in WKT_ROOT_NAMES:
+        return None
+    if root in WKT_GEOGRAPHIC_ROOTS:
+        kind = "geographic"
+    elif root in WKT_PROJECTED_ROOTS:
+        kind = "projected"
+    else:
+        kind = ""
+    codes = EPSG_PATTERN.findall(text)
+    return kind, _wkt_name(text), codes[-1] if codes else ""
+
+
+def _wkt_root(text: str) -> str:
+    match = re.match(r"\s*([A-Za-z_][A-Za-z_0-9]*)", text)
+    return match.group(1).upper() if match else ""
+
+
+def _wkt_name(text: str) -> str:
+    match = re.search(r"""["']([^"']+)["']""", text)
+    return match.group(1) if match else ""
+
+
+def _crs_kind(descriptor: CrsDescriptor) -> str:
+    if descriptor.projected:
+        return "projected"
+    if descriptor.geographic:
+        return "geographic"
+    return ""
+
+
+def duplicate_geometry_issues(
+    layer_name: str,
+    entries: Sequence[Tuple[int, object]],
+    *,
+    max_detail: int = 1000,
+) -> List[QualityIssue]:
+    """Найти объекты с полностью совпадающей геометрией.
+
+    entries — пары «идентификатор объекта, ключ геометрии»; ключом служит
+    WKB, поэтому совпадают только полностью одинаковые геометрии.
+    """
+
+    seen: Dict[object, int] = {}
+    counts: Dict[object, int] = {}
+    details: List[QualityIssue] = []
+    duplicates = 0
+
+    for feature_id, key in entries:
+        counts[key] = counts.get(key, 0) + 1
+        original = seen.get(key)
+        if original is None:
+            seen[key] = feature_id
+            continue
+        duplicates += 1
+        if len(details) < max_detail:
+            details.append(
+                QualityIssue(
+                    "duplicate_features",
+                    "Дубль геометрии объекта {} — совпадает с объектом {}",
+                    (feature_id, original),
+                    layer=layer_name,
+                    feature_id=feature_id,
+                    location="Геометрия",
+                    detail_only=True,
+                )
+            )
+
+    if not duplicates:
+        return []
+
+    groups = sum(1 for value in counts.values() if value > 1)
+    details.append(
+        QualityIssue(
+            "duplicate_features",
+            "Слой «{}»: дублей по геометрии: {}, групп: {}",
+            (layer_name, duplicates, groups),
+            layer=layer_name,
+            location="Геометрия",
+        )
+    )
+    return details
 
 
 def crs_issues(values: Sequence[str]) -> List[QualityIssue]:

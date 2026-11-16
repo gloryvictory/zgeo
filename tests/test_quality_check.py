@@ -15,10 +15,20 @@ from zgeo.quality_check import (
     crs_metadata_issues,
     dbf_encoding_issues,
     directory_files,
+    duplicate_geometry_issues,
+    file_path_issues,
+    invalid_name_characters,
+    is_reserved_file_name,
+    orphan_sidecars,
     empty_layer_issues,
     field_name_issues,
+    file_path_issues,
+    invalid_name_characters,
     is_known_encoding,
+    is_reserved_file_name,
+    orphan_sidecars,
     metadata_sidecar_issues,
+    prj_file_issues,
     truncated_duplicate_issues,
 )
 
@@ -555,6 +565,334 @@ class CoordinateProblemTests(unittest.TestCase):
             coordinate_problem(
                 500000.0, 5000000.0, geographic=False
             )
+        )
+
+
+class PrjFileTests(unittest.TestCase):
+    PROJECTED = (
+        'PROJCS["WGS 84 / Pseudo-Mercator",'
+        'GEOGCS["WGS 84",AUTHORITY["EPSG","4326"]],'
+        'AUTHORITY["EPSG","3857"]]'
+    )
+    GEOGRAPHIC = 'GEOGCS["WGS 84",AUTHORITY["EPSG","4326"]]'
+
+    def descriptor(self, **overrides) -> CrsDescriptor:
+        values = {
+            "layer": "roads",
+            "authid": "EPSG:3857",
+            "description": "WGS 84 / Pseudo-Mercator",
+            "valid": True,
+            "geographic": False,
+            "projected": True,
+            "deprecated": False,
+            "units": "Meters",
+            "axis_inverted": False,
+        }
+        values.update(overrides)
+        return CrsDescriptor(**values)
+
+    def issues(self, content, descriptors=()):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            files = {}
+            if content is not None:
+                prj = root / "roads.prj"
+                prj.write_bytes(
+                    content.encode("utf-8")
+                    if isinstance(content, str)
+                    else content
+                )
+                files["roads.prj"] = prj
+            return prj_file_issues(
+                geo_file(root / "roads.shp"),
+                files,
+                list(descriptors),
+            )
+
+    def messages(self, content, descriptors=()) -> list:
+        return [
+            issue.message.format(*issue.args)
+            for issue in self.issues(content, descriptors)
+        ]
+
+    def test_missing_prj_is_reported(self) -> None:
+        messages = self.messages(None)
+        self.assertTrue(
+            any("Нет файла .prj" in message for message in messages),
+            messages,
+        )
+
+    def test_empty_prj_is_reported(self) -> None:
+        messages = self.messages("")
+        self.assertTrue(
+            any("пуст" in message for message in messages), messages
+        )
+
+    def test_broken_wkt_is_reported(self) -> None:
+        messages = self.messages("не WKT")
+        self.assertTrue(
+            any("корректного WKT" in message for message in messages),
+            messages,
+        )
+
+    def test_unbalanced_brackets_are_reported(self) -> None:
+        messages = self.messages('PROJCS["name"')
+        self.assertTrue(
+            any("корректного WKT" in message for message in messages),
+            messages,
+        )
+
+    def test_matching_crs_has_no_issues(self) -> None:
+        self.assertEqual(
+            self.issues(self.PROJECTED, [self.descriptor()]), []
+        )
+
+    def test_type_mismatch_is_reported(self) -> None:
+        messages = self.messages(self.GEOGRAPHIC, [self.descriptor()])
+        self.assertTrue(
+            any("не совпадает с CRS слоя" in message for message in messages),
+            messages,
+        )
+
+    def test_epsg_mismatch_is_reported(self) -> None:
+        messages = self.messages(
+            self.GEOGRAPHIC,
+            [
+                self.descriptor(
+                    authid="EPSG:32637",
+                    geographic=True,
+                    projected=False,
+                )
+            ],
+        )
+        self.assertTrue(
+            any("EPSG:4326" in message for message in messages), messages
+        )
+
+    def test_esri_prj_without_epsg_matches_by_type(self) -> None:
+        esri = (
+            'PROJCS["WGS_1984_UTM_Zone_37N",'
+            'GEOGCS["GCS_WGS_1984",'
+            'DATUM["D_WGS_1984",'
+            'SPHEROID["WGS_1984",6378137.0,298.257223563]],'
+            'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],'
+            'PROJECTION["Transverse_Mercator"],UNIT["Meter",1.0]]'
+        )
+        self.assertEqual(
+            self.messages(esri, [self.descriptor(authid="EPSG:32637")]),
+            [],
+        )
+
+    def test_cp1251_wkt_is_readable(self) -> None:
+        wkt = 'PROJCS["МГГТ ЦМР",GEOGCS["WGS 84"]]'
+        messages = self.messages(wkt.encode("cp1251"))
+        self.assertEqual(
+            [
+                message
+                for message in messages
+                if "корректного WKT" in message
+            ],
+            [],
+        )
+
+    def test_qpj_is_used_when_prj_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            qpj = root / "roads.qpj"
+            qpj.write_text(self.PROJECTED, encoding="utf-8")
+            self.assertEqual(
+                prj_file_issues(
+                    geo_file(root / "roads.shp"),
+                    {"roads.qpj": qpj},
+                    [self.descriptor()],
+                ),
+                [],
+            )
+
+    def test_sidecar_prj_check_can_be_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shp = SimpleNamespace(
+                path=root / "roads.shp",
+                extension=".shp",
+                category="vector",
+            )
+            self.assertTrue(
+                any(
+                    ".prj" in issue.location
+                    for issue in metadata_sidecar_issues(shp, {})
+                )
+            )
+            self.assertEqual(
+                [
+                    issue
+                    for issue in metadata_sidecar_issues(
+                        shp, {}, include_prj=False, include_cpg=False
+                    )
+                ],
+                [],
+            )
+
+
+class DuplicateGeometryTests(unittest.TestCase):
+    def messages(self, entries: list) -> list:
+        return [
+            issue.message.format(*issue.args)
+            for issue in duplicate_geometry_issues("roads", entries)
+        ]
+
+    def test_identical_geometries_are_reported(self) -> None:
+        messages = self.messages([(1, b"a"), (2, b"a")])
+        self.assertTrue(
+            any("Дубль геометрии объекта 2 — совпадает с объектом 1" in m
+                for m in messages),
+            messages,
+        )
+        self.assertTrue(
+            any("дублей по геометрии: 1, групп: 1" in m for m in messages),
+            messages,
+        )
+
+    def test_unique_geometries_are_not_reported(self) -> None:
+        self.assertEqual(
+            duplicate_geometry_issues("roads", [(1, b"a"), (2, b"b")]),
+            [],
+        )
+
+    def test_three_identical_geometries_make_one_group(self) -> None:
+        messages = self.messages([(1, b"a"), (2, b"a"), (3, b"a")])
+        self.assertTrue(
+            any("дублей по геометрии: 2, групп: 1" in m for m in messages),
+            messages,
+        )
+
+    def test_empty_input_is_ignored(self) -> None:
+        self.assertEqual(duplicate_geometry_issues("roads", []), [])
+
+    def test_details_are_limited(self) -> None:
+        entries = [(0, b"a")] + [(index, b"a") for index in range(1, 20)]
+        issues = duplicate_geometry_issues("roads", entries, max_detail=5)
+        details = [issue for issue in issues if issue.detail_only]
+        self.assertEqual(len(details), 5)
+        self.assertTrue(issues[-1].message.startswith("Слой"))
+
+
+class FilePathTests(unittest.TestCase):
+    def geo_file(self, path: Path):
+        return SimpleNamespace(
+            path=path, extension=path.suffix.lower(), category="vector"
+        )
+
+    def messages(self, path: Path, names=(), files=None, **kwargs):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            entries = {}
+            for name in files or ():
+                entries[name.casefold()] = root / name
+            target = root / path.name
+            return [
+                issue.message.format(*issue.args)
+                for issue in file_path_issues(
+                    self.geo_file(target),
+                    entries,
+                    names=names,
+                    **kwargs,
+                )
+            ]
+
+    def test_long_path_is_reported(self) -> None:
+        name = "a" * 250 + ".shp"
+        messages = self.messages(Path(name))
+        self.assertTrue(
+            any("ограничение Windows" in message for message in messages),
+            messages,
+        )
+
+    def test_short_path_has_no_issues(self) -> None:
+        self.assertEqual(self.messages(Path("roads.shp")), [])
+
+    def test_invalid_characters(self) -> None:
+        self.assertEqual(invalid_name_characters("a<b>c|d?.shp"), "<>?|")
+        self.assertEqual(invalid_name_characters("roads.shp"), "")
+        messages = self.messages(Path("a*b.shp"))
+        self.assertTrue(
+            any("Недопустимые символы" in message for message in messages),
+            messages,
+        )
+
+    def test_reserved_names(self) -> None:
+        self.assertTrue(is_reserved_file_name("CON.shp"))
+        self.assertTrue(is_reserved_file_name("lpt9.shp"))
+        self.assertFalse(is_reserved_file_name("console.shp"))
+        messages = self.messages(Path("nul.shp"))
+        self.assertTrue(
+            any("зарезервировано" in message for message in messages),
+            messages,
+        )
+
+    def test_case_collision_is_reported(self) -> None:
+        names = ("Roads.shp", "roads.shp")
+        messages = self.messages(Path("Roads.shp"), names=names)
+        self.assertTrue(
+            any("различаются только регистром" in message
+                for message in messages),
+            messages,
+        )
+
+    def test_case_collision_is_reported_once(self) -> None:
+        names = ("Roads.shp", "roads.shp")
+        self.assertEqual(
+            [
+                message
+                for message in self.messages(Path("roads.shp"), names=names)
+                if "различаются только регистром" in message
+            ],
+            [],
+        )
+
+    def test_unique_names_have_no_collision(self) -> None:
+        self.assertEqual(
+            self.messages(Path("roads.shp"), names=("roads.shp",)),
+            [],
+        )
+
+    def test_orphan_sidecars_are_detected(self) -> None:
+        self.assertEqual(
+            orphan_sidecars(
+                {
+                    "roads.shp": Path("roads.shp"),
+                    "roads.dbf": Path("roads.dbf"),
+                    "lost.dbf": Path("lost.dbf"),
+                    "lost.prj": Path("lost.prj"),
+                    "dem.tif": Path("dem.tif"),
+                    "dem.tif.aux.xml": Path("dem.tif.aux.xml"),
+                    "old.tif.ovr": Path("old.tif.ovr"),
+                    "readme.xml": Path("readme.xml"),
+                }
+            ),
+            ["lost.dbf", "lost.prj", "old.tif.ovr"],
+        )
+
+    def test_sidecar_forces_primary_names(self) -> None:
+        files = {
+            "roads.shp": Path("roads.shp"),
+            "roads.prj": Path("roads.prj"),
+            "dem.tif": Path("dem.tif"),
+            "dem.tfw": Path("dem.tfw"),
+        }
+        self.assertEqual(orphan_sidecars(files), [])
+
+    def test_orphans_are_reported_once_per_folder(self) -> None:
+        files = ("roads.shp", "lost.dbf")
+        owner = self.messages(
+            Path("roads.shp"), files=files, folder_owner=True
+        )
+        self.assertTrue(
+            any("Осиротевший" in message for message in owner), owner
+        )
+        other = self.messages(Path("roads.shp"), files=files)
+        self.assertEqual(
+            [m for m in other if "Осиротевший" in m], []
         )
 
 
