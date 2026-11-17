@@ -63,6 +63,7 @@ from .check_dialog import (
     CHECK_DUPLICATES,
     CHECK_FIELD_NAMES,
     CHECK_FILE_PATHS,
+    CHECK_GEOJSON_QUALITY,
     CHECK_GEOMETRY,
     CHECK_JSON_GEOJSON,
     CHECK_METADATA_CRS,
@@ -77,6 +78,7 @@ from .dataset_size import DirectoryIndex, measure_geo_file_cached
 from .excel_export import SheetSpec
 from .explorer import open_folder, reveal_files
 from .geojson_check import JSON_EXTENSIONS, check_json_file
+from .geojson_quality import validate_geojson_file
 from .file_info import (
     FileInfo,
     LayerSummary,
@@ -2857,6 +2859,13 @@ class ZGeoPanel(QDockWidget):
     def _problem_candidates_for_check(self, check: str) -> List[GeoFile]:
         """Вернуть файлы, к которым применима конкретная проверка."""
 
+        if check == CHECK_GEOJSON_QUALITY:
+            return [
+                geo_file
+                for geo_file in self._files
+                if geo_file.extension in JSON_EXTENSIONS
+            ]
+
         if check == CHECK_DATASET_INTEGRITY:
             return [
                 geo_file
@@ -3068,6 +3077,8 @@ class ZGeoPanel(QDockWidget):
 
         if check == CHECK_DATASET_INTEGRITY:
             return self._inspect_dataset_integrity(geo_file)
+        if check == CHECK_GEOJSON_QUALITY:
+            return self._inspect_geojson_quality(geo_file)
         if check == CHECK_PRJ:
             return self._inspect_prj_file(geo_file)
         if check == CHECK_DUPLICATES:
@@ -3107,6 +3118,18 @@ class ZGeoPanel(QDockWidget):
             except Exception:
                 self._problem_info_cache[path_key] = None
         return self._problem_info_cache[path_key]
+
+    def _inspect_geojson_quality(
+        self, geo_file: GeoFile
+    ) -> Tuple[List[QualityIssue], bool]:
+        """Проверить координаты, кольца, bbox и структуру GeoJSON."""
+
+        if geo_file.extension not in JSON_EXTENSIONS:
+            return [], False
+        issues = validate_geojson_file(
+            geo_file.path, CHECK_GEOJSON_QUALITY
+        )
+        return issues, True
 
     def _inspect_dataset_integrity(
         self, geo_file: GeoFile

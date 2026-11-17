@@ -30,6 +30,7 @@ ICON_PATH = Path(__file__).with_name("icon.svg")
 
 CHECK_SIZE = "refine_size"
 CHECK_JSON_GEOJSON = "json_geojson"
+CHECK_GEOJSON_QUALITY = "geojson_quality"
 CHECK_CRS_QUALITY = "crs_quality"
 CHECK_COUNT_QUALITY = "count_quality"
 CHECK_FIELD_NAMES = "field_names"
@@ -44,6 +45,7 @@ CHECK_FILE_PATHS = "file_paths"
 PROBLEM_CHECKS = frozenset(
     {
         CHECK_FILE_PATHS,
+        CHECK_GEOJSON_QUALITY,
         CHECK_CRS_QUALITY,
         CHECK_COUNT_QUALITY,
         CHECK_FIELD_NAMES,
@@ -523,8 +525,7 @@ def check_definitions(
             for index, definition in enumerate(definitions)
             if definition.key == CHECK_FIELD_NAMES
         )
-        definitions.insert(
-            field_index,
+        definitions[field_index:field_index] = [
             CheckDefinition(
                 key=CHECK_JSON_GEOJSON,
                 label=tr("Проверка JSON на формат GEOJSON"),
@@ -562,7 +563,56 @@ def check_definitions(
                     ),
                 ),
             ),
-        )
+            CheckDefinition(
+                key=CHECK_GEOJSON_QUALITY,
+                label=tr("Проверка GeoJSON"),
+                description=tr(
+                    "Проверяет координаты, замкнутость колец, bbox и "
+                    "структуру Feature/GeometryCollection в файлах "
+                    "GeoJSON."
+                ),
+                checked=False,
+                details=(
+                    tr(
+                        "Для каждого файла .json и .geojson ZGeo "
+                        "разбирает документ и проверяет координаты: "
+                        "числовой тип, отсутствие NaN/Inf, диапазон "
+                        "долготы и широты, признаки перепутанных широты "
+                        "и долготы."
+                    ),
+                    tr(
+                        "Проверяются позиции, линии и кольца: "
+                        "минимальное число точек, замкнутость первого и "
+                        "последнего положения кольца и соответствие "
+                        "вложенности типу геометрии."
+                    ),
+                    tr(
+                        "Необязательный bbox проверяется на уровне "
+                        "документа, объекта, геометрии и коллекции: "
+                        "длина 4 или 6 чисел, конечные значения и "
+                        "порядок минимума и максимума. Также проверяются "
+                        "обязательные поля и структура Feature, "
+                        "FeatureCollection и GeometryCollection."
+                    ),
+                ),
+                examples=(
+                    tr(
+                        "FeatureCollection с корректными координатами и "
+                        "замкнутыми кольцами — проблем не найдено."
+                    ),
+                    tr(
+                        "Полигон, у которого первая и последняя точки "
+                        "кольца не совпадают — отмечается «Кольцо не "
+                        "замкнуто»."
+                    ),
+                    tr(
+                        "bbox [0, 0, 10] — отмечается неверное число "
+                        "значений; координата [200, 95] — перепутанные "
+                        "широта и долгота."
+                    ),
+                ),
+            ),
+        ]
 
     return definitions
 

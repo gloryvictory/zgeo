@@ -64,6 +64,16 @@ class I18nTests(unittest.TestCase):
             "Проверка JSON на формат GEOJSON",
             "Проверяет файлы .json и .geojson по полю type. Файлы, "
             "не являющиеся GeoJSON, исключаются из списка.",
+            "Проверка GeoJSON",
+            "Проверяет координаты, замкнутость колец, bbox и "
+            "структуру Feature/GeometryCollection в файлах "
+            "GeoJSON.",
+            "Ошибок GeoJSON: {} (координаты: {}, кольца: {}, "
+            "bbox: {}, структура: {})",
+            "Кольцо не замкнуто: первая и последняя точки "
+            "не совпадают",
+            "Долгота вне диапазона [-180, 180]: {}",
+            "Широта вне диапазона [-90, 90]: {}",
             "Проверка имён полей",
             "Проверяет нелатинские символы, длину имени (не более "
             "10 символов DBF), пробелы, недопустимые символы и дубли "
@@ -290,6 +300,37 @@ class I18nTests(unittest.TestCase):
                 argument.value, str
             ):
                 sources.add(argument.value)
+        missing = sorted(
+            source
+            for source in sources
+            if source not in EN_TRANSLATIONS
+        )
+        self.assertEqual(missing, [])
+
+    def test_geojson_quality_messages_have_english_translations(
+        self,
+    ) -> None:
+        path = (
+            Path(__file__).resolve().parents[1]
+            / "geojson_quality.py"
+        )
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        sources = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            function = node.func
+            if not isinstance(function, ast.Name):
+                continue
+            if function.id != "QualityIssue":
+                continue
+            for keyword in node.keywords:
+                if keyword.arg != "message":
+                    continue
+                if isinstance(keyword.value, ast.Constant) and isinstance(
+                    keyword.value.value, str
+                ):
+                    sources.add(keyword.value.value)
         missing = sorted(
             source
             for source in sources

@@ -295,6 +295,162 @@ EN_TRANSLATIONS = {
     "Все найденные файлы исключены проверками.": (
         "All found files were excluded by checks."
     ),
+    "Проверка GeoJSON": "GeoJSON check",
+    "Проверяет координаты, замкнутость колец, bbox и структуру Feature/GeometryCollection в файлах GeoJSON.": (
+        "Checks coordinates, ring closure, bbox and Feature/"
+        "GeometryCollection structure in GeoJSON files."
+    ),
+    "Для каждого файла .json и .geojson ZGeo разбирает документ и проверяет координаты: числовой тип, отсутствие NaN/Inf, диапазон долготы и широты, признаки перепутанных широты и долготы.": (
+        "For each .json and .geojson file ZGeo parses the document and "
+        "checks coordinates: numeric type, absence of NaN/Inf, longitude "
+        "and latitude range, and signs of swapped latitude and longitude."
+    ),
+    "Проверяются позиции, линии и кольца: минимальное число точек, замкнутость первого и последнего положения кольца и соответствие вложенности типу геометрии.": (
+        "Positions, lines and rings are checked: the minimum number of "
+        "points, whether the first and last ring positions match, and "
+        "whether the nesting matches the geometry type."
+    ),
+    "Необязательный bbox проверяется на уровне документа, объекта, геометрии и коллекции: длина 4 или 6 чисел, конечные значения и порядок минимума и максимума. Также проверяются обязательные поля и структура Feature, FeatureCollection и GeometryCollection.": (
+        "The optional bbox is validated at document, feature, geometry "
+        "and collection level: a length of 4 or 6 numbers, finite values "
+        "and minimum/maximum order. Required fields and the structure of "
+        "Feature, FeatureCollection and GeometryCollection are also "
+        "checked."
+    ),
+    "FeatureCollection с корректными координатами и замкнутыми кольцами — проблем не найдено.": (
+        "A FeatureCollection with valid coordinates and closed rings — no "
+        "issues found."
+    ),
+    "Полигон, у которого первая и последняя точки кольца не совпадают — отмечается «Кольцо не замкнуто».": (
+        "A polygon whose first and last ring positions do not match — "
+        "“Ring is not closed” is flagged."
+    ),
+    "bbox [0, 0, 10] — отмечается неверное число значений; координата [200, 95] — перепутанные широта и долгота.": (
+        "bbox [0, 0, 10] — an invalid number of values is flagged; the "
+        "coordinate [200, 95] — swapped latitude and longitude."
+    ),
+    "Ошибок GeoJSON: {} (координаты: {}, кольца: {}, bbox: {}, структура: {})": (
+        "GeoJSON issues: {} (coordinates: {}, rings: {}, bbox: {}, "
+        "structure: {})"
+    ),
+    "Дополнительные ошибки не показаны (лимит {}).": (
+        "Additional issues are not shown (limit {})."
+    ),
+    "Не удалось прочитать GeoJSON: {}": "Could not read GeoJSON: {}",
+    "Не удалось проверить GeoJSON: {}": "Could not validate GeoJSON: {}",
+    "Корень GeoJSON должен быть объектом": (
+        "The GeoJSON root must be an object"
+    ),
+    "Отсутствует или неверен тип GeoJSON: {}": (
+        "The GeoJSON type is missing or invalid: {}"
+    ),
+    "Неизвестный тип GeoJSON: {}": "Unknown GeoJSON type: {}",
+    "Отсутствует обязательное поле «features»": (
+        "The required “features” field is missing"
+    ),
+    "Поле «features» должно быть массивом": (
+        "The “features” field must be an array"
+    ),
+    "Элемент FeatureCollection должен быть объектом Feature": (
+        "A FeatureCollection element must be a Feature object"
+    ),
+    "Тип объекта Feature должен быть «Feature»: {}": (
+        "A Feature object type must be “Feature”: {}"
+    ),
+    "Отсутствует обязательное поле «geometry»": (
+        "The required “geometry” field is missing"
+    ),
+    "Поле «geometry» должно быть объектом или null": (
+        "The “geometry” field must be an object or null"
+    ),
+    "Отсутствует обязательное поле «properties»": (
+        "The required “properties” field is missing"
+    ),
+    "Поле «properties» должно быть объектом или null": (
+        "The “properties” field must be an object or null"
+    ),
+    "Поле «id» должно быть строкой или числом": (
+        "The “id” field must be a string or a number"
+    ),
+    "Отсутствует обязательное поле «geometries»": (
+        "The required “geometries” field is missing"
+    ),
+    "Поле «geometries» должно быть массивом": (
+        "The “geometries” field must be an array"
+    ),
+    "Элемент GeometryCollection должен быть объектом геометрии": (
+        "A GeometryCollection element must be a geometry object"
+    ),
+    "Тип GeometryCollection должен быть «GeometryCollection»: {}": (
+        "A GeometryCollection type must be “GeometryCollection”: {}"
+    ),
+    "Отсутствует или неверен тип геометрии: {}": (
+        "The geometry type is missing or invalid: {}"
+    ),
+    "Неизвестный тип геометрии: {}": "Unknown geometry type: {}",
+    "Отсутствует обязательное поле «coordinates»": (
+        "The required “coordinates” field is missing"
+    ),
+    "Поле «coordinates» должно быть массивом": (
+        "The “coordinates” field must be an array"
+    ),
+    "Поле «bbox» должно быть массивом чисел": (
+        "The “bbox” field must be an array of numbers"
+    ),
+    "Поле «bbox» должно содержать 4 или 6 чисел": (
+        "The “bbox” field must contain 4 or 6 numbers"
+    ),
+    "Элемент bbox должен быть числом: {}": (
+        "A bbox element must be a number: {}"
+    ),
+    "Элемент bbox не должен быть NaN/Inf": (
+        "A bbox element must not be NaN/Inf"
+    ),
+    "bbox: минимум больше максимума по оси {}": (
+        "bbox: minimum is greater than maximum on axis {}"
+    ),
+    "Позиция должна быть массивом чисел": (
+        "A position must be an array of numbers"
+    ),
+    "Позиция должна содержать не менее двух чисел": (
+        "A position must contain at least two numbers"
+    ),
+    "Координата должна быть числом: {}": (
+        "A coordinate must be a number: {}"
+    ),
+    "Долгота вне диапазона [-180, 180]: {}": (
+        "Longitude is outside the [-180, 180] range: {}"
+    ),
+    "Широта вне диапазона [-90, 90]: {}": (
+        "Latitude is outside the [-90, 90] range: {}"
+    ),
+    "LineString должен быть массивом позиций": (
+        "A LineString must be an array of positions"
+    ),
+    "LineString должен содержать не менее {} точек": (
+        "A LineString must contain at least {} points"
+    ),
+    "LineString должен содержать не менее 2 точек": (
+        "A LineString must contain at least 2 points"
+    ),
+    "Кольцо должно быть массивом позиций": (
+        "A ring must be an array of positions"
+    ),
+    "Кольцо должно содержать не менее 4 точек": (
+        "A ring must contain at least 4 points"
+    ),
+    "Кольцо не замкнуто: первая и последняя точки не совпадают": (
+        "The ring is not closed: the first and last positions differ"
+    ),
+    "Полигон должен содержать хотя бы одно кольцо": (
+        "A polygon must contain at least one ring"
+    ),
+    "Полигон в MultiPolygon должен быть массивом колец": (
+        "A MultiPolygon polygon must be an array of rings"
+    ),
+    "Структура GeoJSON слишком глубокая": (
+        "The GeoJSON structure is too deeply nested"
+    ),
     "Нет файлов для построения диаграмм.": "No files to build charts.",
     "Проверка имён атрибутивных полей": "Attribute field name check",
     "Проверяет имена полей векторных файлов на нелатинские символы и добавляет колонку «Проблемы». Если в имени поля есть нелатинские символы, ставится «Да», иначе «Нет»; для растровых файлов — «—».": (

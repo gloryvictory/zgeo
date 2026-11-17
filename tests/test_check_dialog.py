@@ -75,6 +75,13 @@ class CheckDefinitionsTests(unittest.TestCase):
         )
         self.assertIn("CHECK_DUPLICATES", _definition_keys())
 
+    def test_geojson_quality_check_is_registered(self) -> None:
+        constants = _check_constants()
+        self.assertEqual(
+            constants.get("CHECK_GEOJSON_QUALITY"), "geojson_quality"
+        )
+        self.assertIn("CHECK_GEOJSON_QUALITY", _definition_keys())
+
     def test_new_checks_are_disabled_by_default(self) -> None:
         unchecked = set()
         for node in ast.walk(_module()):
@@ -102,6 +109,7 @@ class CheckDefinitionsTests(unittest.TestCase):
         self.assertIn("CHECK_FILE_PATHS", unchecked)
         self.assertIn("CHECK_GEOMETRY", unchecked)
         self.assertIn("CHECK_COORDINATES", unchecked)
+        self.assertIn("CHECK_GEOJSON_QUALITY", unchecked)
 
     def test_keys_are_unique(self) -> None:
         values = list(_check_constants().values())
