@@ -1,6 +1,20 @@
 ZGeo change log
 ===============
 
+Version 1.38.3 — 2026-11-19
+Previous GitHub release: v1.38.2 (2026-11-19)
+
+Overview
+--------
+ZGeo 1.38.3 adds the LICENSE file required by the QGIS plugin
+package reader.
+
+Changes in 1.38.3
+-----------------
+- Added a plain `LICENSE` file to the plugin package root.
+- Kept `LICENSE.md` for the GitHub repository.
+- The build script now fails if `LICENSE` is missing.
+
 Version 1.38.2 — 2026-11-19
 Previous GitHub release: v1.38.1 (2026-11-19)
 

@@ -7,9 +7,14 @@ $ErrorActionPreference = "Stop"
 $pluginRoot = Split-Path -Parent $PSScriptRoot
 $pluginName = Split-Path -Leaf $pluginRoot
 $metadataPath = Join-Path $pluginRoot "metadata.txt"
+$licensePath = Join-Path $pluginRoot "LICENSE"
 
 if (-not (Test-Path -LiteralPath $metadataPath)) {
     throw "metadata.txt not found: $metadataPath"
+}
+
+if (-not (Test-Path -LiteralPath $licensePath)) {
+    throw "LICENSE not found: $licensePath"
 }
 
 $versionLine = Select-String -LiteralPath $metadataPath -Pattern '^version=(.+)$'
