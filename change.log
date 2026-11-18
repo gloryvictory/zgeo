@@ -1,6 +1,19 @@
 ZGeo change log
 ===============
 
+Version 1.38.2 — 2026-11-19
+Previous GitHub release: v1.38.1 (2026-11-19)
+
+Overview
+--------
+ZGeo 1.38.2 fixes the plugin metadata required by the QGIS plugin
+package reader.
+
+Changes in 1.38.2
+-----------------
+- Added the `repository` URL to `metadata.txt`.
+- Updated the `homepage` URL to the current GitHub repository.
+
 Version 1.38.1 — 2026-11-19
 Previous GitHub release: v1.38.0 (2026-11-18)
 
