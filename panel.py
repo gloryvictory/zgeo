@@ -56,6 +56,7 @@ from .charts import BarChart, BarDatum
 from .check_timing import TimingRecord, build_timing_rows
 from .copy_files import build_copy_plan, copy_plan
 from .check_dialog import (
+    CHECK_ATTRIBUTE_FILL,
     CHECK_COORDINATES,
     CHECK_CRS_QUALITY,
     CHECK_COUNT_QUALITY,
@@ -69,11 +70,13 @@ from .check_dialog import (
     CHECK_METADATA_CRS,
     CHECK_PRJ,
     CHECK_SIZE,
+    CHECK_TOPOLOGY,
     PROBLEM_CHECKS,
     ChecksDialog,
     check_definitions,
 )
 from .attribute_check import has_non_latin_characters
+from .attribute_fill import inspect_attribute_fill
 from .dataset_size import DirectoryIndex, measure_geo_file_cached
 from .excel_export import SheetSpec
 from .explorer import open_folder, reveal_files
@@ -127,6 +130,7 @@ from .scanner import (
     get_format_groups,
 )
 from .stats import build_size_distribution, build_type_distribution
+from .topology_check import inspect_topology
 from .table_export import (
     export_rows_with_dialog,
     export_rows_with_html_dialog,
@@ -140,8 +144,9 @@ DISABLED_FORMATS_KEY = "zgeo/disabled_formats"
 ICON_PATH = Path(__file__).with_name("icon.svg")
 CHECKS_TOOLTIP = (
     "Проверки: уточнить размер, систему координат и количество элементов, "
-    "проверить JSON, имена полей, имена и пути файлов, набор данных, "
-    "метаданные и CRS, .prj, геометрии, дубли, координаты."
+    "проверить JSON и GeoJSON, имена полей, заполненность атрибутов, "
+    "имена и пути файлов, набор данных, метаданные и CRS, .prj, геометрии, "
+    "топологию, дубли, координаты."
 )
 SIZE_CHART_COLOR = "#0F766E"
 TYPE_CHART_COLORS = (
@@ -3075,6 +3080,10 @@ class ZGeoPanel(QDockWidget):
     ) -> Tuple[List[QualityIssue], bool]:
         """Выполнить одну проверку для одного файла."""
 
+        if check == CHECK_ATTRIBUTE_FILL:
+            return inspect_attribute_fill(geo_file)
+        if check == CHECK_TOPOLOGY:
+            return self._inspect_topology(geo_file)
         if check == CHECK_DATASET_INTEGRITY:
             return self._inspect_dataset_integrity(geo_file)
         if check == CHECK_GEOJSON_QUALITY:
@@ -3273,6 +3282,16 @@ class ZGeoPanel(QDockWidget):
         ]
         return issues, applicable
 
+    def _inspect_topology(
+        self, geo_file: GeoFile
+    ) -> Tuple[List[QualityIssue], bool]:
+        """Проверить наложения, разрывы и линейную топологию."""
+
+        found, applicable = inspect_topology(geo_file)
+        issues = [
+            replace(issue, check=CHECK_TOPOLOGY) for issue in found
+        ]
+        return issues, applicable
 
     def _inspect_geometry_coordinates(
         self, geo_file: GeoFile, file_info: FileInfo, check: str

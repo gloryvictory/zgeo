@@ -34,11 +34,13 @@ CHECK_GEOJSON_QUALITY = "geojson_quality"
 CHECK_CRS_QUALITY = "crs_quality"
 CHECK_COUNT_QUALITY = "count_quality"
 CHECK_FIELD_NAMES = "field_names"
+CHECK_ATTRIBUTE_FILL = "attribute_fill"
 CHECK_DATASET_INTEGRITY = "dataset_integrity"
 CHECK_METADATA_CRS = "metadata_crs"
 CHECK_PRJ = "prj_file"
 CHECK_GEOMETRY = "geometry_quality"
 CHECK_COORDINATES = "coordinates_quality"
+CHECK_TOPOLOGY = "topology_quality"
 CHECK_DUPLICATES = "duplicate_features"
 CHECK_FILE_PATHS = "file_paths"
 
@@ -49,10 +51,12 @@ PROBLEM_CHECKS = frozenset(
         CHECK_CRS_QUALITY,
         CHECK_COUNT_QUALITY,
         CHECK_FIELD_NAMES,
+        CHECK_ATTRIBUTE_FILL,
         CHECK_DATASET_INTEGRITY,
         CHECK_METADATA_CRS,
         CHECK_PRJ,
         CHECK_GEOMETRY,
+        CHECK_TOPOLOGY,
         CHECK_DUPLICATES,
         CHECK_COORDINATES,
     }
@@ -63,9 +67,11 @@ LAYER_PROBLEM_CHECKS = frozenset(
         CHECK_CRS_QUALITY,
         CHECK_COUNT_QUALITY,
         CHECK_FIELD_NAMES,
+        CHECK_ATTRIBUTE_FILL,
         CHECK_METADATA_CRS,
         CHECK_PRJ,
         CHECK_GEOMETRY,
+        CHECK_TOPOLOGY,
         CHECK_DUPLICATES,
         CHECK_COORDINATES,
     }
@@ -282,6 +288,49 @@ def check_definitions(
             ),
         ),
         CheckDefinition(
+            key=CHECK_ATTRIBUTE_FILL,
+            label=tr("Проверка заполненности атрибутов"),
+            description=tr(
+                "Проверяет NULL и пустые строки, долю заполнения по полям, "
+                "обязательные поля и почти пустые слои."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "Для каждого векторного слоя и таблицы ZGeo читает "
+                    "объекты и считает пустыми значения NULL и строки, "
+                    "состоящие только из пробелов. Для каждого поля "
+                    "вычисляется доля заполнения."
+                ),
+                tr(
+                    "Поле считается обязательным, если для него задано "
+                    "ограничение NOT NULL или оно входит в первичный ключ "
+                    "слоя. Пустые значения в обязательных полях отмечаются "
+                    "отдельно."
+                ),
+                tr(
+                    "Поля с заполненностью ниже 50% отмечаются как проблемы. "
+                    "Слой считается почти пустым, если заполнено менее 5% "
+                    "ячеек или не менее 95% объектов не содержат ни одного "
+                    "заполненного атрибута. В отчёт попадают доли заполнения "
+                    "по полям."
+                ),
+            ),
+            examples=(
+                tr(
+                    "Поле name: 120 из 200 значений (60%) — проблемы нет, "
+                    "если поле не обязательное."
+                ),
+                tr(
+                    "Обязательное поле code: 3 пустых значения — отмечается."
+                ),
+                tr(
+                    "Слой из 1000 объектов, где 98% объектов не имеют "
+                    "атрибутов — отмечается как почти пустой."
+                ),
+            ),
+        ),
+        CheckDefinition(
             key=CHECK_DATASET_INTEGRITY,
             label=tr("Проверка набора данных"),
             description=tr(
@@ -431,6 +480,59 @@ def check_definitions(
                 tr(
                     "Объект без геометрии — отмечается «Геометрия "
                     "отсутствует (null)»."
+                ),
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_TOPOLOGY,
+            label=tr("Проверка топологии"),
+            description=tr(
+                "Ищет наложения и разрывы полигонов, висячие линии и "
+                "пересечения линий."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "Для полигонов ZGeo проверяет попарные наложения по "
+                    "площади и ищет замкнутые разрывы внутри объединения "
+                    "слоя. Разрыв учитывается, если его граница "
+                    "соприкасается с двумя или более объектами; внутренние "
+                    "отверстия одного полигона не считаются разрывом."
+                ),
+                tr(
+                    "Для линий проверяются свободные концы: конец считается "
+                    "висячим, если он не совпадает с концом другой линии и "
+                    "не лежит на другой линии. Пересечения внутри линий и "
+                    "наложения линий отмечаются отдельно; соединения в "
+                    "конечных точках, включая T-образные, не считаются "
+                    "пересечением."
+                ),
+                tr(
+                    "Некорректные и пустые геометрии пропускаются — для них "
+                    "есть отдельная проверка валидности. Подробно "
+                    "описывается до 1000 замечаний на слой."
+                ),
+            ),
+            examples=(
+                tr(
+                    "Два полигона перекрываются на площади 12.5 — "
+                    "отмечается наложение."
+                ),
+                tr(
+                    "Полигоны образуют кольцо с незаполненной областью — "
+                    "отмечается разрыв."
+                ),
+                tr(
+                    "Линия заканчивается в пустоте — отмечается висячая "
+                    "линия."
+                ),
+                tr(
+                    "Две линии пересекаются в точке, не являющейся концом "
+                    "ни одной из них — отмечается пересечение."
+                ),
+                tr(
+                    "Две линии частично идут по одному и тому же участку — "
+                    "отмечается наложение линий."
                 ),
             ),
         ),

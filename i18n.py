@@ -249,10 +249,11 @@ EN_TRANSLATIONS = {
     "Проблем не найдено.": "No problems found.",
     "Идёт проверка…": "Check in progress…",
     "Прервать проверки": "Cancel checks",
-    "Проверки: уточнить размер, систему координат и количество элементов, проверить JSON, имена полей, имена и пути файлов, набор данных, метаданные и CRS, .prj, геометрии, дубли, координаты.": (
-        "Checks: refine size, CRS and feature count, validate JSON, field "
-        "names, file names and paths, dataset integrity, metadata and CRS, "
-        ".prj, geometries, duplicates, coordinates."
+    "Проверки: уточнить размер, систему координат и количество элементов, проверить JSON и GeoJSON, имена полей, заполненность атрибутов, имена и пути файлов, набор данных, метаданные и CRS, .prj, геометрии, топологию, дубли, координаты.": (
+        "Checks: refine size, CRS and feature count, validate JSON and "
+        "GeoJSON, field names, attribute completeness, file names and "
+        "paths, dataset integrity, metadata and CRS, .prj, geometries, "
+        "topology, duplicates, coordinates."
     ),
     "Выберите проверки": "Select checks",
     "Отметьте проверки, которые нужно выполнить для найденных файлов. Нажмите «i» справа, чтобы открыть подробное описание с примерами.": (
@@ -536,6 +537,46 @@ EN_TRANSLATIONS = {
     "Проверка валидности геометрий": "Geometry validity check",
     "Ищет самопересечения, незамкнутые кольца, пустые и null-геометрии.": (
         "Finds self-intersections, unclosed rings, empty and null geometries."
+    ),
+    "Проверка топологии": "Topology check",
+    "Ищет наложения и разрывы полигонов, висячие линии и пересечения линий.": (
+        "Finds polygon overlaps and gaps, dangling lines and line "
+        "intersections."
+    ),
+    "Для полигонов ZGeo проверяет попарные наложения по площади и ищет замкнутые разрывы внутри объединения слоя. Разрыв учитывается, если его граница соприкасается с двумя или более объектами; внутренние отверстия одного полигона не считаются разрывом.": (
+        "For polygons, ZGeo checks pairwise overlaps by area and looks for "
+        "enclosed gaps inside the layer union. A gap is reported if its "
+        "boundary touches two or more features; interior holes of a single "
+        "polygon are not considered gaps."
+    ),
+    "Для линий проверяются свободные концы: конец считается висячим, если он не совпадает с концом другой линии и не лежит на другой линии. Пересечения внутри линий и наложения линий отмечаются отдельно; соединения в конечных точках, включая T-образные, не считаются пересечением.": (
+        "For lines, free endpoints are checked: an endpoint is dangling if "
+        "it does not coincide with another line endpoint and does not lie "
+        "on another line. Interior crossings and line overlaps are "
+        "reported separately; connections at endpoints, including "
+        "T-junctions, are not considered intersections."
+    ),
+    "Некорректные и пустые геометрии пропускаются — для них есть отдельная проверка валидности. Подробно описывается до 1000 замечаний на слой.": (
+        "Invalid and empty geometries are skipped; a separate validity "
+        "check covers them. Up to 1,000 issues per layer are described in "
+        "detail."
+    ),
+    "Два полигона перекрываются на площади 12.5 — отмечается наложение.": (
+        "Two polygons overlap over an area of 12.5 — an overlap is reported."
+    ),
+    "Полигоны образуют кольцо с незаполненной областью — отмечается разрыв.": (
+        "Polygons form a ring with an unfilled area — a gap is reported."
+    ),
+    "Линия заканчивается в пустоте — отмечается висячая линия.": (
+        "A line ends in empty space — a dangling line is reported."
+    ),
+    "Две линии пересекаются в точке, не являющейся концом ни одной из них — отмечается пересечение.": (
+        "Two lines intersect at a point that is not an endpoint of either "
+        "line — an intersection is reported."
+    ),
+    "Две линии частично идут по одному и тому же участку — отмечается наложение линий.": (
+        "Two lines partially follow the same segment — a line overlap is "
+        "reported."
     ),
     "Проверка дублей объектов": "Duplicate features check",
     "Ищет объекты с полностью совпадающей геометрией.": (
@@ -907,6 +948,38 @@ EN_TRANSLATIONS = {
         "Checks non-Latin characters, name length (10 characters max for "
         "DBF), spaces, invalid characters and duplicates after truncation."
     ),
+    "Проверка заполненности атрибутов": "Attribute completeness check",
+    "Проверяет NULL и пустые строки, долю заполнения по полям, обязательные поля и почти пустые слои.": (
+        "Checks NULL and empty strings, per-field fill rates, required "
+        "fields and almost empty layers."
+    ),
+    "Для каждого векторного слоя и таблицы ZGeo читает объекты и считает пустыми значения NULL и строки, состоящие только из пробелов. Для каждого поля вычисляется доля заполнения.": (
+        "For each vector layer and table, ZGeo reads the features and "
+        "treats NULL values and whitespace-only strings as empty. The fill "
+        "rate is calculated for every field."
+    ),
+    "Поле считается обязательным, если для него задано ограничение NOT NULL или оно входит в первичный ключ слоя. Пустые значения в обязательных полях отмечаются отдельно.": (
+        "A field is considered required if it has a NOT NULL constraint or "
+        "belongs to the layer primary key. Empty values in required fields "
+        "are reported separately."
+    ),
+    "Поля с заполненностью ниже 50% отмечаются как проблемы. Слой считается почти пустым, если заполнено менее 5% ячеек или не менее 95% объектов не содержат ни одного заполненного атрибута. В отчёт попадают доли заполнения по полям.": (
+        "Fields with a fill rate below 50% are reported as problems. A "
+        "layer is considered almost empty if less than 5% of cells are "
+        "filled or at least 95% of features contain no filled attributes. "
+        "Field fill rates are included in the report."
+    ),
+    "Поле name: 120 из 200 значений (60%) — проблемы нет, если поле не обязательное.": (
+        "Field name: 120 of 200 values (60%) — no problem if the field is "
+        "not required."
+    ),
+    "Обязательное поле code: 3 пустых значения — отмечается.": (
+        "Required field code: 3 empty values — reported."
+    ),
+    "Слой из 1000 объектов, где 98% объектов не имеют атрибутов — отмечается как почти пустой.": (
+        "A layer with 1000 features where 98% of features have no "
+        "attributes — reported as almost empty."
+    ),
     "Проверка набора данных": "Dataset integrity check",
     "Проверяет обязательные файлы набора, наличие .cpg и корректность указанной кодировки DBF.": (
         "Checks required dataset files, the presence of .cpg and the "
@@ -951,6 +1024,40 @@ EN_TRANSLATIONS = {
         "“Excessively large coordinate” is flagged."
     ),
     "Нелатинское имя поля: {}": "Non-Latin field name: {}",
+    "Слой «{}»: заполненность атрибутов {}% ({} из {} ячеек, пусто {}); низкая заполненность: {}; обязательные поля с пустыми значениями: {}": (
+        "Layer “{}”: attribute fill {}% ({} of {} cells, {} empty); low "
+        "fill: {}; required fields with empty values: {}"
+    ),
+    "Слой «{}»: почти пустые атрибуты — заполнено {} из {} ячеек ({}%), полностью пустых объектов {} из {} ({}%)": (
+        "Layer “{}”: almost empty attributes — {} of {} cells filled "
+        "({}%), {} of {} features completely empty ({}%)"
+    ),
+    "Обязательное поле «{}»: заполнено {} из {} ({}%), пусто {}": (
+        "Required field “{}”: filled {} of {} ({}%), {} empty"
+    ),
+    "Поле «{}»: заполнено {} из {} ({}%), пусто {}": (
+        "Field “{}”: filled {} of {} ({}%), {} empty"
+    ),
+    "Слой «{}»: наложений полигонов: {}, разрывов полигонов: {}, висячих линий: {} (свободных концов: {}), пересечений линий: {}, наложений линий: {}": (
+        "Layer “{}”: polygon overlaps: {}, polygon gaps: {}, dangling "
+        "lines: {} (free endpoints: {}), line intersections: {}, line "
+        "overlaps: {}"
+    ),
+    "Наложение полигонов: объект {} и объект {} — площадь {}": (
+        "Polygon overlap: feature {} and feature {} — area {}"
+    ),
+    "Разрыв полигонов: площадь {} — окружён объектами: {}": (
+        "Polygon gap: area {} — surrounded by features: {}"
+    ),
+    "Висячая линия: объект {} — свободных концов: {}": (
+        "Dangling line: feature {} — free endpoints: {}"
+    ),
+    "Наложение линий: объект {} и объект {} — длина {}": (
+        "Line overlap: feature {} and feature {} — length {}"
+    ),
+    "Пересечение линий: объект {} и объект {}": (
+        "Line intersection: feature {} and feature {}"
+    ),
     "Геометрия отсутствует (null)": "Geometry is missing (null)",
     "Пустая геометрия": "Empty geometry",
     "Незамкнутое кольцо": "Unclosed ring",

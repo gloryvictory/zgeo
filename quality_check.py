@@ -18,6 +18,9 @@ from .scanner import FORMATS, RASTER
 
 DBF_FIELD_NAME_LIMIT = 10
 MAX_ABS_COORDINATE = 1e9
+ATTRIBUTE_LOW_FILL_RATE = 0.5
+ATTRIBUTE_ALMOST_EMPTY_RATE = 0.05
+ATTRIBUTE_ALMOST_EMPTY_FEATURE_SHARE = 0.95
 
 METRIC_UNITS = frozenset(
     {"Meters", "Kilometers", "Centimeters", "Millimeters"}
@@ -114,6 +117,86 @@ class QualityIssue:
     feature_id: Optional[int] = None
     location: str = ""
     detail_only: bool = False
+
+
+@dataclass(frozen=True)
+class FieldFillStats:
+    """Заполненность одного атрибутивного поля."""
+
+    name: str
+    total: int
+    empty: int
+    required: bool = False
+
+    @property
+    def filled(self) -> int:
+        return max(self.total - self.empty, 0)
+
+    @property
+    def fill_rate(self) -> float:
+        if self.total <= 0:
+            return 0.0
+        return self.filled / self.total
+
+
+@dataclass(frozen=True)
+class LayerFillStats:
+    """Заполненность атрибутов одного векторного слоя."""
+
+    layer: str
+    feature_count: int
+    fields: Tuple[FieldFillStats, ...]
+    fully_empty_features: int = 0
+
+    @property
+    def total_cells(self) -> int:
+        return max(self.feature_count, 0) * len(self.fields)
+
+    @property
+    def empty_cells(self) -> int:
+        return sum(field.empty for field in self.fields)
+
+    @property
+    def filled_cells(self) -> int:
+        return max(self.total_cells - self.empty_cells, 0)
+
+    @property
+    def fill_rate(self) -> float:
+        if self.total_cells <= 0:
+            return 0.0
+        return self.filled_cells / self.total_cells
+
+    @property
+    def fully_empty_share(self) -> float:
+        if self.feature_count <= 0:
+            return 0.0
+        return min(
+            max(self.fully_empty_features / self.feature_count, 0.0),
+            1.0,
+        )
+
+
+@dataclass
+class TopologyStats:
+    """Счётчики топологических проблем одного слоя."""
+
+    layer: str
+    polygon_overlaps: int = 0
+    polygon_gaps: int = 0
+    dangling_lines: int = 0
+    free_ends: int = 0
+    line_intersections: int = 0
+    line_overlaps: int = 0
+
+    @property
+    def has_issues(self) -> bool:
+        return bool(
+            self.polygon_overlaps
+            or self.polygon_gaps
+            or self.dangling_lines
+            or self.line_intersections
+            or self.line_overlaps
+        )
 
 
 @dataclass(frozen=True)
@@ -1031,6 +1114,176 @@ def coordinate_problem(
             return "out_of_range"
 
     return None
+
+
+def attribute_fill_issues(
+    layers: Sequence[LayerFillStats],
+    *,
+    low_fill_rate: float = ATTRIBUTE_LOW_FILL_RATE,
+    almost_empty_rate: float = ATTRIBUTE_ALMOST_EMPTY_RATE,
+    almost_empty_feature_share: float = (
+        ATTRIBUTE_ALMOST_EMPTY_FEATURE_SHARE
+    ),
+) -> List[QualityIssue]:
+    """Проверить NULL/пустые значения и долю заполнения атрибутов."""
+
+    issues: List[QualityIssue] = []
+
+    for layer in layers:
+        if layer.feature_count <= 0 or not layer.fields:
+            continue
+        if layer.total_cells <= 0:
+            continue
+
+        required_empty = [
+            field
+            for field in layer.fields
+            if field.required and field.empty > 0
+        ]
+        low_fields = [
+            field
+            for field in layer.fields
+            if (
+                not field.required
+                and field.empty > 0
+                and field.fill_rate < low_fill_rate
+            )
+        ]
+        almost_empty = (
+            layer.fill_rate < almost_empty_rate
+            or layer.fully_empty_share >= almost_empty_feature_share
+        )
+
+        if not required_empty and not low_fields and not almost_empty:
+            continue
+
+        low_text = _fill_field_list(low_fields)
+        required_text = _fill_field_names(required_empty)
+        issues.append(
+            QualityIssue(
+                "attribute_fill",
+                "Слой «{}»: заполненность атрибутов {}% "
+                "({} из {} ячеек, пусто {}); низкая заполненность: {}; "
+                "обязательные поля с пустыми значениями: {}",
+                (
+                    layer.layer,
+                    _fill_percent(layer.fill_rate),
+                    layer.filled_cells,
+                    layer.total_cells,
+                    layer.empty_cells,
+                    low_text,
+                    required_text,
+                ),
+                layer=layer.layer,
+                location="Атрибуты",
+            )
+        )
+
+        if almost_empty:
+            issues.append(
+                QualityIssue(
+                    "attribute_fill",
+                    "Слой «{}»: почти пустые атрибуты — заполнено {} "
+                    "из {} ячеек ({}%), полностью пустых объектов {} "
+                    "из {} ({}%)",
+                    (
+                        layer.layer,
+                        layer.filled_cells,
+                        layer.total_cells,
+                        _fill_percent(layer.fill_rate),
+                        layer.fully_empty_features,
+                        layer.feature_count,
+                        _fill_percent(layer.fully_empty_share),
+                    ),
+                    layer=layer.layer,
+                    location="Атрибуты",
+                )
+            )
+
+        for field in layer.fields:
+            if field.required:
+                message = (
+                    "Обязательное поле «{}»: заполнено {} из {} "
+                    "({}%), пусто {}"
+                )
+            else:
+                message = (
+                    "Поле «{}»: заполнено {} из {} ({}%), пусто {}"
+                )
+            issues.append(
+                QualityIssue(
+                    "attribute_fill",
+                    message,
+                    (
+                        field.name,
+                        field.filled,
+                        field.total,
+                        _fill_percent(field.fill_rate),
+                        field.empty,
+                    ),
+                    layer=layer.layer,
+                    location=field.name,
+                    detail_only=True,
+                )
+            )
+
+    return issues
+
+
+def _fill_percent(value: float) -> int:
+    return int(round(max(min(value, 1.0), 0.0) * 100))
+
+
+def _fill_field_list(fields: Sequence[FieldFillStats]) -> str:
+    if not fields:
+        return "—"
+    limit = 8
+    parts = [
+        f"{field.name} — {_fill_percent(field.fill_rate)}%"
+        for field in fields[:limit]
+    ]
+    if len(fields) > limit:
+        parts.append("…")
+    return ", ".join(parts)
+
+
+def _fill_field_names(fields: Sequence[FieldFillStats]) -> str:
+    if not fields:
+        return "—"
+    limit = 8
+    names = [field.name for field in fields[:limit]]
+    if len(fields) > limit:
+        names.append("…")
+    return ", ".join(names)
+
+
+def topology_summary_issues(
+    stats: TopologyStats,
+) -> List[QualityIssue]:
+    """Сформировать сводку топологических проблем слоя."""
+
+    if not stats.has_issues:
+        return []
+
+    return [
+        QualityIssue(
+            "topology",
+            "Слой «{}»: наложений полигонов: {}, разрывов полигонов: {}, "
+            "висячих линий: {} (свободных концов: {}), пересечений "
+            "линий: {}, наложений линий: {}",
+            (
+                stats.layer,
+                stats.polygon_overlaps,
+                stats.polygon_gaps,
+                stats.dangling_lines,
+                stats.free_ends,
+                stats.line_intersections,
+                stats.line_overlaps,
+            ),
+            layer=stats.layer,
+            location="Топология",
+        )
+    ]
 
 
 def empty_layer_issues(

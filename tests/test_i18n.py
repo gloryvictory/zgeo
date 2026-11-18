@@ -132,8 +132,9 @@ class I18nTests(unittest.TestCase):
             "{} прервано: {} из {}",
             "Нет файлов для выбранных проверок",
             "Проверки: уточнить размер, систему координат и количество "
-            "элементов, проверить JSON, имена полей, имена и пути файлов, "
-            "набор данных, метаданные и CRS, .prj, геометрии, дубли, "
+            "элементов, проверить JSON и GeoJSON, имена полей, "
+            "заполненность атрибутов, имена и пути файлов, набор данных, "
+            "метаданные и CRS, .prj, геометрии, топологию, дубли, "
             "координаты.",
             "Проверка JSON на формат GeoJSON: 0 из {}",
             "Проверка JSON: {} из {} · {}",
@@ -331,6 +332,80 @@ class I18nTests(unittest.TestCase):
                     keyword.value.value, str
                 ):
                     sources.add(keyword.value.value)
+        missing = sorted(
+            source
+            for source in sources
+            if source not in EN_TRANSLATIONS
+        )
+        self.assertEqual(missing, [])
+
+    def test_quality_check_messages_have_english_translations(
+        self,
+    ) -> None:
+        path = Path(__file__).resolve().parents[1] / "quality_check.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        sources = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            function = node.func
+            if not isinstance(function, ast.Name):
+                continue
+            if function.id != "QualityIssue":
+                continue
+            message = None
+            if (
+                len(node.args) >= 2
+                and isinstance(node.args[1], ast.Constant)
+                and isinstance(node.args[1].value, str)
+            ):
+                message = node.args[1].value
+            for keyword in node.keywords:
+                if keyword.arg != "message":
+                    continue
+                if isinstance(keyword.value, ast.Constant) and isinstance(
+                    keyword.value.value, str
+                ):
+                    message = keyword.value.value
+            if message:
+                sources.add(message)
+        missing = sorted(
+            source
+            for source in sources
+            if source not in EN_TRANSLATIONS
+        )
+        self.assertEqual(missing, [])
+
+    def test_topology_messages_have_english_translations(
+        self,
+    ) -> None:
+        path = Path(__file__).resolve().parents[1] / "topology_check.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        sources = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            function = node.func
+            if not isinstance(function, ast.Name):
+                continue
+            if function.id != "QualityIssue":
+                continue
+            message = None
+            if (
+                len(node.args) >= 2
+                and isinstance(node.args[1], ast.Constant)
+                and isinstance(node.args[1].value, str)
+            ):
+                message = node.args[1].value
+            for keyword in node.keywords:
+                if keyword.arg != "message":
+                    continue
+                if isinstance(keyword.value, ast.Constant) and isinstance(
+                    keyword.value.value, str
+                ):
+                    message = keyword.value.value
+            if message:
+                sources.add(message)
         missing = sorted(
             source
             for source in sources

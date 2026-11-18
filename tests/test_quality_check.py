@@ -9,6 +9,10 @@ from types import SimpleNamespace
 
 from zgeo.quality_check import (
     CrsDescriptor,
+    FieldFillStats,
+    LayerFillStats,
+    TopologyStats,
+    attribute_fill_issues,
     completeness_issues,
     coordinate_problem,
     crs_issues,
@@ -29,6 +33,7 @@ from zgeo.quality_check import (
     orphan_sidecars,
     metadata_sidecar_issues,
     prj_file_issues,
+    topology_summary_issues,
     truncated_duplicate_issues,
 )
 
@@ -518,6 +523,158 @@ class EmptyLayerTests(unittest.TestCase):
 
     def test_unknown_count_is_not_empty(self) -> None:
         self.assertEqual(empty_layer_issues([("one", -1)]), [])
+
+
+class AttributeFillTests(unittest.TestCase):
+    def test_complete_layer_has_no_issues(self) -> None:
+        layer = LayerFillStats(
+            "roads",
+            2,
+            (
+                FieldFillStats("name", 2, 0),
+                FieldFillStats("code", 2, 0),
+            ),
+        )
+        self.assertEqual(attribute_fill_issues([layer]), [])
+
+    def test_required_null_and_empty_strings_are_reported(self) -> None:
+        layer = LayerFillStats(
+            "roads",
+            4,
+            (
+                FieldFillStats("name", 4, 0),
+                FieldFillStats("code", 4, 2, required=True),
+            ),
+        )
+        issues = attribute_fill_issues([layer])
+        self.assertEqual(len(issues), 3)
+        summary = issues[0]
+        self.assertFalse(summary.detail_only)
+        self.assertIn("code", summary.args[6])
+        self.assertIn("{}%", summary.message)
+        self.assertEqual(summary.args[1], 75)
+        self.assertEqual(
+            [issue.detail_only for issue in issues[1:]],
+            [True, True],
+        )
+        self.assertEqual(issues[2].message.count("{}"), 5)
+
+    def test_low_fill_field_is_reported_with_rate(self) -> None:
+        layer = LayerFillStats(
+            "roads",
+            10,
+            (
+                FieldFillStats("id", 10, 0),
+                FieldFillStats("comment", 10, 8),
+            ),
+        )
+        issues = attribute_fill_issues([layer])
+        summary = issues[0]
+        self.assertIn("comment — 20%", summary.args[5])
+        self.assertEqual(summary.args[1], 60)
+        self.assertTrue(all(issue.detail_only for issue in issues[1:]))
+
+    def test_almost_empty_layer_is_reported(self) -> None:
+        layer = LayerFillStats(
+            "empty",
+            10,
+            (
+                FieldFillStats("name", 10, 10),
+                FieldFillStats("code", 10, 10, required=True),
+            ),
+            fully_empty_features=10,
+        )
+        issues = attribute_fill_issues([layer])
+        almost = [
+            issue
+            for issue in issues
+            if "почти пустые атрибуты" in issue.message
+        ]
+        self.assertEqual(len(almost), 1)
+        self.assertEqual(almost[0].args, ("empty", 0, 20, 0, 10, 10, 100))
+        self.assertEqual(issues[0].args[5], "name — 0%")
+        self.assertEqual(issues[0].args[6], "code")
+
+    def test_many_fully_empty_features_trigger_almost_empty(self) -> None:
+        fields = tuple(
+            FieldFillStats(f"field_{index}", 100, 95)
+            for index in range(20)
+        )
+        layer = LayerFillStats(
+            "sparse",
+            100,
+            fields,
+            fully_empty_features=95,
+        )
+        issues = attribute_fill_issues([layer])
+        almost = [
+            issue
+            for issue in issues
+            if "почти пустые атрибуты" in issue.message
+        ]
+        self.assertEqual(len(almost), 1)
+        self.assertEqual(almost[0].args[3], 5)
+
+    def test_exactly_half_fill_is_not_low(self) -> None:
+        layer = LayerFillStats(
+            "roads",
+            2,
+            (
+                FieldFillStats("full", 2, 0),
+                FieldFillStats("half", 2, 1),
+            ),
+        )
+        self.assertEqual(attribute_fill_issues([layer]), [])
+
+    def test_zero_features_and_no_fields_are_skipped(self) -> None:
+        self.assertEqual(
+            attribute_fill_issues(
+                [
+                    LayerFillStats(
+                        "empty",
+                        0,
+                        (FieldFillStats("name", 0, 0),),
+                    ),
+                    LayerFillStats("no_fields", 10, ()),
+                ]
+            ),
+            [],
+        )
+
+
+class TopologySummaryTests(unittest.TestCase):
+    def test_no_issues_produces_no_summary(self) -> None:
+        self.assertEqual(
+            topology_summary_issues(TopologyStats("roads")), []
+        )
+
+    def test_summary_contains_all_counts(self) -> None:
+        issues = topology_summary_issues(
+            TopologyStats(
+                "roads",
+                polygon_overlaps=2,
+                polygon_gaps=1,
+                dangling_lines=3,
+                free_ends=4,
+                line_intersections=5,
+                line_overlaps=6,
+            )
+        )
+        self.assertEqual(len(issues), 1)
+        issue = issues[0]
+        self.assertEqual(issue.check, "topology")
+        self.assertFalse(issue.detail_only)
+        self.assertEqual(
+            issue.args,
+            ("roads", 2, 1, 3, 4, 5, 6),
+        )
+        self.assertEqual(issue.location, "Топология")
+
+    def test_only_line_issues_are_reported(self) -> None:
+        issues = topology_summary_issues(
+            TopologyStats("lines", dangling_lines=1, free_ends=1)
+        )
+        self.assertEqual(len(issues), 1)
 
 
 class CoordinateProblemTests(unittest.TestCase):
