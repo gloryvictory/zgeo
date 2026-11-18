@@ -1,6 +1,20 @@
 ZGeo change log
 ===============
 
+Version 1.38.1 — 2026-11-19
+Previous GitHub release: v1.38.0 (2026-11-18)
+
+Overview
+--------
+ZGeo 1.38.1 fixes the metadata changelog so QGIS can read the plugin
+package.
+
+Changes in 1.38.1
+-----------------
+- Fixed a metadata parsing error caused by a percent sign in the
+  changelog field of `metadata.txt`.
+- Shortened the metadata changelog and kept it in English only.
+
 Version 1.38.0 — 2026-11-18
 Previous GitHub release: v1.36.0 (2026-11-16)
 
