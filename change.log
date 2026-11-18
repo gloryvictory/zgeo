@@ -1,6 +1,20 @@
 ZGeo change log
 ===============
 
+Version 1.38.4 — 2026-11-19
+Previous GitHub release: v1.38.3 (2026-11-19)
+
+Overview
+--------
+ZGeo 1.38.4 updates the plugin metadata for QGIS 4.
+
+Changes in 1.38.4
+-----------------
+- Removed the deprecated `supportsQt6` key.
+- Kept `qgisMaximumVersion=4.99`; QGIS 4 compatibility is determined
+  by this field.
+- Added a metadata regression check.
+
 Version 1.38.3 — 2026-11-19
 Previous GitHub release: v1.38.2 (2026-11-19)
 

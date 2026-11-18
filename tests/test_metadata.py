@@ -17,9 +17,10 @@ class MetadataTests(unittest.TestCase):
         self.assertEqual(
             parser.get("general", "qgisMinimumVersion"), "3.16"
         )
-        self.assertTrue(
-            parser.get("general", "qgisMaximumVersion").startswith("4.")
+        self.assertEqual(
+            parser.get("general", "qgisMaximumVersion"), "4.99"
         )
+        self.assertFalse(parser.has_option("general", "supportsQt6"))
 
 
 if __name__ == "__main__":
