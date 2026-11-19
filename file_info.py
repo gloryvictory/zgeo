@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -19,6 +20,7 @@ from .i18n import tr
 from .quality_check import CrsDescriptor
 from .scanner import OTHER, RASTER, TABLE, VECTOR, GeoFile
 
+_LOGGER = logging.getLogger(__name__)
 _LAYER_TYPE = getattr(Qgis, "LayerType", None)
 _VECTOR_LAYER_TYPE = getattr(_LAYER_TYPE, "Vector", 0)
 _RASTER_LAYER_TYPE = getattr(_LAYER_TYPE, "Raster", 1)
@@ -446,7 +448,7 @@ def _is_projected(crs) -> bool:
         try:
             return bool(method())
         except Exception:
-            pass
+            _LOGGER.debug("CRS isProjected() failed", exc_info=True)
 
     crs_type = getattr(Qgis, "CrsType", None)
     type_method = getattr(crs, "type", None)
@@ -458,7 +460,7 @@ def _is_projected(crs) -> bool:
                 crs_type.DerivedProjected,
             )
         except Exception:
-            pass
+            _LOGGER.debug("CRS type() failed", exc_info=True)
 
     try:
         return crs.isValid() and not crs.isGeographic()
@@ -476,7 +478,9 @@ def _distance_unit_name(units) -> str:
         try:
             return distance_unit(units).name
         except Exception:
-            pass
+            _LOGGER.debug(
+                "Could not convert distance unit %r", units, exc_info=True
+            )
     return "Unknown"
 
 

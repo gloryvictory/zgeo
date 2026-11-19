@@ -2,7 +2,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from zgeo.explorer import group_files_by_folder, open_folder
+from zgeo.explorer import (
+    _LINUX_OPEN,
+    _MACOS_OPEN,
+    _WINDOWS_EXPLORER,
+    group_files_by_folder,
+    open_folder,
+)
 
 
 class GroupFilesByFolderTests(unittest.TestCase):
@@ -37,9 +43,9 @@ class OpenFolderTests(unittest.TestCase):
     def test_opens_folder_with_platform_command(self) -> None:
         folder = Path("C:/data/out")
         cases = (
-            ("win32", ["explorer.exe", str(folder)]),
-            ("darwin", ["open", str(folder)]),
-            ("linux", ["xdg-open", str(folder)]),
+            ("win32", [_WINDOWS_EXPLORER, str(folder)]),
+            ("darwin", [_MACOS_OPEN, str(folder)]),
+            ("linux", [_LINUX_OPEN, str(folder)]),
         )
 
         for platform, expected in cases:

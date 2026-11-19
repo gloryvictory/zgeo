@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
-import subprocess
+import os
+import subprocess  # nosec B404
 import sys
 from collections import OrderedDict
 from pathlib import Path
 from typing import Dict, Iterable, List
+
+_WINDOWS_EXPLORER = os.path.join(
+    os.environ.get("SystemRoot", r"C:\Windows"), "explorer.exe"
+)
+_MACOS_OPEN = "/usr/bin/open"
+_LINUX_OPEN = "/usr/bin/xdg-open"
 
 
 def group_files_by_folder(paths: Iterable[Path]) -> Dict[Path, List[Path]]:
@@ -47,43 +54,30 @@ def open_folder(path: Path) -> List[str]:
     return []
 
 
+def _launch(program: str, *arguments: str) -> None:
+    """Запустить системную программу с фиксированным путём и без shell."""
+
+    # The executable is fixed and the argument list is never passed to a shell.
+    subprocess.Popen(  # nosec B603
+        [program, *arguments],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 def _open_folder(path: Path) -> None:
     if sys.platform.startswith("win"):
-        subprocess.Popen(
-            ["explorer.exe", str(path)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        _launch(_WINDOWS_EXPLORER, str(path))
     elif sys.platform == "darwin":
-        subprocess.Popen(
-            ["open", str(path)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        _launch(_MACOS_OPEN, str(path))
     else:
-        subprocess.Popen(
-            ["xdg-open", str(path)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        _launch(_LINUX_OPEN, str(path))
 
 
 def _reveal_file(path: Path) -> None:
     if sys.platform.startswith("win"):
-        subprocess.Popen(
-            ["explorer.exe", "/select,", str(path)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        _launch(_WINDOWS_EXPLORER, "/select,", str(path))
     elif sys.platform == "darwin":
-        subprocess.Popen(
-            ["open", "-R", str(path)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        _launch(_MACOS_OPEN, "-R", str(path))
     else:
-        subprocess.Popen(
-            ["xdg-open", str(path.parent)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        _launch(_LINUX_OPEN, str(path.parent))

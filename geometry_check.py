@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -28,6 +29,8 @@ from .quality_check import (
 )
 
 MAX_DETAIL_ISSUES = 1000
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -124,8 +127,17 @@ def inspect_geometry_and_coordinates(
                             len(details), detail_budget
                         )
                 except Exception:
+                    _LOGGER.debug(
+                        "Skipping feature while checking geometry",
+                        exc_info=True,
+                    )
                     continue
         except Exception:
+            _LOGGER.debug(
+                "Skipping layer %s while checking geometry",
+                layer.name(),
+                exc_info=True,
+            )
             continue
 
         if check_geometry:
@@ -175,8 +187,17 @@ def inspect_duplicate_geometries(
                         (feature_id, bytes(geometry.asWkb()))
                     )
                 except Exception:
+                    _LOGGER.debug(
+                        "Skipping feature while checking duplicate geometry",
+                        exc_info=True,
+                    )
                     continue
         except Exception:
+            _LOGGER.debug(
+                "Skipping layer %s while checking duplicate geometry",
+                layer.name(),
+                exc_info=True,
+            )
             continue
 
         issues.extend(
@@ -340,7 +361,7 @@ def _is_projected(crs: QgsCoordinateReferenceSystem) -> bool:
         try:
             return bool(method())
         except Exception:
-            pass
+            _LOGGER.debug("CRS isProjected() failed", exc_info=True)
 
     crs_type = getattr(Qgis, "CrsType", None)
     type_method = getattr(crs, "type", None)
@@ -352,7 +373,7 @@ def _is_projected(crs: QgsCoordinateReferenceSystem) -> bool:
                 crs_type.DerivedProjected,
             )
         except Exception:
-            pass
+            _LOGGER.debug("CRS type() failed", exc_info=True)
 
     return crs.isValid() and not crs.isGeographic()
 

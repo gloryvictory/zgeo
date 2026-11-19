@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
@@ -24,6 +25,8 @@ from .quality_check import (
 
 MAX_DETAIL_ISSUES = 1000
 MAX_ID_LIST = 8
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -187,9 +190,17 @@ def _collect_entries(
                     )
                 )
             except Exception:
+                _LOGGER.debug(
+                    "Skipping feature while collecting topology entries",
+                    exc_info=True,
+                )
                 continue
     except Exception:
-        pass
+        _LOGGER.debug(
+            "Skipping layer %s while collecting topology entries",
+            layer.name(),
+            exc_info=True,
+        )
 
     return polygons, lines
 
@@ -238,6 +249,11 @@ def _build_index(entries: Sequence[_Entry]) -> QgsSpatialIndex:
                 entry.key, entry.geometry.boundingBox()
             )
         except Exception:
+            _LOGGER.debug(
+                "Could not add feature %s to the spatial index",
+                entry.feature_id,
+                exc_info=True,
+            )
             continue
     return index
 
@@ -253,6 +269,11 @@ def _polygon_overlaps(
         try:
             candidates = index.intersects(entry.geometry.boundingBox())
         except Exception:
+            _LOGGER.debug(
+                "Could not query the spatial index for polygon %s",
+                entry.feature_id,
+                exc_info=True,
+            )
             continue
         for key in candidates:
             if key <= entry.key:
@@ -268,6 +289,12 @@ def _polygon_overlaps(
                     continue
                 area = overlap.area()
             except Exception:
+                _LOGGER.debug(
+                    "Could not compare polygons %s and %s",
+                    entry.feature_id,
+                    other.feature_id,
+                    exc_info=True,
+                )
                 continue
             if area <= 0:
                 continue
@@ -326,10 +353,19 @@ def _polygon_gaps(
                     if other.geometry.intersects(boundary):
                         owners.add(other.feature_id)
                 except Exception:
+                    _LOGGER.debug(
+                        "Could not test the gap boundary against feature %s",
+                        other.feature_id,
+                        exc_info=True,
+                    )
                     continue
             if len(owners) < 2:
                 continue
         except Exception:
+            _LOGGER.debug(
+                "Skipping an invalid polygon gap candidate",
+                exc_info=True,
+            )
             continue
 
         stats.polygon_gaps += 1
@@ -360,7 +396,9 @@ def _union_polygons(
         if union is not None and not union.isNull() and not union.isEmpty():
             return union
     except Exception:
-        pass
+        _LOGGER.debug(
+            "Unary union failed; trying pairwise union", exc_info=True
+        )
 
     try:
         union = polygons[0].geometry
@@ -369,7 +407,7 @@ def _union_polygons(
         if not union.isNull() and not union.isEmpty():
             return union
     except Exception:
-        pass
+        _LOGGER.debug("Pairwise polygon union failed", exc_info=True)
     return None
 
 
@@ -486,6 +524,11 @@ def _endpoint_connected(
                     ):
                         return True
                 except Exception:
+                    _LOGGER.debug(
+                        "Could not compare line parts for feature %s",
+                        candidate.feature_id,
+                        exc_info=True,
+                    )
                     continue
             continue
 
@@ -493,6 +536,11 @@ def _endpoint_connected(
             if candidate.geometry.distance(point_geometry) <= tolerance:
                 return True
         except Exception:
+            _LOGGER.debug(
+                "Could not compare line feature %s",
+                candidate.feature_id,
+                exc_info=True,
+            )
             continue
 
     return False
@@ -510,6 +558,11 @@ def _line_intersections(
         try:
             candidates = index.intersects(entry.geometry.boundingBox())
         except Exception:
+            _LOGGER.debug(
+                "Could not query the spatial index for line %s",
+                entry.feature_id,
+                exc_info=True,
+            )
             continue
         for key in candidates:
             if key <= entry.key:
@@ -524,6 +577,12 @@ def _line_intersections(
                     other.geometry
                 )
             except Exception:
+                _LOGGER.debug(
+                    "Could not intersect lines %s and %s",
+                    entry.feature_id,
+                    other.feature_id,
+                    exc_info=True,
+                )
                 continue
             if (
                 intersection is None

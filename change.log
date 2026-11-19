@@ -1,6 +1,21 @@
 ZGeo change log
 ===============
 
+Version 1.38.5 — 2026-11-19
+Previous GitHub release: v1.38.4 (2026-11-19)
+
+Overview
+--------
+ZGeo 1.38.5 addresses the reported Bandit security findings.
+
+Changes in 1.38.5
+-----------------
+- Replaced XML escaping with a local helper that does not use XML parsers.
+- Logged ignored QGIS API errors instead of silently swallowing them.
+- Used absolute file-manager executables and documented the fixed-argument
+  subprocess call.
+- Added regression coverage for XML escaping and platform commands.
+
 Version 1.38.4 — 2026-11-19
 Previous GitHub release: v1.38.3 (2026-11-19)
 

@@ -132,6 +132,15 @@ class ExcelExportTests(unittest.TestCase):
                 workbook = archive.read("xl/workbook.xml").decode("utf-8")
                 self.assertIn('name="Данные_2026_тест"', workbook)
 
+    def test_escapes_sheet_name_attribute(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "table.xlsx"
+            write_xlsx(path, 'A&B "C"', ["A"], [["B"]])
+
+            with zipfile.ZipFile(path) as archive:
+                workbook = archive.read("xl/workbook.xml").decode("utf-8")
+                self.assertIn('name="A&amp;B &quot;C&quot;"', workbook)
+
     def test_english_sheet_name_and_boolean_cells(self):
         set_language(LANGUAGE_EN)
         try:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import List, Optional, Sequence, Tuple
 
 from qgis.core import QgsFieldConstraints, QgsVectorLayer
@@ -13,6 +14,8 @@ from .quality_check import (
     QualityIssue,
     attribute_fill_issues,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def inspect_attribute_fill(
@@ -102,6 +105,11 @@ def _required_field_names(
         try:
             strength = field.constraints().constraintStrength(not_null)
         except Exception:
+            _LOGGER.debug(
+                "Could not read constraint strength for field %s",
+                field.name(),
+                exc_info=True,
+            )
             continue
         if strength != not_set:
             required.add(field.name())

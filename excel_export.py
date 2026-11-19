@@ -6,7 +6,6 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, List, Sequence, Tuple, Union
-from xml.sax.saxutils import escape
 
 from .i18n import tr
 
@@ -14,6 +13,19 @@ CellValue = Union[str, int, float, None]
 SheetSpec = Tuple[str, Sequence[str], Iterable[Sequence[CellValue]]]
 
 _INVALID_SHEET_CHARS = set('[]:*?/\\')
+
+
+def _escape_xml(value: str, *, attribute: bool = False) -> str:
+    """Экранировать текст для XML без использования XML-парсеров."""
+
+    text = (
+        value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+    if attribute:
+        text = text.replace('"', "&quot;").replace("'", "&apos;")
+    return text
 
 
 def write_xlsx(
@@ -164,7 +176,7 @@ def _cell_xml(
             reference, style_attr, value
         )
 
-    text = escape(str(value))
+    text = _escape_xml(str(value))
     return (
         '<c r="{ref}"{style} t="inlineStr">'
         '<is><t xml:space="preserve">{text}</t></is>'
@@ -252,7 +264,7 @@ def _root_rels_xml() -> str:
 def _workbook_xml(sheet_names: Sequence[str]) -> str:
     sheets = "".join(
         '<sheet name="{name}" sheetId="{sheet_id}" r:id="rId{sheet_id}"/>'.format(
-            name=escape(name, {'"': "&quot;"}),
+            name=_escape_xml(name, attribute=True),
             sheet_id=index,
         )
         for index, name in enumerate(sheet_names, start=1)
