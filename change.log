@@ -1,6 +1,26 @@
 ZGeo change log
 ===============
 
+Version 1.39.0 — 2026-11-19
+Previous GitHub release: v1.38.5 (2026-11-19)
+
+Overview
+--------
+ZGeo 1.39.0 adds file readability and GeoPackage/SQLite integrity checks.
+
+Changes in 1.39.0
+-----------------
+- Added a file readability check: missing and empty files, provider open errors,
+  vector feature read errors and raster sample read errors.
+- Added a GeoPackage/SQLite integrity check: read-only PRAGMA quick_check,
+  PRAGMA integrity_check on errors, PRAGMA foreign_key_check, required
+  GeoPackage tables, geometry column existence and srs_id consistency.
+- The check selection window now contains 17 checks; the new checks are
+  disabled by default.
+- Added Russian and English descriptions, examples, issue messages, reports
+  and timing integration.
+- Added unit tests and updated the documentation.
+
 Version 1.38.5 — 2026-11-19
 Previous GitHub release: v1.38.4 (2026-11-19)
 

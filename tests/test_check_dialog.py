@@ -68,6 +68,18 @@ class CheckDefinitionsTests(unittest.TestCase):
         self.assertEqual(constants.get("CHECK_FILE_PATHS"), "file_paths")
         self.assertIn("CHECK_FILE_PATHS", _definition_keys())
 
+    def test_readability_check_is_registered(self) -> None:
+        constants = _check_constants()
+        self.assertEqual(constants.get("CHECK_READABILITY"), "readability")
+        self.assertIn("CHECK_READABILITY", _definition_keys())
+
+    def test_gpkg_integrity_check_is_registered(self) -> None:
+        constants = _check_constants()
+        self.assertEqual(
+            constants.get("CHECK_GPKG_INTEGRITY"), "gpkg_integrity"
+        )
+        self.assertIn("CHECK_GPKG_INTEGRITY", _definition_keys())
+
     def test_duplicate_check_is_registered(self) -> None:
         constants = _check_constants()
         self.assertEqual(
@@ -119,6 +131,8 @@ class CheckDefinitionsTests(unittest.TestCase):
             if key and not checked:
                 unchecked.add(key)
         self.assertIn("CHECK_PRJ", unchecked)
+        self.assertIn("CHECK_READABILITY", unchecked)
+        self.assertIn("CHECK_GPKG_INTEGRITY", unchecked)
         self.assertIn("CHECK_DUPLICATES", unchecked)
         self.assertIn("CHECK_FILE_PATHS", unchecked)
         self.assertIn("CHECK_GEOMETRY", unchecked)

@@ -66,9 +66,11 @@ from .check_dialog import (
     CHECK_FILE_PATHS,
     CHECK_GEOJSON_QUALITY,
     CHECK_GEOMETRY,
+    CHECK_GPKG_INTEGRITY,
     CHECK_JSON_GEOJSON,
     CHECK_METADATA_CRS,
     CHECK_PRJ,
+    CHECK_READABILITY,
     CHECK_SIZE,
     CHECK_TOPOLOGY,
     PROBLEM_CHECKS,
@@ -93,6 +95,7 @@ from .geometry_check import (
     inspect_duplicate_geometries,
     inspect_geometry_and_coordinates,
 )
+from .gpkg_check import SQLITE_EXTENSIONS, inspect_gpkg_integrity
 from .quality_check import (
     QualityIssue,
     completeness_issues,
@@ -130,6 +133,7 @@ from .scanner import (
     get_format_groups,
 )
 from .stats import build_size_distribution, build_type_distribution
+from .readability_check import inspect_readability
 from .topology_check import inspect_topology
 from .table_export import (
     export_rows_with_dialog,
@@ -144,8 +148,9 @@ DISABLED_FORMATS_KEY = "zgeo/disabled_formats"
 ICON_PATH = Path(__file__).with_name("icon.svg")
 CHECKS_TOOLTIP = (
     "Проверки: уточнить размер, систему координат и количество элементов, "
-    "проверить JSON и GeoJSON, имена полей, заполненность атрибутов, "
-    "имена и пути файлов, набор данных, метаданные и CRS, .prj, геометрии, "
+    "проверить читаемость файлов, JSON и GeoJSON, имена полей, "
+    "заполненность атрибутов, имена и пути файлов, набор данных, "
+    "целостность GeoPackage/SQLite, метаданные и CRS, .prj, геометрии, "
     "топологию, дубли, координаты."
 )
 SIZE_CHART_COLOR = "#0F766E"
@@ -2878,6 +2883,16 @@ class ZGeoPanel(QDockWidget):
                 if geo_file.extension in (".shp", ".mif", ".tab")
             ]
 
+        if check == CHECK_READABILITY:
+            return list(self._files)
+
+        if check == CHECK_GPKG_INTEGRITY:
+            return [
+                geo_file
+                for geo_file in self._files
+                if geo_file.extension in SQLITE_EXTENSIONS
+            ]
+
         if check in (
             CHECK_CRS_QUALITY,
             CHECK_METADATA_CRS,
@@ -3082,6 +3097,10 @@ class ZGeoPanel(QDockWidget):
 
         if check == CHECK_ATTRIBUTE_FILL:
             return inspect_attribute_fill(geo_file)
+        if check == CHECK_READABILITY:
+            return self._inspect_readability(geo_file)
+        if check == CHECK_GPKG_INTEGRITY:
+            return self._inspect_gpkg_integrity(geo_file)
         if check == CHECK_TOPOLOGY:
             return self._inspect_topology(geo_file)
         if check == CHECK_DATASET_INTEGRITY:
@@ -3270,6 +3289,31 @@ class ZGeoPanel(QDockWidget):
             owner = str(candidates[0]) if candidates else ""
             self._problem_folder_owners[key] = owner
         return owner
+
+    def _inspect_readability(
+        self, geo_file: GeoFile
+    ) -> Tuple[List[QualityIssue], bool]:
+        """Проверить, что файл и его слои открываются и читаются."""
+
+        found, applicable = inspect_readability(geo_file)
+        issues = [
+            replace(issue, check=CHECK_READABILITY) for issue in found
+        ]
+        return issues, applicable
+
+    def _inspect_gpkg_integrity(
+        self, geo_file: GeoFile
+    ) -> Tuple[List[QualityIssue], bool]:
+        """Проверить целостность SQLite и структуру GeoPackage."""
+
+        found, applicable = inspect_gpkg_integrity(
+            geo_file, CHECK_GPKG_INTEGRITY
+        )
+        issues = [
+            replace(issue, check=CHECK_GPKG_INTEGRITY)
+            for issue in found
+        ]
+        return issues, applicable
 
     def _inspect_duplicates(
         self, geo_file: GeoFile

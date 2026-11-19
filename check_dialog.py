@@ -29,6 +29,7 @@ from .i18n import tr
 ICON_PATH = Path(__file__).with_name("icon.svg")
 
 CHECK_SIZE = "refine_size"
+CHECK_READABILITY = "readability"
 CHECK_JSON_GEOJSON = "json_geojson"
 CHECK_GEOJSON_QUALITY = "geojson_quality"
 CHECK_CRS_QUALITY = "crs_quality"
@@ -36,6 +37,7 @@ CHECK_COUNT_QUALITY = "count_quality"
 CHECK_FIELD_NAMES = "field_names"
 CHECK_ATTRIBUTE_FILL = "attribute_fill"
 CHECK_DATASET_INTEGRITY = "dataset_integrity"
+CHECK_GPKG_INTEGRITY = "gpkg_integrity"
 CHECK_METADATA_CRS = "metadata_crs"
 CHECK_PRJ = "prj_file"
 CHECK_GEOMETRY = "geometry_quality"
@@ -46,6 +48,7 @@ CHECK_FILE_PATHS = "file_paths"
 
 PROBLEM_CHECKS = frozenset(
     {
+        CHECK_READABILITY,
         CHECK_FILE_PATHS,
         CHECK_GEOJSON_QUALITY,
         CHECK_CRS_QUALITY,
@@ -53,6 +56,7 @@ PROBLEM_CHECKS = frozenset(
         CHECK_FIELD_NAMES,
         CHECK_ATTRIBUTE_FILL,
         CHECK_DATASET_INTEGRITY,
+        CHECK_GPKG_INTEGRITY,
         CHECK_METADATA_CRS,
         CHECK_PRJ,
         CHECK_GEOMETRY,
@@ -127,6 +131,48 @@ def check_definitions(
                 tr(
                     "dem.tif + dem.tif.aux.xml + dem.tif.ovr + dem.tfw — "
                     "полный размер растрового набора."
+                ),
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_READABILITY,
+            label=tr("Проверка читаемости файлов"),
+            description=tr(
+                "Открывает каждый файл через провайдеры QGIS и проверяет, "
+                "что слои и данные читаются."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "ZGeo открывает каждый файл через провайдеры QGIS, "
+                    "проверяет наличие доступных слоёв и читает один "
+                    "объект векторного слоя или небольшую выборку пикселей "
+                    "растра."
+                ),
+                tr(
+                    "Для векторных слоёв читаются атрибуты и геометрия "
+                    "первого объекта; для растров — несколько пикселей по "
+                    "всей области данных. Полный файл не читается, поэтому "
+                    "проверка остаётся быстрой."
+                ),
+                tr(
+                    "Проверка отмечает отсутствующие и пустые файлы, файлы "
+                    "без доступных слоёв, ошибки открытия и ошибки чтения "
+                    "данных. Пустые слои и проблемы геометрии проверяются "
+                    "отдельными проверками."
+                ),
+            ),
+            examples=(
+                tr(
+                    "Повреждённый GeoTIFF не открывается провайдером GDAL — "
+                    "файл отмечается."
+                ),
+                tr(
+                    "В GeoPackage один слой читается, а данные другого "
+                    "повреждены — отмечается ошибка чтения слоя."
+                ),
+                tr(
+                    "Файл размером 0 байт — отмечается как пустой."
                 ),
             ),
         ),
@@ -365,6 +411,50 @@ def check_definitions(
                 tr(
                     "roads.cpg с текстом UTF-8 — кодировка распознана; с "
                     "текстом x-unknown — отмечается неизвестная кодировка."
+                ),
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_GPKG_INTEGRITY,
+            label=tr("Проверка целостности GeoPackage/SQLite"),
+            description=tr(
+                "Проверяет целостность базы SQLite, внешние ключи и "
+                "структуру GeoPackage."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "Для файлов .gpkg, .sqlite и .spatialite ZGeo открывает "
+                    "базу только для чтения и выполняет PRAGMA quick_check; "
+                    "при обнаружении ошибок дополнительно запускается "
+                    "PRAGMA integrity_check."
+                ),
+                tr(
+                    "Затем выполняется PRAGMA foreign_key_check. Для "
+                    "GeoPackage проверяются обязательные таблицы "
+                    "gpkg_contents, gpkg_geometry_columns и "
+                    "gpkg_spatial_ref_sys, наличие таблиц и геометрических "
+                    "колонок, ссылки на SRS и совпадение srs_id между "
+                    "gpkg_contents и gpkg_geometry_columns."
+                ),
+                tr(
+                    "Проверка не изменяет файл. Для обычных SQLite-баз без "
+                    "таблиц GeoPackage проверяются только целостность и "
+                    "внешние ключи."
+                ),
+            ),
+            examples=(
+                tr(
+                    "Повреждённый блок SQLite обнаруживается PRAGMA "
+                    "quick_check."
+                ),
+                tr(
+                    "В gpkg_geometry_columns указан srs_id, которого нет в "
+                    "gpkg_spatial_ref_sys."
+                ),
+                tr(
+                    "В gpkg_contents есть векторная таблица, но для неё нет "
+                    "записи в gpkg_geometry_columns."
                 ),
             ),
         ),

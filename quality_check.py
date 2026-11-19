@@ -1,4 +1,4 @@
-"""Проверки качества атрибутов, набора данных и слоёв.
+"""Проверки качества атрибутов, набора данных, слоёв и читаемости.
 
 Модуль не зависит от QGIS: на вход подаются имена полей, системы
 координат и количество объектов, собранные через провайдеры QGIS.
@@ -117,6 +117,65 @@ class QualityIssue:
     feature_id: Optional[int] = None
     location: str = ""
     detail_only: bool = False
+
+
+@dataclass(frozen=True)
+class ReadabilityProblem:
+    """Ошибка открытия или чтения файла/слоя."""
+
+    kind: str
+    layer: str = ""
+    detail: str = ""
+
+
+def readability_issues(
+    problems: Sequence[ReadabilityProblem],
+    check: str,
+) -> List[QualityIssue]:
+    """Преобразовать ошибки читаемости в замечания проверки."""
+
+    issues: List[QualityIssue] = []
+    for problem in problems:
+        detail = problem.detail.strip()
+        suffix = ": {}".format(detail) if detail else ""
+        layer = problem.layer
+        location = "Чтение"
+
+        if problem.kind == "file_missing":
+            message = "Файл не найден или недоступен"
+            args: Tuple[object, ...] = ()
+            location = "Файл"
+        elif problem.kind == "empty_file":
+            message = "Файл пуст (0 байт)"
+            args = ()
+            location = "Файл"
+        elif problem.kind == "no_layers":
+            message = "QGIS не смог открыть файл: нет доступных слоёв"
+            args = ()
+            location = "Файл"
+        elif problem.kind == "open":
+            message = "QGIS не смог открыть файл{}"
+            args = (suffix,)
+            location = "Файл"
+        elif problem.kind == "vector_read":
+            message = "Не удалось прочитать объект из слоя «{}»{}"
+            args = (layer, suffix)
+        elif problem.kind == "raster_read":
+            message = "Не удалось прочитать данные растра «{}»{}"
+            args = (layer, suffix)
+        else:
+            continue
+
+        issues.append(
+            QualityIssue(
+                check,
+                message,
+                args,
+                layer=layer,
+                location=location,
+            )
+        )
+    return issues
 
 
 @dataclass(frozen=True)

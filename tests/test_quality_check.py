@@ -11,6 +11,7 @@ from zgeo.quality_check import (
     CrsDescriptor,
     FieldFillStats,
     LayerFillStats,
+    ReadabilityProblem,
     TopologyStats,
     attribute_fill_issues,
     completeness_issues,
@@ -33,6 +34,7 @@ from zgeo.quality_check import (
     orphan_sidecars,
     metadata_sidecar_issues,
     prj_file_issues,
+    readability_issues,
     topology_summary_issues,
     truncated_duplicate_issues,
 )
@@ -1050,6 +1052,64 @@ class FilePathTests(unittest.TestCase):
         other = self.messages(Path("roads.shp"), files=files)
         self.assertEqual(
             [m for m in other if "Осиротевший" in m], []
+        )
+
+
+class ReadabilityTests(unittest.TestCase):
+    def test_file_level_problems(self) -> None:
+        issues = readability_issues(
+            [
+                ReadabilityProblem("file_missing"),
+                ReadabilityProblem("empty_file"),
+                ReadabilityProblem("no_layers"),
+            ],
+            "readability",
+        )
+        self.assertEqual(
+            [issue.message for issue in issues],
+            [
+                "Файл не найден или недоступен",
+                "Файл пуст (0 байт)",
+                "QGIS не смог открыть файл: нет доступных слоёв",
+            ],
+        )
+        self.assertTrue(all(issue.check == "readability" for issue in issues))
+        self.assertTrue(all(issue.location == "Файл" for issue in issues))
+
+    def test_open_and_read_problems_keep_details(self) -> None:
+        issues = readability_issues(
+            [
+                ReadabilityProblem("open", detail="driver error"),
+                ReadabilityProblem(
+                    "vector_read",
+                    layer="roads",
+                    detail="broken DBF",
+                ),
+                ReadabilityProblem(
+                    "raster_read",
+                    layer="dem",
+                    detail="block error",
+                ),
+            ],
+            "readability",
+        )
+        self.assertEqual(
+            issues[0].args,
+            (": driver error",),
+        )
+        self.assertEqual(issues[1].layer, "roads")
+        self.assertEqual(issues[1].args, ("roads", ": broken DBF"))
+        self.assertEqual(issues[2].layer, "dem")
+        self.assertEqual(issues[2].args, ("dem", ": block error"))
+        self.assertEqual(issues[1].location, "Чтение")
+
+    def test_unknown_problem_kind_is_ignored(self) -> None:
+        self.assertEqual(
+            readability_issues(
+                [ReadabilityProblem("unknown")],
+                "readability",
+            ),
+            [],
         )
 
 

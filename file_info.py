@@ -272,9 +272,11 @@ def _inspect_vector_layers(geo_file: GeoFile) -> List[VectorLayerInfo]:
     return layers
 
 
-def _inspect_raster_layers(geo_file: GeoFile) -> List[RasterLayerInfo]:
+def raster_layers(geo_file: GeoFile) -> List[QgsRasterLayer]:
+    """Открыть все растровые слои файла, включая слои контейнеров."""
+
     path = geo_file.path
-    layers: List[RasterLayerInfo] = []
+    layers: List[QgsRasterLayer] = []
     seen_uris = set()
 
     for details in _query_sublayers("gdal", path):
@@ -284,15 +286,29 @@ def _inspect_raster_layers(geo_file: GeoFile) -> List[RasterLayerInfo]:
         layer = QgsRasterLayer(details.uri(), details.name(), provider)
         if not layer.isValid():
             continue
+        uri = layer.source()
+        if uri in seen_uris:
+            continue
+        seen_uris.add(uri)
+        layers.append(layer)
+
+    if not layers and geo_file.category in (RASTER, OTHER):
+        layer = QgsRasterLayer(str(path), path.stem, "gdal")
+        if layer.isValid():
+            layers.append(layer)
+
+    return layers
+
+
+def _inspect_raster_layers(geo_file: GeoFile) -> List[RasterLayerInfo]:
+    layers: List[RasterLayerInfo] = []
+    seen_uris = set()
+
+    for layer in raster_layers(geo_file):
         info = _raster_layer_info(layer)
         if info.uri not in seen_uris:
             seen_uris.add(info.uri)
             layers.append(info)
-
-    if not layers and geo_file.category == RASTER:
-        layer = QgsRasterLayer(str(path), path.stem, "gdal")
-        if layer.isValid():
-            layers.append(_raster_layer_info(layer))
 
     return layers
 

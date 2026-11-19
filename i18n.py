@@ -249,10 +249,11 @@ EN_TRANSLATIONS = {
     "Проблем не найдено.": "No problems found.",
     "Идёт проверка…": "Check in progress…",
     "Прервать проверки": "Cancel checks",
-    "Проверки: уточнить размер, систему координат и количество элементов, проверить JSON и GeoJSON, имена полей, заполненность атрибутов, имена и пути файлов, набор данных, метаданные и CRS, .prj, геометрии, топологию, дубли, координаты.": (
-        "Checks: refine size, CRS and feature count, validate JSON and "
-        "GeoJSON, field names, attribute completeness, file names and "
-        "paths, dataset integrity, metadata and CRS, .prj, geometries, "
+    "Проверки: уточнить размер, систему координат и количество элементов, проверить читаемость файлов, JSON и GeoJSON, имена полей, заполненность атрибутов, имена и пути файлов, набор данных, целостность GeoPackage/SQLite, метаданные и CRS, .prj, геометрии, топологию, дубли, координаты.": (
+        "Checks: refine size, CRS and feature count, check file "
+        "readability, validate JSON and GeoJSON, field names, attribute "
+        "completeness, file names and paths, dataset integrity, "
+        "GeoPackage/SQLite integrity, metadata and CRS, .prj, geometries, "
         "topology, duplicates, coordinates."
     ),
     "Выберите проверки": "Select checks",
@@ -264,6 +265,139 @@ EN_TRANSLATIONS = {
     "Считает полный размер каждого набора данных с учётом сопутствующих файлов.": (
         "Calculates the full size of each dataset, including sidecar files."
     ),
+    "Проверка читаемости файлов": "File readability check",
+    "Открывает каждый файл через провайдеры QGIS и проверяет, что слои и данные читаются.": (
+        "Opens every file through QGIS providers and checks that layers "
+        "and data can be read."
+    ),
+    "ZGeo открывает каждый файл через провайдеры QGIS, проверяет наличие доступных слоёв и читает один объект векторного слоя или небольшую выборку пикселей растра.": (
+        "ZGeo opens every file through QGIS providers, checks that layers "
+        "are available and reads one feature from each vector layer or a "
+        "small sample of raster pixels."
+    ),
+    "Для векторных слоёв читаются атрибуты и геометрия первого объекта; для растров — несколько пикселей по всей области данных. Полный файл не читается, поэтому проверка остаётся быстрой.": (
+        "For vector layers, the attributes and geometry of the first "
+        "feature are read; for rasters, several pixels across the data "
+        "extent are read. The full file is not read, so the check stays "
+        "fast."
+    ),
+    "Проверка отмечает отсутствующие и пустые файлы, файлы без доступных слоёв, ошибки открытия и ошибки чтения данных. Пустые слои и проблемы геометрии проверяются отдельными проверками.": (
+        "The check flags missing and empty files, files without available "
+        "layers, open errors and data read errors. Empty layers and "
+        "geometry problems are covered by separate checks."
+    ),
+    "Повреждённый GeoTIFF не открывается провайдером GDAL — файл отмечается.": (
+        "A corrupted GeoTIFF cannot be opened by the GDAL provider — the "
+        "file is flagged."
+    ),
+    "В GeoPackage один слой читается, а данные другого повреждены — отмечается ошибка чтения слоя.": (
+        "In a GeoPackage, one layer is readable while another is "
+        "corrupted — a layer read error is flagged."
+    ),
+    "Файл размером 0 байт — отмечается как пустой.": (
+        "A file of 0 bytes is flagged as empty."
+    ),
+    "Файл не найден или недоступен": (
+        "The file is missing or inaccessible"
+    ),
+    "Файл пуст (0 байт)": "The file is empty (0 bytes)",
+    "QGIS не смог открыть файл: нет доступных слоёв": (
+        "QGIS could not open the file: no layers are available"
+    ),
+    "QGIS не смог открыть файл{}": "QGIS could not open the file{}",
+    "Не удалось прочитать объект из слоя «{}»{}": (
+        "Could not read a feature from layer “{}”{}"
+    ),
+    "Не удалось прочитать данные растра «{}»{}": (
+        "Could not read raster data from layer “{}”{}"
+    ),
+    "Проверка целостности GeoPackage/SQLite": (
+        "GeoPackage/SQLite integrity check"
+    ),
+    "Проверяет целостность базы SQLite, внешние ключи и структуру GeoPackage.": (
+        "Checks SQLite integrity, foreign keys and GeoPackage structure."
+    ),
+    "Для файлов .gpkg, .sqlite и .spatialite ZGeo открывает базу только для чтения и выполняет PRAGMA quick_check; при обнаружении ошибок дополнительно запускается PRAGMA integrity_check.": (
+        "For .gpkg, .sqlite and .spatialite files, ZGeo opens the database "
+        "read-only and runs PRAGMA quick_check; if errors are found, "
+        "PRAGMA integrity_check is run as well."
+    ),
+    "Затем выполняется PRAGMA foreign_key_check. Для GeoPackage проверяются обязательные таблицы gpkg_contents, gpkg_geometry_columns и gpkg_spatial_ref_sys, наличие таблиц и геометрических колонок, ссылки на SRS и совпадение srs_id между gpkg_contents и gpkg_geometry_columns.": (
+        "Then PRAGMA foreign_key_check is run. For GeoPackage, the "
+        "required gpkg_contents, gpkg_geometry_columns and "
+        "gpkg_spatial_ref_sys tables are checked, along with table and "
+        "geometry column existence, SRS references and srs_id consistency "
+        "between gpkg_contents and gpkg_geometry_columns."
+    ),
+    "Проверка не изменяет файл. Для обычных SQLite-баз без таблиц GeoPackage проверяются только целостность и внешние ключи.": (
+        "The check does not modify the file. For ordinary SQLite "
+        "databases without GeoPackage tables, only integrity and foreign "
+        "keys are checked."
+    ),
+    "Повреждённый блок SQLite обнаруживается PRAGMA quick_check.": (
+        "A corrupted SQLite block is detected by PRAGMA quick_check."
+    ),
+    "В gpkg_geometry_columns указан srs_id, которого нет в gpkg_spatial_ref_sys.": (
+        "gpkg_geometry_columns contains an srs_id that is missing from "
+        "gpkg_spatial_ref_sys."
+    ),
+    "В gpkg_contents есть векторная таблица, но для неё нет записи в gpkg_geometry_columns.": (
+        "gpkg_contents contains a feature table but gpkg_geometry_columns "
+        "has no entry for it."
+    ),
+    "Не удалось открыть SQLite: {}": "Could not open SQLite: {}",
+    "Проверка целостности SQLite: {}": "SQLite integrity check: {}",
+    "Нарушений целостности SQLite: {} (показаны первые {})": (
+        "SQLite integrity violations: {} (first {} shown)"
+    ),
+    "Не удалось проверить внешние ключи: {}": (
+        "Could not check foreign keys: {}"
+    ),
+    "Нарушение внешнего ключа: таблица {}, строка {}, родительская таблица {}": (
+        "Foreign key violation: table {}, row {}, parent table {}"
+    ),
+    "Нарушений внешнего ключа: {} (показаны первые {})": (
+        "Foreign key violations: {} (first {} shown)"
+    ),
+    "В GeoPackage отсутствует обязательная таблица: {}": (
+        "GeoPackage is missing a required table: {}"
+    ),
+    "Не удалось прочитать таблицы GeoPackage: {}": (
+        "Could not read GeoPackage tables: {}"
+    ),
+    "Некорректная запись gpkg_geometry_columns: пустое имя таблицы или колонки": (
+        "Invalid gpkg_geometry_columns row: empty table or column name"
+    ),
+    "Геометрическая колонка {}: таблица {} отсутствует в gpkg_contents": (
+        "Geometry column {}: table {} is missing from gpkg_contents"
+    ),
+    "Таблица {} в gpkg_contents имеет тип {}, ожидается features": (
+        "Table {} in gpkg_contents has type {}, expected features"
+    ),
+    "Геометрическая колонка {}: не указан srs_id": (
+        "Geometry column {}: srs_id is not set"
+    ),
+    "Геометрическая колонка {}: srs_id {} отсутствует в gpkg_spatial_ref_sys": (
+        "Geometry column {}: srs_id {} is missing from "
+        "gpkg_spatial_ref_sys"
+    ),
+    "Несовпадение srs_id для таблицы {}: gpkg_contents={}, gpkg_geometry_columns={}": (
+        "srs_id mismatch for table {}: gpkg_contents={}, "
+        "gpkg_geometry_columns={}"
+    ),
+    "Геометрическая колонка {}: в таблице {} нет такой колонки": (
+        "Geometry column {}: table {} has no such column"
+    ),
+    "Таблица {} из gpkg_contents отсутствует в базе": (
+        "Table {} from gpkg_contents is missing from the database"
+    ),
+    "Для таблицы {} нет записи в gpkg_geometry_columns": (
+        "No gpkg_geometry_columns entry for table {}"
+    ),
+    "В gpkg_contents для таблицы {} не указан srs_id": (
+        "srs_id is not set in gpkg_contents for table {}"
+    ),
+    "неизвестная ошибка": "unknown error",
     "Уточнить систему координат": "Refine CRS",
     "Читает систему координат слоёв и обновляет колонку «Система координат».": (
         "Reads the CRS of layers and updates the “CRS” column."
