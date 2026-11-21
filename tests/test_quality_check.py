@@ -9,23 +9,46 @@ from types import SimpleNamespace
 
 from zgeo.quality_check import (
     CrsDescriptor,
+    FieldBlankStats,
+    FieldControlStats,
+    FieldDateRangeStats,
+    FieldEdgeSpaceStats,
+    FieldInnerSpaceStats,
+    FieldNumericTextStats,
+    FieldTextLengthStats,
     FieldFillStats,
+    LayerBlankStats,
+    LayerControlStats,
+    LayerDateRangeStats,
+    LayerEdgeSpaceStats,
+    LayerInnerSpaceStats,
+    LayerNumericTextStats,
+    LayerTextLengthStats,
     LayerFillStats,
     ReadabilityProblem,
     TopologyStats,
     attribute_fill_issues,
+    blank_string_issues,
+    case_insensitive_duplicate_issues,
     completeness_issues,
+    control_character_issues,
     coordinate_problem,
     crs_issues,
+    date_range_issues,
     crs_metadata_issues,
     dbf_encoding_issues,
     directory_files,
     duplicate_geometry_issues,
+    edge_space_issues,
+    inner_space_issues,
+    length_outlier_positions,
+    length_statistics,
+    numeric_text_issues,
+    text_length_issues,
     file_path_issues,
     invalid_name_characters,
     is_reserved_file_name,
     orphan_sidecars,
-    empty_layer_issues,
     field_name_issues,
     file_path_issues,
     invalid_name_characters,
@@ -35,6 +58,8 @@ from zgeo.quality_check import (
     metadata_sidecar_issues,
     prj_file_issues,
     readability_issues,
+    suspicious_field_name_issues,
+    suspicious_field_name_reason,
     topology_summary_issues,
     truncated_duplicate_issues,
 )
@@ -42,6 +67,607 @@ from zgeo.quality_check import (
 
 def geo_file(path: Path):
     return SimpleNamespace(path=path, extension=path.suffix.lower())
+
+
+class SuspiciousFieldNameTests(unittest.TestCase):
+    def test_reasons(self) -> None:
+        cases = {
+            "NULL": "null",
+            "none": "null",
+            "NAN": "null",
+            "Field1": "filler",
+            "field_2": "filler",
+            "Unnamed: 0": "filler",
+            "Column3": "filler",
+            "Attribute1": "filler",
+            "2024": "numeric",
+            "": "empty",
+            "   ": "empty",
+            "name": "",
+            "OBJECTID": "",
+            "id": "",
+        }
+        for name, expected in cases.items():
+            with self.subTest(name=name):
+                self.assertEqual(
+                    suspicious_field_name_reason(name), expected
+                )
+
+    def test_issues_are_reported_per_field(self) -> None:
+        issues = suspicious_field_name_issues(
+            [("layer", ("NULL", "Field1", "name", "2024"))]
+        )
+        self.assertEqual(len(issues), 3)
+        locations = [issue.location for issue in issues]
+        self.assertEqual(locations, ["NULL", "Field1", "2024"])
+        for issue in issues:
+            self.assertEqual(
+                issue.check, "suspicious_field_names"
+            )
+            rendered = issue.message.format(*issue.args)
+            self.assertIn("layer", rendered)
+            self.assertNotIn("name", rendered)
+
+    def test_empty_name_is_reported_with_placeholder(self) -> None:
+        issues = suspicious_field_name_issues([("layer", ("", ""))])
+        self.assertEqual(len(issues), 2)
+        self.assertEqual(
+            [issue.location for issue in issues], ["Поле 1", "Поле 2"]
+        )
+        rendered = issues[0].message.format(*issues[0].args)
+        self.assertIn("—", rendered)
+
+    def test_clean_names_have_no_issues(self) -> None:
+        self.assertEqual(
+            suspicious_field_name_issues(
+                [("layer", ("id", "code", "name", "OBJECTID"))]
+            ),
+            [],
+        )
+
+
+class DateRangeTests(unittest.TestCase):
+    def test_fields_with_out_of_range_dates_are_reported(self) -> None:
+        layer = LayerDateRangeStats(
+            layer="events",
+            feature_count=5,
+            fields=(
+                FieldDateRangeStats(
+                    name="date",
+                    total=5,
+                    invalid=((1, "1899-12-30"), (3, "0000-00-00")),
+                    earliest=0,
+                    latest=1899,
+                ),
+                FieldDateRangeStats(name="name", total=5),
+            ),
+        )
+        issues = date_range_issues([layer])
+        self.assertEqual(len(issues), 2)
+        summary = issues[0]
+        self.assertEqual(summary.check, "date_range")
+        rendered = summary.message.format(*summary.args)
+        self.assertIn("date — 2 из 5", rendered)
+        self.assertNotIn("name", rendered)
+        detail = issues[1]
+        self.assertTrue(detail.detail_only)
+        self.assertEqual(detail.location, "date")
+        text = detail.message.format(*detail.args)
+        self.assertIn("40%", text)
+        self.assertIn("1899", text)
+        self.assertIn("1899-12-30", text)
+        self.assertIn("0000-00-00", text)
+
+    def test_clean_layer_has_no_issues(self) -> None:
+        layer = LayerDateRangeStats(
+            layer="events",
+            feature_count=5,
+            fields=(FieldDateRangeStats(name="date", total=5),),
+        )
+        self.assertEqual(date_range_issues([layer]), [])
+
+    def test_empty_layer_is_skipped(self) -> None:
+        layer = LayerDateRangeStats(
+            layer="events", feature_count=0, fields=()
+        )
+        self.assertEqual(date_range_issues([layer]), [])
+
+    def test_field_list_is_truncated(self) -> None:
+        fields = tuple(
+            FieldDateRangeStats(
+                name="f{}".format(index),
+                total=10,
+                invalid=((1, "1899-12-30"),),
+            )
+            for index in range(12)
+        )
+        layer = LayerDateRangeStats(
+            layer="events", feature_count=10, fields=fields
+        )
+        issues = date_range_issues([layer], field_limit=3)
+        self.assertIn("…", issues[0].args[3])
+        self.assertEqual(len(issues), 1 + 12)
+
+    def test_totals_and_share(self) -> None:
+        layer = LayerDateRangeStats(
+            layer="events",
+            feature_count=4,
+            fields=(
+                FieldDateRangeStats(
+                    name="a", total=4, invalid=((1, "1899-01-01"),)
+                ),
+                FieldDateRangeStats(
+                    name="b",
+                    total=4,
+                    invalid=((2, "1898-01-01"), (3, "2999-01-01")),
+                ),
+                FieldDateRangeStats(name="c", total=4),
+            ),
+        )
+        self.assertEqual(layer.invalid_total, 3)
+        self.assertEqual(layer.affected_fields, 2)
+        self.assertAlmostEqual(layer.fields[1].share, 0.5)
+
+
+class TextLengthTests(unittest.TestCase):
+    def test_statistics(self) -> None:
+        mean, deviation = length_statistics([2, 4, 6])
+        self.assertAlmostEqual(mean, 4.0)
+        self.assertAlmostEqual(deviation, (8 / 3) ** 0.5)
+        self.assertEqual(length_statistics([]), (0.0, 0.0))
+
+    def test_outlier_positions(self) -> None:
+        lengths = [6] * 11 + [40]
+        self.assertEqual(length_outlier_positions(lengths), (11,))
+
+    def test_single_value_among_few_is_not_flagged(self) -> None:
+        lengths = [6, 6, 6, 6, 6, 6, 6, 6, 40]
+        self.assertEqual(length_outlier_positions(lengths), ())
+
+    def test_short_samples_and_equal_lengths(self) -> None:
+        self.assertEqual(length_outlier_positions([1, 40]), ())
+        self.assertEqual(length_outlier_positions([5, 5, 5, 5]), ())
+
+    def test_fields_with_outliers_are_reported(self) -> None:
+        layer = LayerTextLengthStats(
+            layer="roads",
+            feature_count=9,
+            fields=(
+                FieldTextLengthStats(
+                    name="name",
+                    total=9,
+                    outliers=((7, 40),),
+                    mean=7.8,
+                    deviation=11.3,
+                    example="«Москва, Тверь»",
+                ),
+                FieldTextLengthStats(name="code", total=9),
+            ),
+        )
+        issues = text_length_issues([layer])
+        self.assertEqual(len(issues), 2)
+        summary = issues[0]
+        self.assertEqual(summary.check, "text_length")
+        rendered = summary.message.format(*summary.args)
+        self.assertIn("name — 1 из 9", rendered)
+        self.assertNotIn("code", rendered)
+        detail = issues[1]
+        self.assertTrue(detail.detail_only)
+        self.assertEqual(detail.location, "name")
+        text = detail.message.format(*detail.args)
+        self.assertIn("40", text)
+        self.assertIn("объекты: 7", text)
+        self.assertIn("Москва", text)
+        self.assertIn("среднее 7.8", text)
+
+    def test_empty_layer_is_skipped(self) -> None:
+        layer = LayerTextLengthStats(
+            layer="roads", feature_count=0, fields=()
+        )
+        self.assertEqual(text_length_issues([layer]), [])
+
+    def test_field_list_is_truncated(self) -> None:
+        fields = tuple(
+            FieldTextLengthStats(
+                name="f{}".format(index),
+                total=10,
+                outliers=((1, 30),),
+            )
+            for index in range(12)
+        )
+        layer = LayerTextLengthStats(
+            layer="roads", feature_count=10, fields=fields
+        )
+        issues = text_length_issues([layer], field_limit=3)
+        self.assertIn("…", issues[0].args[3])
+        self.assertEqual(len(issues), 1 + 12)
+
+    def test_totals_and_share(self) -> None:
+        layer = LayerTextLengthStats(
+            layer="roads",
+            feature_count=4,
+            fields=(
+                FieldTextLengthStats(
+                    name="a", total=4, outliers=((1, 30),)
+                ),
+                FieldTextLengthStats(
+                    name="b", total=4, outliers=((2, 20), (3, 25))
+                ),
+                FieldTextLengthStats(name="c", total=4),
+            ),
+        )
+        self.assertEqual(layer.outlier_total, 3)
+        self.assertEqual(layer.affected_fields, 2)
+        self.assertAlmostEqual(layer.fields[1].share, 0.5)
+        self.assertEqual(layer.fields[1].longest, 25)
+
+
+class NumericTextTests(unittest.TestCase):
+    def test_fields_with_numeric_text_are_reported(self) -> None:
+        layer = LayerNumericTextStats(
+            layer="roads",
+            feature_count=4,
+            fields=(
+                FieldNumericTextStats(
+                    name="code",
+                    total=4,
+                    numeric=3,
+                    integer=2,
+                    real=1,
+                    example="10",
+                ),
+                FieldNumericTextStats(name="name", total=4, numeric=0),
+            ),
+        )
+        issues = numeric_text_issues([layer])
+        self.assertEqual(len(issues), 2)
+        summary = issues[0]
+        self.assertEqual(summary.check, "numeric_text")
+        rendered = summary.message.format(*summary.args)
+        self.assertIn("code — 3 из 4", rendered)
+        self.assertNotIn("name", rendered)
+        detail = issues[1]
+        self.assertTrue(detail.detail_only)
+        self.assertEqual(detail.location, "code")
+        text = detail.message.format(*detail.args)
+        self.assertIn("75%", text)
+        self.assertIn("целых 2", text)
+        self.assertIn("дробных 1", text)
+        self.assertIn("«10»", text)
+
+    def test_clean_layer_has_no_issues(self) -> None:
+        layer = LayerNumericTextStats(
+            layer="roads",
+            feature_count=4,
+            fields=(
+                FieldNumericTextStats(name="name", total=4, numeric=0),
+            ),
+        )
+        self.assertEqual(numeric_text_issues([layer]), [])
+
+    def test_empty_layer_is_skipped(self) -> None:
+        layer = LayerNumericTextStats(
+            layer="roads", feature_count=0, fields=()
+        )
+        self.assertEqual(numeric_text_issues([layer]), [])
+
+    def test_field_list_is_truncated(self) -> None:
+        fields = tuple(
+            FieldNumericTextStats(
+                name="f{}".format(index), total=10, numeric=1
+            )
+            for index in range(12)
+        )
+        layer = LayerNumericTextStats(
+            layer="roads", feature_count=10, fields=fields
+        )
+        issues = numeric_text_issues([layer], field_limit=3)
+        self.assertIn("…", issues[0].args[3])
+        self.assertEqual(len(issues), 1 + 12)
+
+    def test_totals_and_share(self) -> None:
+        layer = LayerNumericTextStats(
+            layer="roads",
+            feature_count=4,
+            fields=(
+                FieldNumericTextStats(name="a", total=4, numeric=1),
+                FieldNumericTextStats(name="b", total=4, numeric=3),
+                FieldNumericTextStats(name="c", total=4, numeric=0),
+            ),
+        )
+        self.assertEqual(layer.numeric_total, 4)
+        self.assertEqual(layer.affected_fields, 2)
+        self.assertAlmostEqual(layer.fields[1].share, 0.75)
+
+
+class InnerSpaceTests(unittest.TestCase):
+    def test_fields_with_inner_spaces_are_reported(self) -> None:
+        layer = LayerInnerSpaceStats(
+            layer="roads",
+            feature_count=4,
+            fields=(
+                FieldInnerSpaceStats(
+                    name="name",
+                    total=4,
+                    affected=2,
+                    example="«Москва··Сити»",
+                ),
+                FieldInnerSpaceStats(name="code", total=4, affected=0),
+            ),
+        )
+        issues = inner_space_issues([layer])
+        self.assertEqual(len(issues), 2)
+        summary = issues[0]
+        self.assertEqual(summary.check, "inner_spaces")
+        rendered = summary.message.format(*summary.args)
+        self.assertIn("name — 2 из 4", rendered)
+        self.assertNotIn("code", rendered)
+        detail = issues[1]
+        self.assertTrue(detail.detail_only)
+        self.assertEqual(detail.location, "name")
+        text = detail.message.format(*detail.args)
+        self.assertIn("50%", text)
+        self.assertIn("Москва", text)
+
+    def test_clean_layer_has_no_issues(self) -> None:
+        layer = LayerInnerSpaceStats(
+            layer="roads",
+            feature_count=4,
+            fields=(
+                FieldInnerSpaceStats(name="name", total=4, affected=0),
+            ),
+        )
+        self.assertEqual(inner_space_issues([layer]), [])
+
+    def test_empty_layer_is_skipped(self) -> None:
+        layer = LayerInnerSpaceStats(
+            layer="roads", feature_count=0, fields=()
+        )
+        self.assertEqual(inner_space_issues([layer]), [])
+
+    def test_field_list_is_truncated(self) -> None:
+        fields = tuple(
+            FieldInnerSpaceStats(
+                name="f{}".format(index), total=10, affected=1
+            )
+            for index in range(12)
+        )
+        layer = LayerInnerSpaceStats(
+            layer="roads", feature_count=10, fields=fields
+        )
+        issues = inner_space_issues([layer], field_limit=3)
+        self.assertIn("…", issues[0].args[3])
+        self.assertEqual(len(issues), 1 + 12)
+
+    def test_totals_and_share(self) -> None:
+        layer = LayerInnerSpaceStats(
+            layer="roads",
+            feature_count=4,
+            fields=(
+                FieldInnerSpaceStats(name="a", total=4, affected=1),
+                FieldInnerSpaceStats(name="b", total=4, affected=3),
+                FieldInnerSpaceStats(name="c", total=4, affected=0),
+            ),
+        )
+        self.assertEqual(layer.affected_total, 4)
+        self.assertEqual(layer.affected_fields, 2)
+        self.assertAlmostEqual(layer.fields[1].share, 0.75)
+
+
+class EdgeSpaceTests(unittest.TestCase):
+    def test_fields_with_edge_spaces_are_reported(self) -> None:
+        layer = LayerEdgeSpaceStats(
+            layer="roads",
+            feature_count=4,
+            fields=(
+                FieldEdgeSpaceStats(
+                    name="name",
+                    total=4,
+                    affected=2,
+                    leading=1,
+                    trailing=2,
+                    example="·Москва·",
+                ),
+                FieldEdgeSpaceStats(name="code", total=4, affected=0),
+            ),
+        )
+        issues = edge_space_issues([layer])
+        self.assertEqual(len(issues), 2)
+        summary = issues[0]
+        self.assertEqual(summary.check, "edge_spaces")
+        rendered = summary.message.format(*summary.args)
+        self.assertIn("name — 2 из 4", rendered)
+        self.assertNotIn("code", rendered)
+        detail = issues[1]
+        self.assertTrue(detail.detail_only)
+        self.assertEqual(detail.location, "name")
+        text = detail.message.format(*detail.args)
+        self.assertIn("50%", text)
+        self.assertIn("в начале 1", text)
+        self.assertIn("в конце 2", text)
+        self.assertIn("·Москва·", text)
+
+    def test_clean_layer_has_no_issues(self) -> None:
+        layer = LayerEdgeSpaceStats(
+            layer="roads",
+            feature_count=4,
+            fields=(
+                FieldEdgeSpaceStats(name="name", total=4, affected=0),
+            ),
+        )
+        self.assertEqual(edge_space_issues([layer]), [])
+
+    def test_empty_layer_is_skipped(self) -> None:
+        layer = LayerEdgeSpaceStats(
+            layer="roads", feature_count=0, fields=()
+        )
+        self.assertEqual(edge_space_issues([layer]), [])
+
+    def test_field_list_is_truncated(self) -> None:
+        fields = tuple(
+            FieldEdgeSpaceStats(
+                name="f{}".format(index), total=10, affected=1
+            )
+            for index in range(12)
+        )
+        layer = LayerEdgeSpaceStats(
+            layer="roads", feature_count=10, fields=fields
+        )
+        issues = edge_space_issues([layer], field_limit=3)
+        self.assertIn("…", issues[0].args[3])
+        self.assertEqual(len(issues), 1 + 12)
+
+    def test_totals_and_share(self) -> None:
+        layer = LayerEdgeSpaceStats(
+            layer="roads",
+            feature_count=4,
+            fields=(
+                FieldEdgeSpaceStats(name="a", total=4, affected=1),
+                FieldEdgeSpaceStats(name="b", total=4, affected=3),
+                FieldEdgeSpaceStats(name="c", total=4, affected=0),
+            ),
+        )
+        self.assertEqual(layer.affected_total, 4)
+        self.assertEqual(layer.affected_fields, 2)
+        self.assertAlmostEqual(layer.fields[1].share, 0.75)
+
+
+class BlankStringTests(unittest.TestCase):
+    def test_blank_fields_are_reported(self) -> None:
+        layer = LayerBlankStats(
+            layer="roads",
+            feature_count=200,
+            fields=(
+                FieldBlankStats(name="name", total=200, blank=12),
+                FieldBlankStats(name="code", total=200, blank=0),
+            ),
+        )
+        issues = blank_string_issues([layer])
+        self.assertEqual(len(issues), 2)
+        summary = issues[0]
+        self.assertEqual(summary.check, "blank_strings")
+        rendered = summary.message.format(*summary.args)
+        self.assertIn("name — 12 из 200", rendered)
+        self.assertNotIn("code", rendered)
+        detail = issues[1]
+        self.assertTrue(detail.detail_only)
+        self.assertEqual(detail.location, "name")
+        self.assertIn("6%", detail.message.format(*detail.args))
+
+    def test_clean_layer_has_no_issues(self) -> None:
+        layer = LayerBlankStats(
+            layer="roads",
+            feature_count=10,
+            fields=(FieldBlankStats(name="name", total=10, blank=0),),
+        )
+        self.assertEqual(blank_string_issues([layer]), [])
+
+    def test_empty_layer_is_skipped(self) -> None:
+        layer = LayerBlankStats(
+            layer="roads",
+            feature_count=0,
+            fields=(FieldBlankStats(name="name", total=0, blank=0),),
+        )
+        self.assertEqual(blank_string_issues([layer]), [])
+
+    def test_field_list_is_truncated(self) -> None:
+        fields = tuple(
+            FieldBlankStats(name="f{}".format(index), total=10, blank=1)
+            for index in range(12)
+        )
+        layer = LayerBlankStats(
+            layer="roads", feature_count=10, fields=fields
+        )
+        issues = blank_string_issues([layer], field_limit=3)
+        self.assertIn("…", issues[0].args[3])
+        self.assertEqual(len(issues), 1 + 12)
+
+    def test_share_and_totals(self) -> None:
+        layer = LayerBlankStats(
+            layer="roads",
+            feature_count=4,
+            fields=(
+                FieldBlankStats(name="a", total=4, blank=1),
+                FieldBlankStats(name="b", total=4, blank=3),
+                FieldBlankStats(name="c", total=4, blank=0),
+            ),
+        )
+        self.assertEqual(layer.blank_total, 4)
+        self.assertEqual(layer.affected_fields, 2)
+        self.assertAlmostEqual(layer.fields[1].share, 0.75)
+
+
+class ControlCharacterTests(unittest.TestCase):
+    def test_field_with_control_characters_is_reported(self) -> None:
+        layer = LayerControlStats(
+            layer="roads",
+            feature_count=10,
+            fields=(
+                FieldControlStats(
+                    name="name",
+                    features_with_chars=3,
+                    characters=("TAB (U+0009)", "LF (U+000A)"),
+                    example="Иванов\\tИ.И.",
+                ),
+            ),
+        )
+        issues = control_character_issues([layer])
+        self.assertEqual(len(issues), 1)
+        issue = issues[0]
+        self.assertEqual(issue.check, "control_chars")
+        self.assertEqual(issue.layer, "roads")
+        self.assertEqual(issue.location, "name")
+        rendered = issue.message.format(*issue.args)
+        self.assertIn("TAB (U+0009)", rendered)
+        self.assertIn("3", rendered)
+        self.assertIn("10", rendered)
+        self.assertIn("Иванов", rendered)
+
+    def test_clean_layer_has_no_issues(self) -> None:
+        layer = LayerControlStats(
+            layer="roads", feature_count=5, fields=()
+        )
+        self.assertEqual(control_character_issues([layer]), [])
+
+    def test_character_list_is_truncated(self) -> None:
+        layer = LayerControlStats(
+            layer="roads",
+            feature_count=2,
+            fields=(
+                FieldControlStats(
+                    name="name",
+                    features_with_chars=1,
+                    characters=tuple(
+                        "U+{:04X}".format(0x200B + index)
+                        for index in range(8)
+                    ),
+                ),
+            ),
+        )
+        issues = control_character_issues([layer])
+        self.assertIn("…", issues[0].args[4])
+        self.assertEqual(issues[0].args[4].count(","), 6)
+
+    def test_empty_layer_is_skipped(self) -> None:
+        layer = LayerControlStats(
+            layer="roads",
+            feature_count=0,
+            fields=(FieldControlStats("name", 2, ("TAB (U+0009)",)),),
+        )
+        self.assertEqual(control_character_issues([layer]), [])
+
+    def test_affected_features_and_fields(self) -> None:
+        layer = LayerControlStats(
+            layer="roads",
+            feature_count=10,
+            fields=(
+                FieldControlStats("name", 3),
+                FieldControlStats("code", 7),
+                FieldControlStats("comment", 0),
+            ),
+        )
+        self.assertEqual(layer.affected_features, 7)
+        self.assertEqual(layer.affected_fields, 2)
 
 
 class FieldNameTests(unittest.TestCase):
@@ -85,6 +711,47 @@ class FieldNameTests(unittest.TestCase):
             ]
         )
         self.assertEqual(len(issues), 1)
+
+    def test_case_insensitive_duplicates(self) -> None:
+        issues = case_insensitive_duplicate_issues(
+            [
+                (
+                    "layer",
+                    (
+                        "Name",
+                        "name",
+                        "NAME",
+                        "other",
+                    ),
+                )
+            ]
+        )
+        self.assertEqual(len(issues), 1)
+        rendered = issues[0].message.format(*issues[0].args)
+        self.assertIn("без учёта регистра", rendered)
+        self.assertIn("Name", rendered)
+        self.assertIn("name", rendered)
+        self.assertIn("NAME", rendered)
+        self.assertNotIn("other", rendered)
+
+    def test_case_insensitive_duplicates_are_layer_specific(self) -> None:
+        self.assertEqual(
+            case_insensitive_duplicate_issues(
+                [
+                    ("one", ("Name",)),
+                    ("two", ("name",)),
+                ]
+            ),
+            [],
+        )
+
+    def test_no_case_insensitive_duplicates(self) -> None:
+        self.assertEqual(
+            case_insensitive_duplicate_issues(
+                [("layer", ("Name", "title"))]
+            ),
+            [],
+        )
 
     def test_truncated_duplicates(self) -> None:
         issues = truncated_duplicate_issues(
@@ -508,23 +1175,7 @@ class CrsMetadataTests(unittest.TestCase):
         )
 
 
-class EmptyLayerTests(unittest.TestCase):
-    def test_empty_file(self) -> None:
-        issues = empty_layer_issues([("roads", 0)])
-        messages = [issue.message for issue in issues]
-        self.assertIn("Файл не содержит объектов", messages)
-        self.assertIn("Слой «{}» не содержит объектов", messages)
 
-    def test_one_empty_layer(self) -> None:
-        issues = empty_layer_issues([("one", 0), ("two", 10)])
-        self.assertEqual(len(issues), 1)
-        self.assertEqual(issues[0].args, ("one",))
-
-    def test_non_empty_layers(self) -> None:
-        self.assertEqual(empty_layer_issues([("one", 5)]), [])
-
-    def test_unknown_count_is_not_empty(self) -> None:
-        self.assertEqual(empty_layer_issues([("one", -1)]), [])
 
 
 class AttributeFillTests(unittest.TestCase):

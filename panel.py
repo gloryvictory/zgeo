@@ -22,7 +22,6 @@ from qgis.PyQt.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QCheckBox,
-    QDialog,
     QDockWidget,
     QFileDialog,
     QFileIconProvider,
@@ -56,12 +55,24 @@ from .charts import BarChart, BarDatum
 from .check_timing import TimingRecord, build_timing_rows
 from .copy_files import build_copy_plan, copy_plan
 from .check_dialog import (
+    CHECK_ATTRIBUTE_DUPLICATES,
     CHECK_ATTRIBUTE_FILL,
+    CHECK_BLANK_STRINGS,
+    CHECK_CONTROL_CHARS,
+    CHECK_CATEGORY_ATTRIBUTE,
+    CHECK_CATEGORY_SPATIAL,
+    CHECK_EDGE_SPACES,
+    CHECK_INNER_SPACES,
+    CHECK_NUMERIC_TEXT,
+    CHECK_TEXT_LENGTH,
+    CHECK_DATE_RANGE,
+    CHECK_SUSPICIOUS_FIELD_NAMES,
     CHECK_COORDINATES,
     CHECK_CRS_QUALITY,
     CHECK_COUNT_QUALITY,
     CHECK_DATASET_INTEGRITY,
     CHECK_DUPLICATES,
+    CHECK_FIELD_NAME_DUPLICATES,
     CHECK_FIELD_NAMES,
     CHECK_FILE_PATHS,
     CHECK_GEOJSON_QUALITY,
@@ -74,14 +85,30 @@ from .check_dialog import (
     CHECK_SIZE,
     CHECK_TOPOLOGY,
     PROBLEM_CHECKS,
-    ChecksDialog,
+    CheckCategoryPage,
+    check_category,
+    check_category_hint,
+    check_category_label,
     check_definitions,
+    definitions_for_category,
 )
 from .attribute_check import has_non_latin_characters
-from .attribute_fill import inspect_attribute_fill
+from .attribute_fill import (
+    inspect_attribute_fill,
+    inspect_blank_strings,
+    inspect_control_characters,
+    inspect_edge_spaces,
+    inspect_inner_spaces,
+    inspect_numeric_text,
+    inspect_date_range,
+    inspect_suspicious_field_names,
+    inspect_text_length,
+)
+from .attribute_duplicates import inspect_attribute_duplicates
 from .dataset_size import DirectoryIndex, measure_geo_file_cached
 from .excel_export import SheetSpec
 from .explorer import open_folder, reveal_files
+from .project_loader import load_files_into_project
 from .geojson_check import JSON_EXTENSIONS, check_json_file
 from .geojson_quality import validate_geojson_file
 from .file_info import (
@@ -98,13 +125,13 @@ from .geometry_check import (
 from .gpkg_check import SQLITE_EXTENSIONS, inspect_gpkg_integrity
 from .quality_check import (
     QualityIssue,
+    case_insensitive_duplicate_issues,
     completeness_issues,
     crs_issues,
     crs_metadata_issues,
     dbf_encoding_issues,
     directory_files,
     directory_names,
-    empty_layer_issues,
     field_name_issues,
     file_path_issues,
     metadata_sidecar_issues,
@@ -146,12 +173,16 @@ LAST_FOLDER_KEY = "zgeo/last_folder"
 LAST_COPY_FOLDER_KEY = "zgeo/last_copy_folder"
 DISABLED_FORMATS_KEY = "zgeo/disabled_formats"
 ICON_PATH = Path(__file__).with_name("icon.svg")
+VALUE_CHECKS = frozenset(
+    {CHECK_SIZE, CHECK_CRS_QUALITY, CHECK_COUNT_QUALITY}
+)
 CHECKS_TOOLTIP = (
     "Проверки: уточнить размер, систему координат и количество элементов, "
     "проверить читаемость файлов, JSON и GeoJSON, имена полей, "
-    "заполненность атрибутов, имена и пути файлов, набор данных, "
-    "целостность GeoPackage/SQLite, метаданные и CRS, .prj, геометрии, "
-    "топологию, дубли, координаты."
+    "дубли имён полей, заполненность атрибутов, управляющие и невидимые "
+    "символы, имена и пути файлов, набор данных, целостность "
+    "GeoPackage/SQLite, метаданные и CRS, .prj, геометрии, топологию, "
+    "дубли, координаты."
 )
 SIZE_CHART_COLOR = "#0F766E"
 TYPE_CHART_COLORS = (
@@ -200,6 +231,9 @@ class ZGeoPanel(QDockWidget):
         self._disabled_formats = self._load_disabled_formats()
         self._icon_provider = QFileIconProvider()
         self._icon_cache: Dict[str, QIcon] = {}
+        self._quality_include_json: Optional[bool] = None
+        self._quality_pages: Dict[str, CheckCategoryPage] = {}
+        self._quality_tab_indices: Dict[str, int] = {}
 
         self._details_queue: Deque[GeoFile] = deque()
         self._details_total = 0
@@ -367,16 +401,45 @@ class ZGeoPanel(QDockWidget):
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
         self.tabs.addTab(self._build_files_page(), tr("Файлы"))
-        self.tabs.addTab(self._build_stats_page(), tr("Статистика"))
-        self.tabs.addTab(self._build_settings_page(), tr("Настройки"))
+
+        initial_definitions = check_definitions(include_json_check=False)
+        for category in (
+            CHECK_CATEGORY_SPATIAL,
+            CHECK_CATEGORY_ATTRIBUTE,
+        ):
+            page = CheckCategoryPage(
+                category,
+                definitions_for_category(initial_definitions, category),
+                self,
+            )
+            page.runRequested.connect(self._run_checks_from_page)
+            index = self.tabs.addTab(
+                page, check_category_label(category)
+            )
+            self.tabs.setTabEnabled(index, False)
+            self._quality_pages[category] = page
+            self._quality_tab_indices[category] = index
+
+        self._stats_tab_index = self.tabs.addTab(
+            self._build_stats_page(), tr("Статистика")
+        )
+        self._settings_tab_index = self.tabs.addTab(
+            self._build_settings_page(), tr("Настройки")
+        )
         self.tabs.setTabToolTip(
             0, tr("Найденные пространственные файлы")
         )
+        for category, index in self._quality_tab_indices.items():
+            self.tabs.setTabToolTip(
+                index, self._quality_tab_tooltip(category, False)
+            )
         self.tabs.setTabToolTip(
-            1, tr("Диаграммы по размеру и типу файлов")
+            self._stats_tab_index,
+            tr("Диаграммы по размеру и типу файлов"),
         )
         self.tabs.setTabToolTip(
-            2, tr("Форматы файлов, которые нужно искать")
+            self._settings_tab_index,
+            tr("Форматы файлов, которые нужно искать"),
         )
         layout.addWidget(self.tabs, 1)
         layout.addWidget(self._build_status_bar())
@@ -569,6 +632,27 @@ class ZGeoPanel(QDockWidget):
         self.copy_button.clicked.connect(self._copy_selected_files)
         self.copy_button.setEnabled(False)
         buttons.addWidget(self.copy_button)
+
+        self.load_project_button = QToolButton()
+        self.load_project_button.setIcon(
+            self.style().standardIcon(
+                QStyle.StandardPixmap.SP_FileDialogNewFolder
+            )
+        )
+        self.load_project_button.setIconSize(QSize(14, 14))
+        self.load_project_button.setAutoRaise(True)
+        self.load_project_button.setFixedSize(24, 24)
+        self.load_project_button.setToolTip(
+            tr("Добавить выбранные файлы слоями в текущий проект")
+        )
+        self.load_project_button.setAccessibleName(
+            tr("Добавить в текущий проект")
+        )
+        self.load_project_button.clicked.connect(
+            self._add_selected_to_project
+        )
+        self.load_project_button.setEnabled(False)
+        buttons.addWidget(self.load_project_button)
 
         self.check_attributes_button = QToolButton()
         self.check_attributes_button.setIcon(
@@ -1492,6 +1576,7 @@ class ZGeoPanel(QDockWidget):
         self._cancel_problem_check()
         self._cancel_details()
         self._cancel_json_check()
+        self._clear_results_tables()
         self._files = files
         self.tree.setUpdatesEnabled(False)
         self.tree.clear()
@@ -1522,6 +1607,7 @@ class ZGeoPanel(QDockWidget):
             self.tree.setUpdatesEnabled(True)
 
         self._update_statistics(files)
+        self._sync_quality_tabs()
 
         if not files:
             self.summary_label.setText(
@@ -1704,6 +1790,7 @@ class ZGeoPanel(QDockWidget):
         self.info_button.setEnabled(len(selected) == 1 and enabled)
         self.explorer_button.setEnabled(bool(selected) and enabled)
         self.copy_button.setEnabled(bool(selected) and enabled)
+        self.load_project_button.setEnabled(bool(selected) and enabled)
         self.export_button.setEnabled(
             self._has_visible_files() and enabled
         )
@@ -1713,6 +1800,7 @@ class ZGeoPanel(QDockWidget):
             and not self._problem_running
             and not self._json_running
         )
+        self._sync_quality_tabs()
         self._update_selection_status()
 
     def _show_file_info(self) -> None:
@@ -1775,6 +1863,53 @@ class ZGeoPanel(QDockWidget):
         self._set_status(
             tr("Проводник открыт: {}", len(selected))
         )
+
+    def _add_selected_to_project(self) -> None:
+        """Загрузить выбранные файлы слоями в текущий проект QGIS."""
+
+        selected = self._selected_files()
+        if not selected or self._busy:
+            return
+
+        self._set_status(
+            tr("Добавляю файлы в проект: {}", len(selected))
+        )
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            result = load_files_into_project(selected)
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        if result.added and result.skipped:
+            self._set_status(
+                tr(
+                    "Добавлено слоёв в проект: {} · уже есть: {}",
+                    result.added,
+                    result.skipped,
+                )
+            )
+        elif result.added:
+            self._set_status(
+                tr("Добавлено слоёв в проект: {}", result.added)
+            )
+        elif result.skipped:
+            self._set_status(
+                tr("Слои уже есть в проекте: {}", result.skipped)
+            )
+        if result.errors:
+            QMessageBox.warning(
+                self,
+                tr("Добавить в текущий проект"),
+                tr(
+                    "Не удалось добавить слои:\n\n{}",
+                    "\n".join(result.errors[:20]),
+                ),
+            )
+            return
+        if not result.added and not result.skipped:
+            self._set_status(
+                tr("Нечего добавлять: выбранные файлы не открылись")
+            )
 
     def _copy_selected_files(self) -> None:
         selected = self._selected_files()
@@ -2319,6 +2454,9 @@ class ZGeoPanel(QDockWidget):
             else:
                 self._element_counts[path_key] = summary.element_count
 
+        if self._details_read_size:
+            self._set_size_check_result(refined)
+
         if refined is not geo_file:
             index = self._file_index_by_path.get(path_key)
             if index is not None and 0 <= index < len(self._files):
@@ -2366,6 +2504,30 @@ class ZGeoPanel(QDockWidget):
                 True,
             )
             self._maybe_finish_check_timing()
+
+    def _set_size_check_result(self, geo_file: GeoFile) -> None:
+        """Записать полный размер набора в таблицу результатов."""
+
+        self._set_value_result(
+            CHECK_SIZE,
+            str(geo_file.path),
+            format_size(geo_file.size),
+            geo_file.size,
+        )
+
+    def _set_value_result(
+        self,
+        check: str,
+        path_key: str,
+        text: str,
+        number: Optional[int] = None,
+        details: Optional[List[str]] = None,
+    ) -> None:
+        """Записать значение проверки в таблицу результатов."""
+
+        page = self._quality_page_for_check(check)
+        if page is not None:
+            page.set_result(path_key, check, text, number, details)
 
     @staticmethod
     def _update_item_crs(item: QTreeWidgetItem, crs: str) -> None:
@@ -2443,22 +2605,39 @@ class ZGeoPanel(QDockWidget):
         )
 
     def _show_checks_dialog(self) -> None:
-        """Открыть окно выбора проверок для найденных файлов."""
+        """Открыть закладку пространственных проверок."""
 
-        if not self._files:
+        if not self._files or self._busy:
             return
 
-        include_json_check = any(
-            geo_file.extension in JSON_EXTENSIONS
-            for geo_file in self._files
+        index = self._quality_tab_indices.get(
+            CHECK_CATEGORY_SPATIAL
         )
-        dialog = ChecksDialog(
-            self, include_json_check=include_json_check
-        )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
+        page = self._quality_pages.get(CHECK_CATEGORY_SPATIAL)
+        if index is None or page is None:
             return
 
-        self._run_checks(dialog.selected_checks())
+        self.tabs.setCurrentIndex(index)
+        page.selection.focus_first_check()
+
+    def _run_checks_from_page(
+        self, category: str, checks: object
+    ) -> None:
+        """Запустить проверки, выбранные на закладке качества."""
+
+        selected = list(checks) if checks else []
+        if (
+            not selected
+            or self._busy
+            or self._problem_running
+            or self._json_running
+        ):
+            return
+
+        index = self._quality_tab_indices.get(category)
+        if index is not None:
+            self.tabs.setCurrentIndex(index)
+        self._run_checks(selected)
 
     def _run_checks(self, checks: List[str]) -> None:
         """Выполнить выбранные проверки."""
@@ -2500,6 +2679,7 @@ class ZGeoPanel(QDockWidget):
         problem_checks = [
             check for check in checks if check in PROBLEM_CHECKS
         ]
+        self._begin_results_tables(checks)
 
         if read_size:
             self._start_details(
@@ -2557,6 +2737,7 @@ class ZGeoPanel(QDockWidget):
             completed and self._check_timing_completed
         )
         self._check_timing_active = False
+        self._set_results_running(False)
 
     def _maybe_finish_check_timing(self) -> None:
         if not self._check_timing_active:
@@ -2851,6 +3032,72 @@ class ZGeoPanel(QDockWidget):
 
         self._update_controls()
 
+    def _begin_results_tables(self, checks: List[str]) -> None:
+        """Подготовить таблицы результатов по выбранным проверкам."""
+
+        rows = [
+            (str(geo_file.path), geo_file.relative_posix)
+            for geo_file in self._files
+        ]
+        folder_name = self._folder.name if self._folder else "zgeo"
+        for category, page in self._quality_pages.items():
+            page_checks = [
+                check
+                for check in checks
+                if check_category(check) == category
+            ]
+            if not page_checks:
+                page.clear_results()
+                continue
+            page.begin_results(rows, page_checks, folder_name)
+            page.results.set_running(True)
+
+    def _update_check_result(
+        self,
+        geo_file: GeoFile,
+        check: str,
+        issues: List[QualityIssue],
+        applicable: bool,
+    ) -> None:
+        """Записать статистику проверки в таблицу результатов."""
+
+        if check in VALUE_CHECKS:
+            return
+
+        path_key = str(geo_file.path)
+        if applicable:
+            count = len(issues)
+            text = "0" if count == 0 else str(count)
+        else:
+            count = None
+            text = "—"
+        self._set_value_result(
+            check,
+            path_key,
+            text,
+            count,
+            [tr(issue.message, *issue.args) for issue in issues],
+        )
+
+    def _quality_page_for_check(
+        self, check: str
+    ) -> Optional[CheckCategoryPage]:
+        """Вернуть закладку качества, к которой относится проверка."""
+
+        try:
+            category = check_category(check)
+        except ValueError:
+            return None
+        return self._quality_pages.get(category)
+
+    def _set_results_running(self, running: bool) -> None:
+        for page in self._quality_pages.values():
+            page.results.set_running(running)
+
+    def _clear_results_tables(self) -> None:
+        for page in self._quality_pages.values():
+            page.clear_results()
+
     def _problem_check_label(self, check: Optional[str] = None) -> str:
         """Вернуть название текущей проверки без списка остальных."""
 
@@ -3052,6 +3299,9 @@ class ZGeoPanel(QDockWidget):
                 self._update_problems_summary()
         if applicable:
             self._problem_checked_paths.add(path_key)
+        self._update_check_result(
+            geo_file, check, issues, applicable
+        )
         item = self._item_by_path.get(path_key)
         if item is not None:
             self._update_item_problems(
@@ -3097,6 +3347,24 @@ class ZGeoPanel(QDockWidget):
 
         if check == CHECK_ATTRIBUTE_FILL:
             return inspect_attribute_fill(geo_file)
+        if check == CHECK_CONTROL_CHARS:
+            return inspect_control_characters(geo_file)
+        if check == CHECK_BLANK_STRINGS:
+            return inspect_blank_strings(geo_file)
+        if check == CHECK_EDGE_SPACES:
+            return inspect_edge_spaces(geo_file)
+        if check == CHECK_INNER_SPACES:
+            return inspect_inner_spaces(geo_file)
+        if check == CHECK_NUMERIC_TEXT:
+            return inspect_numeric_text(geo_file)
+        if check == CHECK_TEXT_LENGTH:
+            return inspect_text_length(geo_file)
+        if check == CHECK_DATE_RANGE:
+            return inspect_date_range(geo_file)
+        if check == CHECK_SUSPICIOUS_FIELD_NAMES:
+            return inspect_suspicious_field_names(geo_file)
+        if check == CHECK_ATTRIBUTE_DUPLICATES:
+            return inspect_attribute_duplicates(geo_file)
         if check == CHECK_READABILITY:
             return self._inspect_readability(geo_file)
         if check == CHECK_GPKG_INTEGRITY:
@@ -3120,6 +3388,8 @@ class ZGeoPanel(QDockWidget):
 
         if check == CHECK_FIELD_NAMES:
             return self._inspect_field_names(file_info)
+        if check == CHECK_FIELD_NAME_DUPLICATES:
+            return self._inspect_field_name_duplicates(file_info)
         if check == CHECK_CRS_QUALITY:
             return self._inspect_crs_quality(geo_file, file_info)
         if check == CHECK_COUNT_QUALITY:
@@ -3220,6 +3490,26 @@ class ZGeoPanel(QDockWidget):
             issues.append(replace(issue, check=CHECK_FIELD_NAMES))
         return issues, True
 
+    def _inspect_field_name_duplicates(
+        self, file_info: FileInfo
+    ) -> Tuple[List[QualityIssue], bool]:
+        vector_layers = file_info.vector_layers
+        if not vector_layers:
+            return [], False
+
+        layer_fields = [
+            (
+                layer.name,
+                tuple(field.name for field in layer.fields),
+            )
+            for layer in vector_layers
+        ]
+        issues = [
+            replace(issue, check=CHECK_FIELD_NAME_DUPLICATES)
+            for issue in case_insensitive_duplicate_issues(layer_fields)
+        ]
+        return issues, True
+
     def _inspect_crs_quality(
         self, geo_file: GeoFile, file_info: FileInfo
     ) -> Tuple[List[QualityIssue], bool]:
@@ -3237,6 +3527,8 @@ class ZGeoPanel(QDockWidget):
     def _inspect_count_quality(
         self, geo_file: GeoFile, file_info: FileInfo
     ) -> Tuple[List[QualityIssue], bool]:
+        """Заполнить количество элементов без поиска проблем."""
+
         vector_layers = file_info.vector_layers
         if not vector_layers:
             return [], False
@@ -3245,12 +3537,8 @@ class ZGeoPanel(QDockWidget):
             (layer.name, layer.feature_count)
             for layer in vector_layers
         ]
-        issues = [
-            replace(issue, check=CHECK_COUNT_QUALITY)
-            for issue in empty_layer_issues(layer_counts)
-        ]
         self._apply_count_summary(geo_file, layer_counts)
-        return issues, True
+        return [], True
 
     def _inspect_file_paths(
         self, geo_file: GeoFile
@@ -3446,6 +3734,7 @@ class ZGeoPanel(QDockWidget):
 
         path_key = str(geo_file.path)
         self._refined_crs_paths.add(path_key)
+        self._set_value_result(CHECK_CRS_QUALITY, path_key, text)
         item = self._item_by_path.get(path_key)
         if item is not None:
             self._update_item_crs(item, text)
@@ -3463,8 +3752,15 @@ class ZGeoPanel(QDockWidget):
         self._refined_count_paths.add(path_key)
         if total is None:
             self._element_counts.pop(path_key, None)
+            self._set_value_result(CHECK_COUNT_QUALITY, path_key, "—")
         else:
             self._element_counts[path_key] = total
+            self._set_value_result(
+                CHECK_COUNT_QUALITY,
+                path_key,
+                "{:,}".format(total).replace(",", " "),
+                total,
+            )
 
         item = self._item_by_path.get(path_key)
         if item is not None:
@@ -3514,6 +3810,7 @@ class ZGeoPanel(QDockWidget):
         self._problem_current_check = None
         self._problem_check_queue.clear()
         self._problem_queue.clear()
+        self._set_results_running(False)
         self._problem_info_cache = {}
         self._problem_file_cache = {}
         self._problem_name_cache = {}
@@ -3570,6 +3867,7 @@ class ZGeoPanel(QDockWidget):
         self._problem_running = False
         self._problem_checked = bool(self._problem_checked_paths)
         self._problem_interrupted = self._problem_checked
+        self._set_results_running(False)
         self._problem_info_cache = {}
         self._problem_file_cache = {}
         self._problem_name_cache = {}
@@ -3945,6 +4243,51 @@ class ZGeoPanel(QDockWidget):
 
         self._update_file_actions()
 
+    def _sync_quality_tabs(self, *, force: bool = False) -> None:
+        """Обновить состав и доступность закладок качества данных."""
+
+        if not self._quality_pages or not hasattr(
+            self, "_quality_tab_indices"
+        ):
+            return
+
+        include_json = any(
+            geo_file.extension in JSON_EXTENSIONS
+            for geo_file in self._files
+        )
+        if force or self._quality_include_json != include_json:
+            self._quality_include_json = include_json
+            definitions = check_definitions(include_json)
+            for category, page in self._quality_pages.items():
+                page.set_definitions(
+                    definitions_for_category(definitions, category)
+                )
+
+        enabled = bool(self._files) and not self._busy
+        for category, index in self._quality_tab_indices.items():
+            self.tabs.setTabEnabled(index, enabled)
+            self._quality_pages[category].setEnabled(enabled)
+            self.tabs.setTabToolTip(
+                index, self._quality_tab_tooltip(category, enabled)
+            )
+
+        running = (
+            self._busy
+            or self._problem_running
+            or self._json_running
+        )
+        for page in self._quality_pages.values():
+            page.set_running(running)
+
+    @staticmethod
+    def _quality_tab_tooltip(category: str, enabled: bool) -> str:
+        """Подсказка закладки качества: пояснение и доступность."""
+
+        hint = check_category_hint(category)
+        if enabled:
+            return hint
+        return hint + "\n" + tr("Сначала отсканируйте папку.")
+
     def _set_busy(self, busy: bool) -> None:
         self._busy = busy
         if busy:
@@ -4010,17 +4353,37 @@ class ZGeoPanel(QDockWidget):
         self.refresh_button.setAccessibleName(tr("Пересканировать папку"))
 
         self.tabs.setTabText(0, tr("Файлы"))
-        self.tabs.setTabText(1, tr("Статистика"))
-        self.tabs.setTabText(2, tr("Настройки"))
         self.tabs.setTabToolTip(
             0, tr("Найденные пространственные файлы")
         )
-        self.tabs.setTabToolTip(
-            1, tr("Диаграммы по размеру и типу файлов")
+        for category, index in self._quality_tab_indices.items():
+            self.tabs.setTabText(
+                index, check_category_label(category)
+            )
+            self.tabs.setTabToolTip(
+                index,
+                self._quality_tab_tooltip(
+                    category, self.tabs.isTabEnabled(index)
+                ),
+            )
+        self.tabs.setTabText(
+            self._stats_tab_index, tr("Статистика")
         )
         self.tabs.setTabToolTip(
-            2, tr("Форматы файлов, которые нужно искать")
+            self._stats_tab_index,
+            tr("Диаграммы по размеру и типу файлов"),
         )
+        self.tabs.setTabText(
+            self._settings_tab_index, tr("Настройки")
+        )
+        self.tabs.setTabToolTip(
+            self._settings_tab_index,
+            tr("Форматы файлов, которые нужно искать"),
+        )
+
+        self._sync_quality_tabs(force=True)
+        for page in self._quality_pages.values():
+            page.retranslate_ui()
 
         self.filter_edit.setPlaceholderText(
             tr("Фильтр по имени, формату или пути")
@@ -4049,6 +4412,12 @@ class ZGeoPanel(QDockWidget):
             )
         )
         self.copy_button.setAccessibleName(tr("Скопировать в …"))
+        self.load_project_button.setToolTip(
+            tr("Добавить выбранные файлы слоями в текущий проект")
+        )
+        self.load_project_button.setAccessibleName(
+            tr("Добавить в текущий проект")
+        )
         self.export_button.setText(tr("Экспорт"))
         self.export_button.setToolTip(
             tr("Экспортировать список в Excel или HTML")

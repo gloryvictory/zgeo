@@ -1,6 +1,66 @@
 ZGeo change log
 ===============
 
+Version 1.40.0 — 2026-11-21
+Previous GitHub release: v1.39.0 (2026-11-19)
+
+Overview
+--------
+ZGeo 1.40.0 moves the checks to two quality tabs, adds a results table with
+per-file statistics and a detailed issue dialog, an "Add to current project"
+button, and ten new attribute data checks (27 checks total).
+
+Changes in 1.40.0
+-----------------
+- Added a case-insensitive duplicate field name check.
+- Added the "Spatial data quality" and "Attribute data quality" tabs. Checks
+  are divided between them by meaning, and the tabs become available after
+  the first scan.
+- Added "Select all", "Clear all" and "Defaults" buttons above the check list of
+  both quality tabs; the check list now scrolls.
+- Added a results table under the check list: rows are files, columns are the
+  statistics of each selected check. The "Run selected checks" button moved
+  above the table, and a single "Export" button below the table offers Excel
+  and HTML.
+- Added a "Control and invisible characters" attribute check:
+  tabs, line feeds, carriage returns, NUL/ESC, no-break and zero-width spaces,
+  soft hyphens, line/paragraph separators and the BOM in text values, with
+  character names, feature counts and escaped examples in the report.
+- Added an "Attribute duplicates (very slow!)" check: full row
+  duplicates, composite key duplicates over text fields, matches ignoring case
+  and extra spaces, and partial occurrences with an occurrence percent.
+- Results table cells now store the issue list: double-clicking a cell opens a
+  detailed dialog with every finding.
+- Added a "Blank strings" attribute check: text fields whose value is empty or
+  consists only of spaces, reported with per-field counts and shares because
+  such values are invisible to IS NULL and split sorting and grouping into a
+  separate group.
+- Added a "Leading and trailing spaces" check: values with leading or trailing
+  spaces, tabs and line breaks, reported per field with leading/trailing counts
+  and a sample with visible space symbols.
+- Added a "Double spaces inside values" check: two or more consecutive spaces
+  inside a value, usually produced by manual input or field concatenation,
+  reported with per-field counts, shares and a visible sample.
+- Added a "Numbers stored as text" check: text fields whose values are integers
+  or real numbers, reported with integer/real counts, shares and a sample,
+  because such fields compare alphabetically and cannot be used in arithmetic.
+- Added an "Abnormal text length" check: per text field the average value
+  length and the standard deviation are computed and values longer than the
+  average by more than three deviations are reported with the statistics,
+  feature ids and a sample.
+- Added a small "Add to current project" button to the Files tab: the selected
+  files are loaded as layers into the open QGIS project, containers with all of
+  their layers, already present sources are skipped.
+- The feature count check is now "Refine feature count" only: it fills the
+  "Features" column and no longer flags empty layers or files without features;
+  those findings live on the attribute data tab.
+- Added a "Dates outside a reasonable range" check: date, timestamp and text
+  fields with years before 1900 or after the current year, including the zero
+  date, reported with year bounds, feature ids and values.
+- Added a "Suspicious field names" check (27 checks total): empty names,
+  NULL/None/NaN names, digit-only names and technical import names such as
+  Field1, Column3 or Unnamed: 0, reported per field with the reason.
+
 Version 1.39.0 — 2026-11-19
 Previous GitHub release: v1.38.5 (2026-11-19)
 

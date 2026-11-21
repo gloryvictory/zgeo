@@ -235,6 +235,288 @@ class LayerFillStats:
         )
 
 
+
+@dataclass(frozen=True)
+class FieldControlStats:
+    """Управляющие и невидимые символы в одном поле."""
+
+    name: str
+    features_with_chars: int
+    characters: Tuple[str, ...] = ()
+    example: str = ""
+
+
+@dataclass(frozen=True)
+class LayerControlStats:
+    """Найденные управляющие символы одного слоя."""
+
+    layer: str
+    feature_count: int
+    fields: Tuple[FieldControlStats, ...]
+
+    @property
+    def affected_features(self) -> int:
+        return max(
+            (field.features_with_chars for field in self.fields),
+            default=0,
+        )
+
+    @property
+    def affected_fields(self) -> int:
+        return sum(1 for field in self.fields if field.features_with_chars)
+
+
+
+
+
+
+TEXT_LENGTH_DEVIATIONS = 3.0
+TEXT_LENGTH_MIN_SAMPLES = 3
+
+
+def length_statistics(lengths: Sequence[int]) -> Tuple[float, float]:
+    """Вернуть среднее и стандартное отклонение длин значений."""
+
+    if not lengths:
+        return 0.0, 0.0
+    count = len(lengths)
+    mean = sum(lengths) / count
+    variance = sum((length - mean) ** 2 for length in lengths) / count
+    return mean, variance ** 0.5
+
+
+def length_outlier_positions(
+    lengths: Sequence[int],
+    *,
+    deviations: float = TEXT_LENGTH_DEVIATIONS,
+    min_samples: int = TEXT_LENGTH_MIN_SAMPLES,
+) -> Tuple[int, ...]:
+    """Вернуть позиции значений длиннее среднего более чем на N отклонений."""
+
+    if min_samples <= 0 or len(lengths) < min_samples:
+        return ()
+    mean, deviation = length_statistics(lengths)
+    if deviation <= 0:
+        return ()
+    limit = mean + deviations * deviation
+    return tuple(
+        position
+        for position, length in enumerate(lengths)
+        if length > limit
+    )
+
+
+
+@dataclass(frozen=True)
+class FieldDateRangeStats:
+    """Даты вне разумного диапазона в одном поле."""
+
+    name: str
+    total: int
+    invalid: Tuple[Tuple[int, str], ...] = ()
+    earliest: int = 0
+    latest: int = 0
+
+    @property
+    def count(self) -> int:
+        return len(self.invalid)
+
+    @property
+    def share(self) -> float:
+        if self.total <= 0:
+            return 0.0
+        return min(max(self.count / self.total, 0.0), 1.0)
+
+
+@dataclass(frozen=True)
+class LayerDateRangeStats:
+    """Даты вне разумного диапазона в одном слое."""
+
+    layer: str
+    feature_count: int
+    fields: Tuple[FieldDateRangeStats, ...]
+
+    @property
+    def invalid_total(self) -> int:
+        return sum(field.count for field in self.fields)
+
+    @property
+    def affected_fields(self) -> int:
+        return sum(1 for field in self.fields if field.count)
+
+@dataclass(frozen=True)
+class FieldTextLengthStats:
+    """Аномальная длина текста в одном текстовом поле."""
+
+    name: str
+    total: int
+    outliers: Tuple[Tuple[int, int], ...] = ()
+    mean: float = 0.0
+    deviation: float = 0.0
+    example: str = ""
+
+    @property
+    def count(self) -> int:
+        return len(self.outliers)
+
+    @property
+    def share(self) -> float:
+        if self.total <= 0:
+            return 0.0
+        return min(max(self.count / self.total, 0.0), 1.0)
+
+    @property
+    def longest(self) -> int:
+        return max((length for _id, length in self.outliers), default=0)
+
+
+@dataclass(frozen=True)
+class LayerTextLengthStats:
+    """Аномальная длина текста в одном слое."""
+
+    layer: str
+    feature_count: int
+    fields: Tuple[FieldTextLengthStats, ...]
+
+    @property
+    def outlier_total(self) -> int:
+        return sum(field.count for field in self.fields)
+
+    @property
+    def affected_fields(self) -> int:
+        return sum(1 for field in self.fields if field.count)
+
+@dataclass(frozen=True)
+class FieldNumericTextStats:
+    """Числа, записанные как текст, в одном текстовом поле."""
+
+    name: str
+    total: int
+    numeric: int
+    integer: int = 0
+    real: int = 0
+    example: str = ""
+
+    @property
+    def share(self) -> float:
+        if self.total <= 0:
+            return 0.0
+        return min(max(self.numeric / self.total, 0.0), 1.0)
+
+
+@dataclass(frozen=True)
+class LayerNumericTextStats:
+    """Числа, записанные как текст, в одном слое."""
+
+    layer: str
+    feature_count: int
+    fields: Tuple[FieldNumericTextStats, ...]
+
+    @property
+    def numeric_total(self) -> int:
+        return sum(field.numeric for field in self.fields)
+
+    @property
+    def affected_fields(self) -> int:
+        return sum(1 for field in self.fields if field.numeric)
+
+@dataclass(frozen=True)
+class FieldInnerSpaceStats:
+    """Двойные пробелы внутри значений одного текстового поля."""
+
+    name: str
+    total: int
+    affected: int
+    example: str = ""
+
+    @property
+    def share(self) -> float:
+        if self.total <= 0:
+            return 0.0
+        return min(max(self.affected / self.total, 0.0), 1.0)
+
+
+@dataclass(frozen=True)
+class LayerInnerSpaceStats:
+    """Двойные пробелы внутри значений одного слоя."""
+
+    layer: str
+    feature_count: int
+    fields: Tuple[FieldInnerSpaceStats, ...]
+
+    @property
+    def affected_total(self) -> int:
+        return sum(field.affected for field in self.fields)
+
+    @property
+    def affected_fields(self) -> int:
+        return sum(1 for field in self.fields if field.affected)
+
+@dataclass(frozen=True)
+class FieldEdgeSpaceStats:
+    """Пробелы по краям значений в одном текстовом поле."""
+
+    name: str
+    total: int
+    affected: int
+    leading: int = 0
+    trailing: int = 0
+    example: str = ""
+
+    @property
+    def share(self) -> float:
+        if self.total <= 0:
+            return 0.0
+        return min(max(self.affected / self.total, 0.0), 1.0)
+
+
+@dataclass(frozen=True)
+class LayerEdgeSpaceStats:
+    """Пробелы по краям значений одного слоя."""
+
+    layer: str
+    feature_count: int
+    fields: Tuple[FieldEdgeSpaceStats, ...]
+
+    @property
+    def affected_total(self) -> int:
+        return sum(field.affected for field in self.fields)
+
+    @property
+    def affected_fields(self) -> int:
+        return sum(1 for field in self.fields if field.affected)
+
+@dataclass(frozen=True)
+class FieldBlankStats:
+    """Пустые строки в одном текстовом поле."""
+
+    name: str
+    total: int
+    blank: int
+
+    @property
+    def share(self) -> float:
+        if self.total <= 0:
+            return 0.0
+        return min(max(self.blank / self.total, 0.0), 1.0)
+
+
+@dataclass(frozen=True)
+class LayerBlankStats:
+    """Пустые строки одного слоя."""
+
+    layer: str
+    feature_count: int
+    fields: Tuple[FieldBlankStats, ...]
+
+    @property
+    def blank_total(self) -> int:
+        return sum(field.blank for field in self.fields)
+
+    @property
+    def affected_fields(self) -> int:
+        return sum(1 for field in self.fields if field.blank)
+
 @dataclass
 class TopologyStats:
     """Счётчики топологических проблем одного слоя."""
@@ -677,6 +959,100 @@ def _dbf_ldid(path: Path) -> Optional[int]:
     return header[29]
 
 
+
+NULL_LIKE_FIELD_NAMES = frozenset(
+    {"null", "none", "nan", "<null>", "nil", "undefined", "null_null"}
+)
+FILLER_FIELD_PREFIXES = (
+    "unnamed",
+    "attribute",
+    "column",
+    "field",
+    "attr",
+    "col",
+)
+
+SUSPICIOUS_FIELD_REASONS = frozenset(
+    {"empty", "null", "filler", "numeric"}
+)
+
+
+def suspicious_field_name_reason(name: str) -> str:
+    """Вернуть причину подозрительного имени поля или пустую строку.
+
+    Подозрительными считаются пустое имя, имена, обозначающие отсутствие
+    значения (NULL, None, NAN), технические имена после импорта вида
+    «Field1», «field_2», «Unnamed: 0», «Column3» и имена из одних цифр.
+    """
+
+    text = (name or "").strip()
+    if not text:
+        return "empty"
+
+    folded = text.casefold()
+    if folded in NULL_LIKE_FIELD_NAMES:
+        return "null"
+
+    if folded.replace(" ", "").replace("_", "").replace("-", "").isdigit():
+        return "numeric"
+
+    for prefix in FILLER_FIELD_PREFIXES:
+        if not folded.startswith(prefix):
+            continue
+        tail = folded[len(prefix):].strip(" _-:.")
+        if not tail or tail.isdigit():
+            return "filler"
+    return ""
+
+
+def suspicious_field_name_issues(
+    layers: Sequence[Tuple[str, Sequence[str]]],
+) -> List[QualityIssue]:
+    """Найти технические и бессмысленные имена полей в слоях."""
+
+    issues: List[QualityIssue] = []
+
+    for layer_name, field_names in layers:
+        empty_index = 0
+        for name in field_names:
+            reason = suspicious_field_name_reason(name)
+            if not reason:
+                continue
+            if reason == "empty":
+                empty_index += 1
+                shown = "—"
+                location = "Поле {}".format(empty_index)
+            else:
+                shown = name
+                location = name
+            issues.append(
+                QualityIssue(
+                    "suspicious_field_names",
+                    "Слой «{}»: подозрительное имя поля «{}» — {}",
+                    (
+                        layer_name,
+                        shown,
+                        _suspicious_reason_label(reason),
+                    ),
+                    layer=layer_name,
+                    location=location,
+                )
+            )
+
+    return issues
+
+
+def _suspicious_reason_label(reason: str) -> str:
+    """Текст причины подозрительного имени поля."""
+
+    if reason == "null":
+        return tr("имя обозначает отсутствующее значение")
+    if reason == "numeric":
+        return tr("имя состоит только из цифр")
+    if reason == "filler":
+        return tr("техническое имя после импорта")
+    return tr("имя поля пустое")
+
 def field_name_issues(
     layers: Sequence[Tuple[str, Sequence[str]]],
 ) -> List[QualityIssue]:
@@ -734,6 +1110,37 @@ def field_name_issues(
                         location=name,
                     )
                 )
+
+    return issues
+
+
+def case_insensitive_duplicate_issues(
+    layers: Sequence[Tuple[str, Sequence[str]]],
+) -> List[QualityIssue]:
+    """Найти имена полей, совпадающие без учёта регистра в одном слое."""
+
+    issues: List[QualityIssue] = []
+
+    for layer_name, field_names in layers:
+        groups: Dict[str, List[str]] = {}
+        for name in field_names:
+            if not name:
+                continue
+            groups.setdefault(name.casefold(), []).append(name)
+
+        for key, names in groups.items():
+            if len(names) < 2:
+                continue
+            unique = sorted(set(names), key=str.casefold)
+            issues.append(
+                QualityIssue(
+                    "field_name_duplicates",
+                    "Слой «{}»: имена полей совпадают без учёта регистра: {}",
+                    (layer_name, ", ".join(unique)),
+                    layer=layer_name,
+                    location=key,
+                )
+            )
 
     return issues
 
@@ -1289,6 +1696,498 @@ def attribute_fill_issues(
     return issues
 
 
+
+
+
+
+
+
+
+def date_range_issues(
+    layers: Sequence[LayerDateRangeStats],
+    *,
+    field_limit: int = 8,
+) -> List[QualityIssue]:
+    """Отметить поля с датами вне разумного диапазона."""
+
+    issues: List[QualityIssue] = []
+
+    for layer in layers:
+        if layer.feature_count <= 0:
+            continue
+        affected_fields = [
+            field for field in layer.fields if field.count
+        ]
+        if not affected_fields:
+            continue
+
+        parts = [
+            tr(
+                "{} — {} из {}",
+                field.name,
+                field.count,
+                field.total,
+            )
+            for field in affected_fields[:field_limit]
+        ]
+        if len(affected_fields) > field_limit:
+            parts.append("…")
+        issues.append(
+            QualityIssue(
+                "date_range",
+                "Слой «{}»: даты вне разумного диапазона — "
+                "затронуто полей {} из {}: {}",
+                (
+                    layer.layer,
+                    len(affected_fields),
+                    len(layer.fields),
+                    ", ".join(parts),
+                ),
+                layer=layer.layer,
+                location="Атрибуты",
+            )
+        )
+
+        for field in affected_fields:
+            ids = ", ".join(
+                str(feature_id)
+                for feature_id, _value in field.invalid[:10]
+            )
+            values = ", ".join(
+                "«{}»".format(value) for _id, value in field.invalid[:5]
+            )
+            issues.append(
+                QualityIssue(
+                    "date_range",
+                    "Поле «{}»: даты вне разумного диапазона у {} из {} "
+                    "объектов ({}%); годы от {} до {} (объекты: {}); "
+                    "значения: {}",
+                    (
+                        field.name,
+                        field.count,
+                        field.total,
+                        _fill_percent(field.share),
+                        field.earliest,
+                        field.latest,
+                        ids,
+                        values,
+                    ),
+                    layer=layer.layer,
+                    location=field.name,
+                    detail_only=True,
+                )
+            )
+
+    return issues
+
+def text_length_issues(
+    layers: Sequence[LayerTextLengthStats],
+    *,
+    field_limit: int = 8,
+) -> List[QualityIssue]:
+    """Отметить текстовые поля со значениями аномальной длины."""
+
+    issues: List[QualityIssue] = []
+
+    for layer in layers:
+        if layer.feature_count <= 0:
+            continue
+        affected_fields = [
+            field for field in layer.fields if field.count
+        ]
+        if not affected_fields:
+            continue
+
+        parts = [
+            tr(
+                "{} — {} из {}",
+                field.name,
+                field.count,
+                field.total,
+            )
+            for field in affected_fields[:field_limit]
+        ]
+        if len(affected_fields) > field_limit:
+            parts.append("…")
+        issues.append(
+            QualityIssue(
+                "text_length",
+                "Слой «{}»: аномальная длина текста — "
+                "затронуто полей {} из {}: {}",
+                (
+                    layer.layer,
+                    len(affected_fields),
+                    len(layer.fields),
+                    ", ".join(parts),
+                ),
+                layer=layer.layer,
+                location="Атрибуты",
+            )
+        )
+
+        for field in affected_fields:
+            ids = ", ".join(
+                str(feature_id)
+                for feature_id, _length in field.outliers[:10]
+            )
+            args: List[object] = [
+                field.name,
+                field.count,
+                field.total,
+                _fill_percent(field.share),
+                round(field.mean, 1),
+                round(field.deviation, 1),
+                field.longest,
+                ids,
+            ]
+            message = (
+                "Поле «{}»: значения аномальной длины у {} из {} "
+                "объектов ({}%); среднее {}, отклонение {}, самая длинная "
+                "{} символов (объекты: {})"
+            )
+            if field.example:
+                message = message + "; пример: {}"
+                args.append(field.example)
+            issues.append(
+                QualityIssue(
+                    "text_length",
+                    message,
+                    tuple(args),
+                    layer=layer.layer,
+                    location=field.name,
+                    detail_only=True,
+                )
+            )
+
+    return issues
+
+def numeric_text_issues(
+    layers: Sequence[LayerNumericTextStats],
+    *,
+    field_limit: int = 8,
+) -> List[QualityIssue]:
+    """Отметить текстовые поля, где значения записаны числами."""
+
+    issues: List[QualityIssue] = []
+
+    for layer in layers:
+        if layer.feature_count <= 0:
+            continue
+        numeric_fields = [
+            field for field in layer.fields if field.numeric
+        ]
+        if not numeric_fields:
+            continue
+
+        parts = [
+            tr(
+                "{} — {} из {}",
+                field.name,
+                field.numeric,
+                field.total,
+            )
+            for field in numeric_fields[:field_limit]
+        ]
+        if len(numeric_fields) > field_limit:
+            parts.append("…")
+        issues.append(
+            QualityIssue(
+                "numeric_text",
+                "Слой «{}»: числа, записанные как текст — "
+                "затронуто полей {} из {}: {}",
+                (
+                    layer.layer,
+                    len(numeric_fields),
+                    len(layer.fields),
+                    ", ".join(parts),
+                ),
+                layer=layer.layer,
+                location="Атрибуты",
+            )
+        )
+
+        for field in numeric_fields:
+            args: List[object] = [
+                field.name,
+                field.numeric,
+                field.total,
+                _fill_percent(field.share),
+                field.integer,
+                field.real,
+            ]
+            message = (
+                "Поле «{}»: числа, записанные как текст, у {} из {} "
+                "объектов ({}%); целых {}, дробных {}"
+            )
+            if field.example:
+                message = message + "; пример: «{}»"
+                args.append(field.example)
+            issues.append(
+                QualityIssue(
+                    "numeric_text",
+                    message,
+                    tuple(args),
+                    layer=layer.layer,
+                    location=field.name,
+                    detail_only=True,
+                )
+            )
+
+    return issues
+
+def inner_space_issues(
+    layers: Sequence[LayerInnerSpaceStats],
+    *,
+    field_limit: int = 8,
+) -> List[QualityIssue]:
+    """Отметить текстовые поля с двойными пробелами внутри значений."""
+
+    issues: List[QualityIssue] = []
+
+    for layer in layers:
+        if layer.feature_count <= 0:
+            continue
+        affected_fields = [
+            field for field in layer.fields if field.affected
+        ]
+        if not affected_fields:
+            continue
+
+        parts = [
+            tr(
+                "{} — {} из {}",
+                field.name,
+                field.affected,
+                field.total,
+            )
+            for field in affected_fields[:field_limit]
+        ]
+        if len(affected_fields) > field_limit:
+            parts.append("…")
+        issues.append(
+            QualityIssue(
+                "inner_spaces",
+                "Слой «{}»: двойные пробелы внутри значений — "
+                "затронуто полей {} из {}: {}",
+                (
+                    layer.layer,
+                    len(affected_fields),
+                    len(layer.fields),
+                    ", ".join(parts),
+                ),
+                layer=layer.layer,
+                location="Атрибуты",
+            )
+        )
+
+        for field in affected_fields:
+            args: List[object] = [
+                field.name,
+                field.affected,
+                field.total,
+                _fill_percent(field.share),
+            ]
+            message = (
+                "Поле «{}»: двойные пробелы внутри значений у {} из {} "
+                "объектов ({}%)"
+            )
+            if field.example:
+                message = message + "; пример: {}"
+                args.append(field.example)
+            issues.append(
+                QualityIssue(
+                    "inner_spaces",
+                    message,
+                    tuple(args),
+                    layer=layer.layer,
+                    location=field.name,
+                    detail_only=True,
+                )
+            )
+
+    return issues
+
+def edge_space_issues(
+    layers: Sequence[LayerEdgeSpaceStats],
+    *,
+    field_limit: int = 8,
+) -> List[QualityIssue]:
+    """Отметить текстовые поля со пробелами по краям значений."""
+
+    issues: List[QualityIssue] = []
+
+    for layer in layers:
+        if layer.feature_count <= 0:
+            continue
+        affected_fields = [
+            field for field in layer.fields if field.affected
+        ]
+        if not affected_fields:
+            continue
+
+        parts = [
+            tr(
+                "{} — {} из {}",
+                field.name,
+                field.affected,
+                field.total,
+            )
+            for field in affected_fields[:field_limit]
+        ]
+        if len(affected_fields) > field_limit:
+            parts.append("…")
+        issues.append(
+            QualityIssue(
+                "edge_spaces",
+                "Слой «{}»: пробелы по краям значений — "
+                "затронуто полей {} из {}: {}",
+                (
+                    layer.layer,
+                    len(affected_fields),
+                    len(layer.fields),
+                    ", ".join(parts),
+                ),
+                layer=layer.layer,
+                location="Атрибуты",
+            )
+        )
+
+        for field in affected_fields:
+            args: List[object] = [
+                field.name,
+                field.affected,
+                field.total,
+                _fill_percent(field.share),
+                field.leading,
+                field.trailing,
+            ]
+            message = (
+                "Поле «{}»: пробелы по краям у {} из {} объектов ({}%); "
+                "в начале {}, в конце {}"
+            )
+            if field.example:
+                message = message + "; пример: {}"
+                args.append(field.example)
+            issues.append(
+                QualityIssue(
+                    "edge_spaces",
+                    message,
+                    tuple(args),
+                    layer=layer.layer,
+                    location=field.name,
+                    detail_only=True,
+                )
+            )
+
+    return issues
+
+def blank_string_issues(
+    layers: Sequence[LayerBlankStats],
+    *,
+    field_limit: int = 8,
+) -> List[QualityIssue]:
+    """Отметить текстовые поля с пустыми строками вместо NULL."""
+
+    issues: List[QualityIssue] = []
+
+    for layer in layers:
+        if layer.feature_count <= 0:
+            continue
+        blank_fields = [field for field in layer.fields if field.blank]
+        if not blank_fields:
+            continue
+
+        parts = [
+            tr(
+                "{} — {} из {}",
+                field.name,
+                field.blank,
+                field.total,
+            )
+            for field in blank_fields[:field_limit]
+        ]
+        if len(blank_fields) > field_limit:
+            parts.append("…")
+        issues.append(
+            QualityIssue(
+                "blank_strings",
+                "Слой «{}»: пустые строки вместо NULL — "
+                "затронуто полей {} из {}: {}",
+                (
+                    layer.layer,
+                    len(blank_fields),
+                    len(layer.fields),
+                    ", ".join(parts),
+                ),
+                layer=layer.layer,
+                location="Атрибуты",
+            )
+        )
+
+        for field in blank_fields:
+            issues.append(
+                QualityIssue(
+                    "blank_strings",
+                    "Поле «{}»: пустые строки у {} из {} объектов ({}%)",
+                    (
+                        field.name,
+                        field.blank,
+                        field.total,
+                        _fill_percent(field.share),
+                    ),
+                    layer=layer.layer,
+                    location=field.name,
+                    detail_only=True,
+                )
+            )
+
+    return issues
+
+def control_character_issues(
+    layers: Sequence[LayerControlStats],
+    *,
+    character_limit: int = 6,
+) -> List[QualityIssue]:
+    """Отметить поля с управляющими и невидимыми символами."""
+
+    issues: List[QualityIssue] = []
+
+    for layer in layers:
+        if layer.feature_count <= 0:
+            continue
+        for field in layer.fields:
+            if field.features_with_chars <= 0:
+                continue
+            characters = field.characters[:character_limit]
+            names = ", ".join(characters)
+            if len(field.characters) > character_limit:
+                names = names + ", …"
+            args: List[object] = [
+                layer.layer,
+                field.name,
+                field.features_with_chars,
+                layer.feature_count,
+                names,
+            ]
+            message = (
+                "Слой «{}»: в поле «{}» управляющие или невидимые "
+                "символы найдены у {} из {} объектов: {}"
+            )
+            if field.example:
+                message = message + "; пример: «{}»"
+                args.append(field.example)
+            issues.append(
+                QualityIssue(
+                    "control_chars",
+                    message,
+                    tuple(args),
+                    layer=layer.layer,
+                    location=field.name,
+                )
+            )
+
+    return issues
+
 def _fill_percent(value: float) -> int:
     return int(round(max(min(value, 1.0), 0.0) * 100))
 
@@ -1345,39 +2244,4 @@ def topology_summary_issues(
     ]
 
 
-def empty_layer_issues(
-    layers: Sequence[Tuple[str, int]],
-) -> List[QualityIssue]:
-    """Найти пустые слои и файлы без объектов."""
 
-    if not layers:
-        return []
-
-    empty = [
-        (name, count) for name, count in layers if count == 0
-    ]
-    if not empty:
-        return []
-
-    issues: List[QualityIssue] = []
-    if len(empty) == len(layers):
-        issues.append(
-            QualityIssue(
-                "empty_layers",
-                "Файл не содержит объектов",
-                location="Файл",
-            )
-        )
-
-    for name, _count in empty:
-        issues.append(
-            QualityIssue(
-                "empty_layers",
-                "Слой «{}» не содержит объектов",
-                (name,),
-                layer=name,
-                location="Слой",
-            )
-        )
-
-    return issues

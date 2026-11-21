@@ -39,6 +39,7 @@ try {
         "dist",
         "scripts",
         "tests",
+        ".empryo",
         ".git",
         ".gitignore",
         ".idea",

@@ -1,23 +1,29 @@
-"""Диалог выбора проверок ZGeo."""
+"""Выбор проверок и закладки качества данных ZGeo."""
 
 from __future__ import annotations
 
 import html
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
-from qgis.PyQt.QtCore import Qt
-from qgis.PyQt.QtGui import QFont, QIcon
+from qgis.PyQt.QtCore import Qt, pyqtSignal
+from qgis.PyQt.QtGui import QFont
 from qgis.PyQt.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
+    QMenu,
+    QPushButton,
     QScrollArea,
+    QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
     QTextBrowser,
     QToolButton,
     QVBoxLayout,
@@ -25,8 +31,12 @@ from qgis.PyQt.QtWidgets import (
 )
 
 from .i18n import tr
+from .table_export import (
+    export_rows_with_dialog,
+    export_rows_with_html_dialog,
+)
 
-ICON_PATH = Path(__file__).with_name("icon.svg")
+from .i18n import tr
 
 CHECK_SIZE = "refine_size"
 CHECK_READABILITY = "readability"
@@ -35,7 +45,17 @@ CHECK_GEOJSON_QUALITY = "geojson_quality"
 CHECK_CRS_QUALITY = "crs_quality"
 CHECK_COUNT_QUALITY = "count_quality"
 CHECK_FIELD_NAMES = "field_names"
+CHECK_FIELD_NAME_DUPLICATES = "field_name_duplicates"
 CHECK_ATTRIBUTE_FILL = "attribute_fill"
+CHECK_CONTROL_CHARS = "control_chars"
+CHECK_ATTRIBUTE_DUPLICATES = "attribute_duplicates"
+CHECK_BLANK_STRINGS = "blank_strings"
+CHECK_EDGE_SPACES = "edge_spaces"
+CHECK_INNER_SPACES = "inner_spaces"
+CHECK_NUMERIC_TEXT = "numeric_text"
+CHECK_TEXT_LENGTH = "text_length"
+CHECK_DATE_RANGE = "date_range"
+CHECK_SUSPICIOUS_FIELD_NAMES = "suspicious_field_names"
 CHECK_DATASET_INTEGRITY = "dataset_integrity"
 CHECK_GPKG_INTEGRITY = "gpkg_integrity"
 CHECK_METADATA_CRS = "metadata_crs"
@@ -46,6 +66,91 @@ CHECK_TOPOLOGY = "topology_quality"
 CHECK_DUPLICATES = "duplicate_features"
 CHECK_FILE_PATHS = "file_paths"
 
+CHECK_CATEGORY_SPATIAL = "spatial"
+CHECK_CATEGORY_ATTRIBUTE = "attribute"
+
+SPATIAL_CHECK_KEYS = frozenset(
+    {
+        CHECK_SIZE,
+        CHECK_READABILITY,
+        CHECK_JSON_GEOJSON,
+        CHECK_GEOJSON_QUALITY,
+        CHECK_CRS_QUALITY,
+        CHECK_COUNT_QUALITY,
+        CHECK_DATASET_INTEGRITY,
+        CHECK_GPKG_INTEGRITY,
+        CHECK_METADATA_CRS,
+        CHECK_PRJ,
+        CHECK_GEOMETRY,
+        CHECK_TOPOLOGY,
+        CHECK_DUPLICATES,
+        CHECK_COORDINATES,
+        CHECK_FILE_PATHS,
+    }
+)
+
+ATTRIBUTE_CHECK_KEYS = frozenset(
+    {
+        CHECK_FIELD_NAMES,
+        CHECK_FIELD_NAME_DUPLICATES,
+        CHECK_ATTRIBUTE_FILL,
+        CHECK_CONTROL_CHARS,
+        CHECK_ATTRIBUTE_DUPLICATES,
+        CHECK_BLANK_STRINGS,
+        CHECK_EDGE_SPACES,
+        CHECK_INNER_SPACES,
+        CHECK_NUMERIC_TEXT,
+        CHECK_TEXT_LENGTH,
+        CHECK_DATE_RANGE,
+        CHECK_SUSPICIOUS_FIELD_NAMES,
+    }
+)
+
+
+def check_category(key: str) -> str:
+    """Вернуть категорию проверки для закладки качества данных."""
+
+    if key in ATTRIBUTE_CHECK_KEYS:
+        return CHECK_CATEGORY_ATTRIBUTE
+    if key in SPATIAL_CHECK_KEYS:
+        return CHECK_CATEGORY_SPATIAL
+    raise ValueError(f"Неизвестная проверка: {key}")
+
+
+def check_category_label(category: str) -> str:
+    """Название закладки категории проверок."""
+
+    if category == CHECK_CATEGORY_ATTRIBUTE:
+        return tr("Качество атрибутивных данных")
+    return tr("Качество пространственных данных")
+
+
+def check_category_hint(category: str) -> str:
+    """Краткое описание проверок категории."""
+
+    if category == CHECK_CATEGORY_ATTRIBUTE:
+        return tr(
+            "Проверки имён полей, дублей имён и заполненности "
+            "атрибутов."
+        )
+    return tr(
+        "Проверки геометрии, системы координат, файлов и наборов "
+        "данных."
+    )
+
+
+def definitions_for_category(
+    definitions: List["CheckDefinition"], category: str
+) -> List["CheckDefinition"]:
+    """Отобрать определения проверок для одной категории."""
+
+    return [
+        definition
+        for definition in definitions
+        if check_category(definition.key) == category
+    ]
+
+
 PROBLEM_CHECKS = frozenset(
     {
         CHECK_READABILITY,
@@ -54,7 +159,17 @@ PROBLEM_CHECKS = frozenset(
         CHECK_CRS_QUALITY,
         CHECK_COUNT_QUALITY,
         CHECK_FIELD_NAMES,
+        CHECK_FIELD_NAME_DUPLICATES,
         CHECK_ATTRIBUTE_FILL,
+        CHECK_CONTROL_CHARS,
+        CHECK_ATTRIBUTE_DUPLICATES,
+        CHECK_BLANK_STRINGS,
+        CHECK_EDGE_SPACES,
+        CHECK_INNER_SPACES,
+        CHECK_NUMERIC_TEXT,
+        CHECK_TEXT_LENGTH,
+        CHECK_DATE_RANGE,
+        CHECK_SUSPICIOUS_FIELD_NAMES,
         CHECK_DATASET_INTEGRITY,
         CHECK_GPKG_INTEGRITY,
         CHECK_METADATA_CRS,
@@ -71,7 +186,17 @@ LAYER_PROBLEM_CHECKS = frozenset(
         CHECK_CRS_QUALITY,
         CHECK_COUNT_QUALITY,
         CHECK_FIELD_NAMES,
+        CHECK_FIELD_NAME_DUPLICATES,
         CHECK_ATTRIBUTE_FILL,
+        CHECK_CONTROL_CHARS,
+        CHECK_ATTRIBUTE_DUPLICATES,
+        CHECK_BLANK_STRINGS,
+        CHECK_EDGE_SPACES,
+        CHECK_INNER_SPACES,
+        CHECK_NUMERIC_TEXT,
+        CHECK_TEXT_LENGTH,
+        CHECK_DATE_RANGE,
+        CHECK_SUSPICIOUS_FIELD_NAMES,
         CHECK_METADATA_CRS,
         CHECK_PRJ,
         CHECK_GEOMETRY,
@@ -263,37 +388,37 @@ def check_definitions(
         ),
         CheckDefinition(
             key=CHECK_COUNT_QUALITY,
-            label=tr(
-                "Уточнить количество элементов и проверить пустые слои"
-            ),
+            label=tr("Уточнить количество элементов"),
             description=tr(
-                "Считает количество элементов, обновляет колонку "
-                "«Элементов» и отмечает пустые слои и файлы без объектов."
+                "Считает количество элементов и обновляет колонку "
+                "«Элементов»."
             ),
             details=(
                 tr(
                     "Для каждого слоя ZGeo считает объекты через "
-                    "провайдеры QGIS и обновляет колонку «Элементов»."
+                    "провайдеры QGIS и обновляет колонку «Элементов». "
+                    "Для файлов с несколькими слоями количество "
+                    "суммируется."
                 ),
                 tr(
-                    "Пустой слой отмечается отдельно. Если в файле нет ни "
-                    "одного объекта, файл помечается как не содержащий "
-                    "объектов."
+                    "Проверка только заполняет колонку и не отмечает "
+                    "файлы как проблемные: пустые слои и файлы без "
+                    "объектов ищут проверки атрибутивных данных."
                 ),
                 tr(
-                    "Для растров количество элементов не подсчитывается."
+                    "Для растров количество элементов не подсчитывается, "
+                    "в колонке остаётся «—»."
                 ),
             ),
             examples=(
+                tr("Слой roads: 1 245 объектов — колонка обновлена."),
                 tr(
-                    "Слой roads: 1 245 объектов — проблема не найдена."
+                    "GeoPackage из двух слоёв: 1 245 и 380 объектов — в "
+                    "колонке 1 625."
                 ),
                 tr(
-                    "Слой buildings: 0 объектов — отмечается пустой слой."
-                ),
-                tr(
-                    "GeoPackage из двух пустых слоёв: файл помечается как "
-                    "не содержащий объектов."
+                    "Слой buildings: 0 объектов — колонка показывает 0, "
+                    "проблема не отмечается."
                 ),
             ),
         ),
@@ -330,6 +455,34 @@ def check_definitions(
                 tr(
                     "Поля population_2024 и population_2025: после "
                     "усечения до 10 символов совпадают — отмечается дубль."
+                ),
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_FIELD_NAME_DUPLICATES,
+            label=tr("Проверка дублей имён полей"),
+            description=tr(
+                "Ищет имена атрибутивных полей, совпадающие без учёта "
+                "регистра в одном слое."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "Для каждого векторного слоя ZGeo сравнивает имена "
+                    "полей после приведения к нижнему регистру. Поля "
+                    "Name и name считаются дублями."
+                ),
+                tr(
+                    "Сравнение выполняется только внутри одного слоя; "
+                    "одинаковые имена в разных слоях не считаются дублями."
+                ),
+                tr("Для растров проверка не применяется."),
+            ),
+            examples=(
+                tr("Поля Name и name в одном слое — отмечается дубль."),
+                tr("Поля CODE и code в одном слое — отмечается дубль."),
+                tr(
+                    "Поле name в двух разных слоях — дублем не считается."
                 ),
             ),
         ),
@@ -373,6 +526,449 @@ def check_definitions(
                 tr(
                     "Слой из 1000 объектов, где 98% объектов не имеют "
                     "атрибутов — отмечается как почти пустой."
+                ),
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_CONTROL_CHARS,
+            label=tr("Управляющие и невидимые символы"),
+            description=tr(
+                "Ищет табуляцию, переводы строк, возврат каретки и "
+                "невидимые символы в текстовых значениях."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "Для каждого векторного слоя и таблицы ZGeo читает "
+                    "текстовые поля и ищет управляющие символы: табуляцию "
+                    "(TAB), перевод строки (LF), возврат каретки (CR), "
+                    "вертикальную табуляцию, перевод формата, NUL и ESC."
+                ),
+                tr(
+                    "Невидимыми считаются неразрывный и узкий неразрывный "
+                    "пробелы, мягкий перенос, символы нулевой ширины, "
+                    "разделители строк и абзацев, метка порядка байтов и "
+                    "другие форматирующие символы Unicode. Обычный пробел "
+                    "проблемой не считается."
+                ),
+                tr(
+                    "Такие символы портят вёрстку подписей и отчётов, "
+                    "ломают разбор CSV и мешают сравнению строк: две "
+                    "визуально одинаковые подписи оказываются разными. "
+                    "В отчёте показываются названия символов, число "
+                    "объектов и пример значения, где управляющие символы "
+                    "заменены на \\t, \\n и \\uXXXX."
+                ),
+                tr("Для растров проверка не применяется."),
+            ),
+            examples=(
+                tr(
+                    "Значение «Иванов\\tИ.И.» с табуляцией — отмечается "
+                    "TAB (U+0009)."
+                ),
+                tr(
+                    "Адрес с переводом строки внутри значения — "
+                    "отмечается LF (U+000A)."
+                ),
+                tr(
+                    "Название с неразрывным пробелом вместо обычного — "
+                    "отмечается NBSP (U+00A0)."
+                ),
+                tr(
+                    "Строка «Центральный» без управляющих символов — "
+                    "проблемы нет."
+                ),
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_ATTRIBUTE_DUPLICATES,
+            label=tr("Дубли по атрибутам (очень долго!)"),
+            description=tr(
+                "Ищет полные дубли строк, дубли составного ключа, "
+                "совпадения без учёта регистра и пробелов и частичные "
+                "вхождения значений."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "Полные дубли строк: объекты, у которых совпадают все "
+                    "атрибутивные столбцы. Дубли составного ключа: объекты, "
+                    "у которых совпадают все текстовые столбцы слоя."
+                ),
+                tr(
+                    "Совпадения без учёта регистра и лишних пробелов: "
+                    "значения приводятся к нижнему регистру, повторяющиеся "
+                    "пробелы сжимаются, после чего сравниваются. «Москва» и "
+                    "«москва » считаются дублями."
+                ),
+                tr(
+                    "Частичные вхождения: значение целиком входит в другое "
+                    "значение того же поля, например «ЯмалоНенецкий "
+                    "автономный окру» входит в «ЯмалоНенецкий автономный "
+                    "округ». Показывается процент вхождения — доля длины "
+                    "короткого значения в длинном."
+                ),
+                tr(
+                    "Проверка читает все объекты слоя и сравнивает значения "
+                    "попарно, поэтому на больших наборах данных может "
+                    "работать очень долго. Для защиты от зависания "
+                    "проверяется не более 50 000 объектов на слой, "
+                    "частичные вхождения — не более чем по 1000 значениям "
+                    "на поле, а по каждому виду дублей показывается не "
+                    "более 200 групп. Дубли завышают статистику, дают "
+                    "двойные подписи на карте и мешают объединять данные "
+                    "из разных источников."
+                ),
+                tr(
+                    "Двойной щелчок по ячейке таблицы результатов открывает "
+                    "подробный список найденных дублей с процентами."
+                ),
+            ),
+            examples=(
+                tr(
+                    "Две строки с одинаковыми значениями всех полей — "
+                    "отмечается полный дубль строк."
+                ),
+                tr(
+                    "Поля name и code совпадают у двух объектов, остальные "
+                    "поля различаются — отмечается дубль составного ключа."
+                ),
+                tr(
+                    "Значения «Москва» и «москва » — отмечается совпадение "
+                    "без учёта регистра и пробелов."
+                ),
+                tr(
+                    "«ЯмалоНенецкий автономный окру» и «ЯмалоНенецкий "
+                    "автономный округ» — частичное вхождение 97.3%."
+                ),
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_BLANK_STRINGS,
+            label=tr("Пустые строки"),
+            description=tr(
+                "Ищет текстовые поля, где значение пустое или состоит "
+                "только из пробелов."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "Для каждого векторного слоя и таблицы ZGeo читает "
+                    "текстовые поля и считает пустыми значения, которые "
+                    "являются пустой строкой или состоят только из "
+                    "пробелов, табуляции и переводов строк."
+                ),
+                tr(
+                    "Для пользователя такие значения не отличаются от "
+                    "NULL, но ведут себя иначе в запросах: условие IS NULL "
+                    "их не находит, а сортировка и группировка дают "
+                    "отдельную группу, поэтому одна и та же «пустота» "
+                    "попадает в разные места отчётов."
+                ),
+                tr(
+                    "В подсказке показывается сводка по слою: сколько "
+                    "полей затронуто и сколько пустых строк в каждом, а в "
+                    "отчёте — доля пустых строк по каждому полю. Проверка "
+                    "только сообщает о проблемах и не меняет данные."
+                ),
+                tr("Для растров проверка не применяется."),
+            ),
+            examples=(
+                tr(
+                    "Поле name: у 12 из 200 объектов пустая строка — "
+                    "отмечается 6% пустых строк."
+                ),
+                tr(
+                    "Поле address: значение из трёх пробелов — считается "
+                    "пустой строкой."
+                ),
+                tr(
+                    "Поле code: NULL у 5 объектов и пустая строка ни у "
+                    "одного — проблемой не считается."
+                ),
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_EDGE_SPACES,
+            label=tr("Пробелы по краям значений"),
+            description=tr(
+                "Ищет значения с ведущими или замыкающими пробелами, "
+                "табуляцией и переводами строк."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "Для каждого векторного слоя и таблицы ZGeo читает "
+                    "текстовые поля и сравнивает значение с его версией "
+                    "без пробелов по краям. Учитываются пробел, табуляция, "
+                    "перевод строки, возврат каретки, вертикальная "
+                    "табуляция и перевод формата."
+                ),
+                tr(
+                    "Такие значения не совпадают при сравнении и "
+                    "соединении: «Москва» и «Москва » считаются разными. "
+                    "Из-за этого ломаются справочники, фильтры и связи "
+                    "между слоями, а группировка даёт лишние группы."
+                ),
+                tr(
+                    "Значения, состоящие только из пробелов, эта проверка "
+                    "пропускает — для них есть проверка «Пустые строки». "
+                    "В отчёте по каждому полю показывается число объектов, "
+                    "доля, сколько значений с пробелами в начале и сколько "
+                    "в конце, и пример значения с видимыми символами "
+                    "пробелов: «·Москва·», «\\tТверь»."
+                ),
+                tr("Для растров проверка не применяется."),
+            ),
+            examples=(
+                tr(
+                    "Значение «Москва » с пробелом в конце — отмечается "
+                    "1 объект."
+                ),
+                tr(
+                    "Значение «  Тверь» с двумя пробелами в начале — "
+                    "отмечается как пробелы в начале."
+                ),
+                tr(
+                    "Значение с табуляцией в начале — отмечается «\\t» в "
+                    "примере."
+                ),
+                tr(
+                    "Значение «Москва» без пробелов по краям — проблемы нет."
+                ),
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_INNER_SPACES,
+            label=tr("Двойные пробелы внутри значений"),
+            description=tr(
+                "Ищет значения, внутри которых стоят два и более "
+                "пробела подряд."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "Для каждого векторного слоя и таблицы ZGeo читает "
+                    "текстовые поля, отбрасывает пробелы по краям и ищет "
+                    "внутри значения последовательности из двух и более "
+                    "пробельных символов подряд."
+                ),
+                tr(
+                    "Обычно это следствие ручного ввода или склейки полей. "
+                    "Такие записи не находятся поиском по точному значению "
+                    "и выглядят неряшливо в отчётах, а сравнение с "
+                    "нормализованным значением даёт ложное несовпадение."
+                ),
+                tr(
+                    "Пробелы по краям значения проверяет отдельная "
+                    "проверка «Пробелы по краям значений», пустые строки — "
+                    "проверка «Пустые строки». В отчёте по каждому полю "
+                    "показывается число объектов, доля и пример значения, "
+                    "где пробелы заменены видимыми символами: «Москва··"
+                    "Сити»."
+                ),
+                tr("Для растров проверка не применяется."),
+            ),
+            examples=(
+                tr(
+                    "Значение «Москва  Сити» с двумя пробелами — "
+                    "отмечается 1 объект."
+                ),
+                tr(
+                    "Склейка полей дала «улица  Ленина   1» — отмечается "
+                    "как двойные пробелы внутри значения."
+                ),
+                tr(
+                    "Значение «Москва Сити» с одним пробелом — проблемы "
+                    "нет."
+                ),
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_NUMERIC_TEXT,
+            label=tr("Числа, записанные как текст"),
+            description=tr(
+                "Ищет текстовые столбцы, где значения являются числами: "
+                "идентификаторы, площади, коды."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "Для каждого векторного слоя и таблицы ZGeo читает "
+                    "текстовые поля и проверяет значения: число состоит из "
+                    "цифр, не более чем одного десятичного разделителя "
+                    "(точки или запятой), знака и экспоненты. Пробелы "
+                    "внутри значения, буквы и повторные разделители "
+                    "делают значение нечисловым."
+                ),
+                tr(
+                    "Обычно так выглядят поля, которые нужно хранить "
+                    "числом: идентификаторы, площади, коды. Из-за "
+                    "текстового типа сравнение идёт по алфавиту («10» "
+                    "меньше «9») и невозможны арифметические операции."
+                ),
+                tr(
+                    "В отчёте по каждому полю показывается число объектов, "
+                    "доля, сколько значений целых и сколько дробных, и "
+                    "пример значения. Ведущие нули не мешают: «007» тоже "
+                    "считается числом, записанным как текст."
+                ),
+                tr("Для растров проверка не применяется."),
+            ),
+            examples=(
+                tr(
+                    "Поле code типа «текст» со значениями «10», «9», «007» "
+                    "— отмечается 3 числа, записанных как текст."
+                ),
+                tr(
+                    "Поле area со значениями «12.5» и «7» — отмечается "
+                    "два числа, одно дробное."
+                ),
+                tr(
+                    "Значение «12a» или «1 234» — числом не считается."
+                ),
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_TEXT_LENGTH,
+            label=tr("Аномальная длина текста"),
+            description=tr(
+                "Считает среднюю длину значения и стандартное отклонение "
+                "и ищет значения длиннее среднего более чем на три "
+                "отклонения."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "Для каждого текстового поля ZGeo считает длину "
+                    "каждого непустого значения, среднюю длину и "
+                    "стандартное отклонение, а затем отмечает значения "
+                    "длиннее среднего более чем на три отклонения."
+                ),
+                tr(
+                    "Так находятся обрезанные поля справочника и, "
+                    "наоборот, значения со склеенным или лишним текстом: "
+                    "в поле из двух-трёх слов появляется целая строка "
+                    "адреса или несколько значений через разделитель."
+                ),
+                tr(
+                    "Проверка работает только по длине и не читает "
+                    "содержимое, поэтому подсказка показывает среднее, "
+                    "отклонение, самую длинную длину и пример значения. "
+                    "Для полей с малым числом значений (меньше трёх) и с "
+                    "одинаковой длиной всех значений проверка ничего не "
+                    "отмечает."
+                ),
+                tr("Для растров проверка не применяется."),
+            ),
+            examples=(
+                tr(
+                    "Поле name со значениями «Москва», «Тверь», «Омск» и "
+                    "одним значением «Москва, Тверь, Омск, Тула, Сочи» — "
+                    "отмечается одно аномальное значение."
+                ),
+                tr(
+                    "Поле code со значениями одинаковой длины — проблем "
+                    "нет."
+                ),
+                tr(
+                    "Поле из двух значений — проверка не применяется, "
+                    "статистики слишком мало."
+                ),
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_DATE_RANGE,
+            label=tr("Даты вне разумного диапазона"),
+            description=tr(
+                "Ищет даты и отметки времени раньше 1900 года и позже "
+                "текущего года."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "ZGeo читает поля дат, отметок времени и текстовые "
+                    "поля, разбирает значения как дату и отмечает годы "
+                    "раньше 1900 и позже текущего года."
+                ),
+                tr(
+                    "Поддерживаются записи ГГГГ-ММ-ДД, ДД.ММ.ГГГГ, "
+                    "ДД/ММ/ГГГГ и ГГГГ/ММ/ДД, в том числе с временем "
+                    "через «T» или пробел. Нулевая дата вида 0000-00-00 "
+                    "тоже отмечается."
+                ),
+                tr(
+                    "Так выглядят даты, записанные в неверном формате, и "
+                    "результат подстановки нулевой даты. Такие значения "
+                    "ломают временные фильтры и хронологию в отчётах: "
+                    "сортировка по дате ставит их в начало или в конец "
+                    "списка."
+                ),
+                tr(
+                    "В отчёте по каждому полю показываются число объектов, "
+                    "доля, минимальный и максимальный найденный год, "
+                    "объекты и сами значения."
+                ),
+            ),
+            examples=(
+                tr(
+                    "Значение 1899-12-30 — отмечается как дата раньше "
+                    "1900 года."
+                ),
+                tr(
+                    "Значение 0000-00-00 — отмечается нулевая дата."
+                ),
+                tr(
+                    "Значение 2999-01-01 — отмечается как дата позже "
+                    "текущего года."
+                ),
+                tr(
+                    "Значение 2024-05-01 — проблемы нет."
+                ),
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_SUSPICIOUS_FIELD_NAMES,
+            label=tr("Подозрительные имена полей"),
+            description=tr(
+                "Ищет технические имена после импорта и имена, "
+                "обозначающие отсутствующее значение."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "ZGeo читает имена полей каждого векторного слоя и "
+                    "отмечает пустое имя, имена, обозначающие отсутствие "
+                    "значения (NULL, None, NaN, Nil, Undefined), имена из "
+                    "одних цифр и технические имена после импорта: Field1, "
+                    "field_2, Column3, Unnamed: 0, Attribute1."
+                ),
+                tr(
+                    "Такие имена появляются при импорте таблиц и текстовых "
+                    "файлов без заголовков, при склейке источников и после "
+                    "конвертации из Excel. В справочнике их нет, поэтому "
+                    "слой нельзя сопоставить с эталонной схемой, а отчёты "
+                    "и подписи получают бессмысленные заголовки."
+                ),
+                tr(
+                    "Осмысленные короткие имена (id, code, name, OBJECTID) "
+                    "проблемой не считаются. Проверка только сообщает о "
+                    "проблемах и не переименовывает поля."
+                ),
+                tr("Для растров проверка не применяется."),
+            ),
+            examples=(
+                tr(
+                    "Поле Field1 — техническое имя после импорта."
+                ),
+                tr(
+                    "Поле NULL — имя обозначает отсутствующее значение."
+                ),
+                tr(
+                    "Поле 2024 — имя состоит только из цифр."
+                ),
+                tr(
+                    "Поля OBJECTID и name — проблемы нет."
                 ),
             ),
         ),
@@ -810,46 +1406,52 @@ def check_definitions(
 
 
 
-class ChecksDialog(QDialog):
-    """Окно выбора проверок перед их выполнением."""
+class CheckSelectionWidget(QWidget):
+    """Список проверок с кнопками «i» и панелью подробностей."""
+
+    selectionChanged = pyqtSignal()
+    detailsVisibilityChanged = pyqtSignal(bool)
 
     def __init__(
         self,
+        definitions: List[CheckDefinition],
         parent: Optional[QWidget] = None,
-        *,
-        include_json_check: bool = True,
     ) -> None:
         super().__init__(parent)
+        self._definitions = list(definitions)
         self._checkboxes: Dict[str, QCheckBox] = {}
         self._info_buttons: Dict[str, QToolButton] = {}
-        self._definitions = check_definitions(include_json_check)
-
-        self.setWindowTitle(tr("Проверки"))
-        self.setWindowIcon(QIcon(str(ICON_PATH)))
-        self.resize(640, 480)
-        self.setMinimumSize(540, 380)
-
+        self._current_definition: Optional[CheckDefinition] = None
         self._build_ui()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 14)
-        layout.setSpacing(10)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        title = QLabel(tr("Выберите проверки"))
-        self._set_font(title, 3, bold=True)
-        layout.addWidget(title)
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(14)
 
-        hint = QLabel(
-            tr(
-                "Отметьте проверки, которые нужно выполнить для "
-                "найденных файлов. Нажмите «i» справа, чтобы открыть "
-                "подробное описание с примерами."
-            )
-        )
-        hint.setWordWrap(True)
-        self._set_font(hint, -1)
-        layout.addWidget(hint)
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        body.addWidget(self._scroll, 1)
+
+        self._details_panel = self._build_details_panel()
+        self._details_panel.setVisible(False)
+        body.addWidget(self._details_panel)
+
+        layout.addLayout(body, 1)
+        self._rebuild_checks({})
+
+    def _rebuild_checks(self, checked: Dict[str, bool]) -> None:
+        old_host = self._scroll.takeWidget()
+        if old_host is not None:
+            old_host.deleteLater()
+
+        self._checkboxes = {}
+        self._info_buttons = {}
 
         grid_host = QWidget()
         grid = QGridLayout(grid_host)
@@ -860,8 +1462,10 @@ class ChecksDialog(QDialog):
 
         for row, definition in enumerate(self._definitions):
             checkbox = QCheckBox(definition.label)
-            checkbox.setChecked(definition.checked)
-            checkbox.toggled.connect(self._update_run_button)
+            checkbox.setChecked(
+                checked.get(definition.key, definition.checked)
+            )
+            checkbox.toggled.connect(self._on_checkbox_toggled)
             self._checkboxes[definition.key] = checkbox
             grid.addWidget(checkbox, row, 0)
 
@@ -878,7 +1482,9 @@ class ChecksDialog(QDialog):
             info_button.setAccessibleDescription(definition.description)
             info_button.setCursor(Qt.CursorShape.PointingHandCursor)
             info_font = QFont(info_button.font())
-            info_font.setPointSizeF(max(10.0, info_font.pointSizeF() + 2.0))
+            info_font.setPointSizeF(
+                max(10.0, info_font.pointSizeF() + 2.0)
+            )
             info_font.setBold(True)
             info_button.setFont(info_font)
             info_button.clicked.connect(
@@ -891,42 +1497,77 @@ class ChecksDialog(QDialog):
                 info_button,
                 row,
                 1,
-                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+                Qt.AlignmentFlag.AlignRight
+                | Qt.AlignmentFlag.AlignVCenter,
             )
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setWidget(grid_host)
+        self._scroll.setWidget(grid_host)
+        if (
+            self._current_definition is not None
+            and self._current_definition.key not in self._checkboxes
+        ):
+            self._hide_details()
+        self.selectionChanged.emit()
 
-        body = QHBoxLayout()
-        body.setContentsMargins(0, 0, 0, 0)
-        body.setSpacing(14)
-        body.addWidget(scroll, 1)
+    def _on_checkbox_toggled(self, _checked: bool) -> None:
+        self.selectionChanged.emit()
 
-        self._details_panel = self._build_details_panel()
-        self._details_panel.setVisible(False)
-        body.addWidget(self._details_panel)
+    def set_definitions(
+        self, definitions: List[CheckDefinition]
+    ) -> None:
+        """Заменить список проверок, сохранив отмеченные ключи."""
 
-        layout.addLayout(body, 1)
-
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel
+        checked = {
+            key: checkbox.isChecked()
+            for key, checkbox in self._checkboxes.items()
+        }
+        current_key = (
+            self._current_definition.key
+            if self._current_definition is not None
+            else None
         )
-        self.run_button = buttons.button(QDialogButtonBox.StandardButton.Ok)
-        self.cancel_button = buttons.button(
-            QDialogButtonBox.StandardButton.Cancel
-        )
-        self.run_button.setText(tr("Выполнить"))
-        self.run_button.setDefault(True)
-        self.run_button.setAutoDefault(True)
-        self.cancel_button.setText(tr("Отмена"))
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        self._definitions = list(definitions)
+        self._rebuild_checks(checked)
+        if current_key is not None:
+            for definition in self._definitions:
+                if definition.key == current_key:
+                    self._current_definition = definition
+                    self._details_browser.setHtml(
+                        self._details_html(definition)
+                    )
+                    break
 
-        self._update_run_button()
+    def selected_checks(self) -> List[str]:
+        """Вернуть ключи отмеченных проверок в порядке списка."""
+
+        return [
+            definition.key
+            for definition in self._definitions
+            if self._checkboxes[definition.key].isChecked()
+        ]
+
+    def set_all_checked(self, checked: bool) -> None:
+        """Отметить или снять все проверки списка."""
+
+        for checkbox in self._checkboxes.values():
+            checkbox.setChecked(checked)
+        self.selectionChanged.emit()
+
+    def reset_to_defaults(self) -> None:
+        """Вернуть отметки проверок к значениям по умолчанию."""
+
+        for definition in self._definitions:
+            checkbox = self._checkboxes.get(definition.key)
+            if checkbox is not None:
+                checkbox.setChecked(definition.checked)
+        self.selectionChanged.emit()
+
+    def focus_first_check(self) -> None:
+        for definition in self._definitions:
+            checkbox = self._checkboxes.get(definition.key)
+            if checkbox is not None:
+                checkbox.setFocus()
+                return
 
     def _build_details_panel(self) -> QFrame:
         """Создать панель подробного описания проверки."""
@@ -946,21 +1587,27 @@ class ChecksDialog(QDialog):
         header.setContentsMargins(0, 0, 0, 0)
         header.setSpacing(4)
 
-        header_label = QLabel(tr("Подробное описание"))
-        self._set_font(header_label, -1, bold=True)
-        header.addWidget(header_label)
+        self._details_header_label = QLabel(tr("Подробное описание"))
+        _apply_font(self._details_header_label, -1, bold=True)
+        header.addWidget(self._details_header_label)
         header.addStretch(1)
 
-        close_button = QToolButton()
-        close_button.setObjectName("zgeoCheckDetailsCloseButton")
-        close_button.setText("×")
-        close_button.setAutoRaise(True)
-        close_button.setFixedSize(24, 24)
-        close_button.setToolTip(tr("Закрыть описание"))
-        close_button.setAccessibleName(tr("Закрыть описание"))
-        close_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        close_button.clicked.connect(self._hide_details)
-        header.addWidget(close_button)
+        self._details_close_button = QToolButton()
+        self._details_close_button.setObjectName(
+            "zgeoCheckDetailsCloseButton"
+        )
+        self._details_close_button.setText("×")
+        self._details_close_button.setAutoRaise(True)
+        self._details_close_button.setFixedSize(24, 24)
+        self._details_close_button.setToolTip(tr("Закрыть описание"))
+        self._details_close_button.setAccessibleName(
+            tr("Закрыть описание")
+        )
+        self._details_close_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self._details_close_button.clicked.connect(self._hide_details)
+        header.addWidget(self._details_close_button)
 
         panel_layout.addLayout(header)
 
@@ -989,19 +1636,22 @@ class ChecksDialog(QDialog):
     def _show_details(self, definition: CheckDefinition) -> None:
         """Заполнить и открыть панель подробного описания."""
 
+        self._current_definition = definition
         self._details_browser.setHtml(self._details_html(definition))
         self._details_browser.verticalScrollBar().setValue(0)
         was_hidden = not self._details_panel.isVisible()
         self._details_panel.setVisible(True)
-        if was_hidden and self.isVisible():
-            self.resize(max(self.width(), 960), max(self.height(), 580))
+        if was_hidden:
+            self.detailsVisibilityChanged.emit(True)
 
     def _hide_details(self) -> None:
         """Закрыть панель подробного описания."""
 
+        was_visible = self._details_panel.isVisible()
         self._details_panel.setVisible(False)
-        if self.isVisible():
-            self.resize(640, max(self.height(), 480))
+        self._current_definition = None
+        if was_visible:
+            self.detailsVisibilityChanged.emit(False)
 
     def _details_html(self, definition: CheckDefinition) -> str:
         """Собрать HTML для панели подробного описания."""
@@ -1037,25 +1687,517 @@ class ChecksDialog(QDialog):
 
         return "".join(parts)
 
-    def selected_checks(self) -> List[str]:
-        """Вернуть ключи отмеченных проверок в порядке списка."""
+    def retranslate_ui(self) -> None:
+        """Обновить подписи панели подробностей."""
 
-        return [
-            definition.key
-            for definition in self._definitions
-            if self._checkboxes[definition.key].isChecked()
+        self._details_header_label.setText(tr("Подробное описание"))
+        self._details_close_button.setToolTip(tr("Закрыть описание"))
+        self._details_close_button.setAccessibleName(
+            tr("Закрыть описание")
+        )
+        self._details_browser.setAccessibleName(
+            tr("Подробное описание проверки")
+        )
+        if self._current_definition is not None:
+            self._details_browser.setHtml(
+                self._details_html(self._current_definition)
+            )
+
+
+
+
+def _apply_font(
+    widget: QWidget, size_delta: int, bold: bool = False
+) -> None:
+    font = QFont(widget.font())
+    point_size = widget.font().pointSizeF()
+    if point_size <= 0:
+        point_size = 10.0
+    font.setPointSizeF(max(7.0, point_size + size_delta))
+    font.setBold(bold)
+    widget.setFont(font)
+
+
+class CheckDetailsDialog(QDialog):
+    """Подробный список замечаний по одной ячейке результатов."""
+
+    def __init__(
+        self,
+        title: str,
+        details: Sequence[str],
+        parent: Optional[QWidget] = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(tr("Подробный список"))
+        self.setMinimumSize(560, 320)
+        self.resize(720, 460)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
+
+        caption = QLabel(title)
+        caption.setWordWrap(True)
+        _apply_font(caption, 1, bold=True)
+        layout.addWidget(caption)
+
+        self.browser = QTextBrowser()
+        self.browser.setOpenExternalLinks(False)
+        self.browser.setReadOnly(True)
+        self.browser.setPlainText("\n".join(details))
+        layout.addWidget(self.browser, 1)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Close, parent=self
+        )
+        buttons.rejected.connect(self.reject)
+        close_button = buttons.button(QDialogButtonBox.StandardButton.Close)
+        if close_button is not None:
+            close_button.setText(tr("Закрыть"))
+        layout.addWidget(buttons)
+
+
+class CheckResultsTable(QWidget):
+    """Таблица результатов: строки — файлы, колонки — проверки."""
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self._folder_name = ""
+        self._checks: List[str] = []
+        self._labels: Dict[str, str] = {}
+        self._column_by_check: Dict[str, int] = {}
+        self._row_by_path: Dict[str, int] = {}
+        self._details: Dict[Tuple[int, int], Tuple[str, ...]] = {}
+        self._running = False
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 6, 0, 0)
+        layout.setSpacing(6)
+
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(8)
+        self.title_label = QLabel(tr("Результаты проверок"))
+        _apply_font(self.title_label, 0, bold=True)
+        header.addWidget(self.title_label)
+        header.addStretch(1)
+        self.header_actions = QHBoxLayout()
+        self.header_actions.setContentsMargins(0, 0, 0, 0)
+        self.header_actions.setSpacing(8)
+        header.addLayout(self.header_actions)
+        layout.addLayout(header)
+
+        self.table = QTableWidget(0, 1)
+        self.table.setObjectName("zgeoCheckResultsTable")
+        self.table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.table.setAlternatingRowColors(True)
+        self.table.setWordWrap(False)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setHorizontalHeaderItem(0, QTableWidgetItem(tr("Файл")))
+        self.table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Interactive
+        )
+        self.table.setMinimumHeight(120)
+        self.table.cellDoubleClicked.connect(self._show_cell_details)
+        layout.addWidget(self.table, 1)
+
+        self.export_button = QToolButton()
+        self.export_button.setText(tr("Экспорт"))
+        self.export_button.setPopupMode(
+            QToolButton.ToolButtonPopupMode.InstantPopup
+        )
+        self.export_button.setToolTip(
+            tr("Сохранить таблицу результатов в файл")
+        )
+        self.export_menu = QMenu(self.export_button)
+        self.excel_action = self.export_menu.addAction(
+            tr("Экспорт в Excel")
+        )
+        self.html_action = self.export_menu.addAction(
+            tr("Экспорт в HTML")
+        )
+        self.export_button.setMenu(self.export_menu)
+        self.excel_action.triggered.connect(self._export_excel)
+        self.html_action.triggered.connect(self._export_html)
+
+        footer = QHBoxLayout()
+        footer.setContentsMargins(0, 0, 0, 0)
+        footer.addStretch(1)
+        footer.addWidget(self.export_button)
+        layout.addLayout(footer)
+
+    def begin(
+        self,
+        files: List[Tuple[str, str]],
+        checks: List[str],
+        folder_name: str = "",
+    ) -> None:
+        """Подготовить таблицу под новый запуск проверок."""
+
+        self._folder_name = folder_name
+        self._checks = list(checks)
+        self._labels = self._check_labels()
+        self._column_by_check = {
+            check: index + 1 for index, check in enumerate(self._checks)
+        }
+
+        self._details = {}
+        self.table.clearContents()
+        self.table.setColumnCount(1 + len(self._checks))
+        self.table.setHorizontalHeaderItem(0, QTableWidgetItem(tr("Файл")))
+        for check in self._checks:
+            column = self._column_by_check[check]
+            self.table.setHorizontalHeaderItem(
+                column, QTableWidgetItem(self._labels.get(check, check))
+            )
+
+        self.table.setRowCount(len(files))
+        self._row_by_path = {}
+        for row, (path_key, name) in enumerate(files):
+            self._row_by_path[path_key] = row
+            name_item = QTableWidgetItem(name)
+            name_item.setToolTip(path_key)
+            self.table.setItem(row, 0, name_item)
+            for check in self._checks:
+                self._set_cell(
+                    row, self._column_by_check[check], "—", None
+                )
+        self.table.resizeColumnsToContents()
+        for column in range(1, self.table.columnCount()):
+            width = max(120, self.table.columnWidth(column))
+            self.table.setColumnWidth(column, width)
+        self._update_export_buttons()
+
+    def set_result(
+        self,
+        path_key: str,
+        check: str,
+        text: str,
+        number: Optional[int] = None,
+        details: Optional[Sequence[str]] = None,
+    ) -> None:
+        """Записать статистику проверки для одного файла."""
+
+        row = self._row_by_path.get(path_key)
+        column = self._column_by_check.get(check)
+        if row is None or column is None:
+            return
+        self._set_cell(row, column, text, number)
+        item = self.table.item(row, column)
+        if details:
+            self._details[(row, column)] = tuple(details)
+            if item is not None:
+                item.setToolTip(
+                    tr(
+                        "Двойной щелчок открывает подробный список: {}",
+                        text,
+                    )
+                )
+        else:
+            self._details.pop((row, column), None)
+
+    def clear(self) -> None:
+        """Очистить таблицу результатов."""
+
+        self._checks = []
+        self._labels = {}
+        self._column_by_check = {}
+        self._row_by_path = {}
+        self._details = {}
+        self.table.clearContents()
+        self.table.setRowCount(0)
+        self.table.setColumnCount(1)
+        self.table.setHorizontalHeaderItem(0, QTableWidgetItem(tr("Файл")))
+        self._update_export_buttons()
+
+    def set_running(self, running: bool) -> None:
+        self._running = running
+        self._update_export_buttons()
+
+    def check_keys(self) -> List[str]:
+        """Вернуть ключи проверок, показанных в колонках."""
+
+        return list(self._checks)
+
+    def _check_labels(self) -> Dict[str, str]:
+        """Названия проверок на текущем языке интерфейса."""
+
+        return {
+            definition.key: definition.label
+            for definition in check_definitions(True)
+        }
+
+    def has_results(self) -> bool:
+        return self.table.rowCount() > 0 and bool(self._checks)
+
+    def _set_cell(
+        self,
+        row: int,
+        column: int,
+        text: str,
+        number: Optional[int],
+    ) -> None:
+        item = self.table.item(row, column)
+        if item is None:
+            item = QTableWidgetItem()
+            self.table.setItem(row, column, item)
+        item.setText(text)
+        item.setData(Qt.ItemDataRole.UserRole, number)
+        item.setTextAlignment(
+            Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+        )
+
+    def _show_cell_details(self, row: int, column: int) -> None:
+        """Открыть подробный список замечаний для ячейки таблицы."""
+
+        details = self._details.get((row, column))
+        if not details:
+            return
+
+        header_item = self.table.horizontalHeaderItem(column)
+        title = header_item.text() if header_item is not None else ""
+        file_item = self.table.item(row, 0)
+        file_name = file_item.text() if file_item is not None else ""
+        caption = "{}: {}".format(file_name, title) if title else file_name
+
+        dialog = CheckDetailsDialog(caption, details, self)
+        dialog.exec()
+
+    def _update_export_buttons(self) -> None:
+        enabled = self.has_results() and not self._running
+        self.export_button.setEnabled(enabled)
+        self.excel_action.setEnabled(enabled)
+        self.html_action.setEnabled(enabled)
+
+    def _headers(self) -> List[str]:
+        return [tr("Файл")] + [
+            self._labels.get(check, check) for check in self._checks
         ]
 
-    def _update_run_button(self) -> None:
-        self.run_button.setEnabled(bool(self.selected_checks()))
+    def _rows(self) -> List[List[object]]:
+        rows: List[List[object]] = []
+        for row in range(self.table.rowCount()):
+            values: List[object] = []
+            for column in range(self.table.columnCount()):
+                item = self.table.item(row, column)
+                if item is None:
+                    values.append("")
+                    continue
+                if column == 0:
+                    values.append(item.text())
+                    continue
+                raw = item.data(Qt.ItemDataRole.UserRole)
+                values.append(raw if raw is not None else item.text())
+            rows.append(values)
+        return rows
 
-    def _set_font(
-        self, widget: QWidget, size_delta: int, bold: bool = False
+    def _export_excel(self) -> None:
+        if not self.has_results():
+            return
+        export_rows_with_dialog(
+            self,
+            self._headers(),
+            self._rows(),
+            tr("{}_проверки.xlsx", self._folder_name or "zgeo"),
+            tr("Проверки"),
+        )
+
+    def _export_html(self) -> None:
+        if not self.has_results():
+            return
+        export_rows_with_html_dialog(
+            self,
+            self._headers(),
+            self._rows(),
+            tr("{}_проверки.html", self._folder_name or "zgeo"),
+            tr("Проверки"),
+            title=tr("ZGeo — проверки"),
+        )
+
+    def retranslate_ui(self) -> None:
+        self.title_label.setText(tr("Результаты проверок"))
+        self.export_button.setText(tr("Экспорт"))
+        self.export_button.setToolTip(
+            tr("Сохранить таблицу результатов в файл")
+        )
+        self.excel_action.setText(tr("Экспорт в Excel"))
+        self.html_action.setText(tr("Экспорт в HTML"))
+        self.table.setHorizontalHeaderItem(0, QTableWidgetItem(tr("Файл")))
+        self._labels = self._check_labels()
+        for check in self._checks:
+            column = self._column_by_check.get(check)
+            if column is None:
+                continue
+            self.table.setHorizontalHeaderItem(
+                column, QTableWidgetItem(self._labels.get(check, check))
+            )
+
+
+class CheckCategoryPage(QWidget):
+    """Закладка с проверками одной категории качества."""
+
+    runRequested = pyqtSignal(str, object)
+
+    def __init__(
+        self,
+        category: str,
+        definitions: List[CheckDefinition],
+        parent: Optional[QWidget] = None,
     ) -> None:
-        font = QFont(widget.font())
-        point_size = widget.font().pointSizeF()
-        if point_size <= 0:
-            point_size = 10.0
-        font.setPointSizeF(max(7.0, point_size + size_delta))
-        font.setBold(bold)
-        widget.setFont(font)
+        super().__init__(parent)
+        self.category = category
+        self._running = False
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 8, 0, 0)
+        layout.setSpacing(8)
+
+        self.hint_label = QLabel(check_category_hint(category))
+        self.hint_label.setWordWrap(True)
+        _apply_font(self.hint_label, -1)
+        layout.addWidget(self.hint_label)
+
+        self.select_all_button = self._build_action_button(
+            tr("Выбрать все"),
+            tr("Отметить все проверки закладки"),
+            lambda: self.selection.set_all_checked(True),
+        )
+        self.clear_all_button = self._build_action_button(
+            tr("Сбросить все"),
+            tr("Снять все отметки закладки"),
+            lambda: self.selection.set_all_checked(False),
+        )
+        self.defaults_button = self._build_action_button(
+            tr("По умолчанию"),
+            tr("Вернуть отметки проверок по умолчанию"),
+            self._reset_defaults,
+        )
+
+        self.run_button = QPushButton(tr("Выполнить выбранные проверки"))
+        self.run_button.setMinimumHeight(30)
+        self.run_button.clicked.connect(self._emit_run)
+
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.setSpacing(8)
+        for button in (
+            self.select_all_button,
+            self.clear_all_button,
+            self.defaults_button,
+        ):
+            actions.addWidget(button)
+        actions.addStretch(1)
+        layout.addLayout(actions)
+
+        self.selection = CheckSelectionWidget(definitions)
+        self.selection.selectionChanged.connect(self._update_run_button)
+        self.selection.setMinimumHeight(120)
+
+        self.results = CheckResultsTable()
+        self.results.header_actions.addWidget(self.run_button)
+
+        self.splitter = QSplitter(Qt.Orientation.Vertical)
+        self.splitter.setChildrenCollapsible(False)
+        self.splitter.addWidget(self.selection)
+        self.splitter.addWidget(self.results)
+        self.splitter.setStretchFactor(0, 3)
+        self.splitter.setStretchFactor(1, 2)
+        layout.addWidget(self.splitter, 1)
+
+        self._update_run_button()
+
+    def set_definitions(
+        self, definitions: List[CheckDefinition]
+    ) -> None:
+        self.selection.set_definitions(definitions)
+        self._update_run_button()
+
+    def selected_checks(self) -> List[str]:
+        return self.selection.selected_checks()
+
+    def set_running(self, running: bool) -> None:
+        self._running = running
+        self.results.set_running(running)
+        self._update_run_button()
+
+    def begin_results(
+        self,
+        files: List[Tuple[str, str]],
+        checks: List[str],
+        folder_name: str = "",
+    ) -> None:
+        """Подготовить таблицу результатов к новому запуску проверок."""
+
+        self.results.begin(files, checks, folder_name)
+
+    def set_result(
+        self,
+        path_key: str,
+        check: str,
+        text: str,
+        number: Optional[int] = None,
+        details: Optional[Sequence[str]] = None,
+    ) -> None:
+        self.results.set_result(
+            path_key, check, text, number, details
+        )
+
+    def clear_results(self) -> None:
+        self.results.clear()
+
+    def _reset_defaults(self) -> None:
+        self.selection.reset_to_defaults()
+
+    def _build_action_button(
+        self, text: str, tooltip: str, handler
+    ) -> QPushButton:
+        """Создать кнопку управления отметками проверок."""
+
+        button = QPushButton(text)
+        button.setToolTip(tooltip)
+        button.setAccessibleName(text)
+        button.clicked.connect(lambda _checked=False: handler())
+        return button
+
+    def retranslate_ui(self) -> None:
+        self.hint_label.setText(check_category_hint(self.category))
+        self.select_all_button.setText(tr("Выбрать все"))
+        self.select_all_button.setToolTip(
+            tr("Отметить все проверки закладки")
+        )
+        self.select_all_button.setAccessibleName(tr("Выбрать все"))
+        self.clear_all_button.setText(tr("Сбросить все"))
+        self.clear_all_button.setToolTip(
+            tr("Снять все отметки закладки")
+        )
+        self.clear_all_button.setAccessibleName(tr("Сбросить все"))
+        self.defaults_button.setText(tr("По умолчанию"))
+        self.defaults_button.setToolTip(
+            tr("Вернуть отметки проверок по умолчанию")
+        )
+        self.defaults_button.setAccessibleName(tr("По умолчанию"))
+        self.run_button.setText(tr("Выполнить выбранные проверки"))
+        self.selection.retranslate_ui()
+        self.results.retranslate_ui()
+        self._update_run_button()
+
+    def _emit_run(self) -> None:
+        checks = self.selected_checks()
+        if checks and not self._running:
+            self.runRequested.emit(self.category, checks)
+
+    def _update_run_button(self) -> None:
+        self.run_button.setEnabled(
+            bool(self.selected_checks()) and not self._running
+        )
+        for button in (
+            self.select_all_button,
+            self.clear_all_button,
+            self.defaults_button,
+        ):
+            button.setEnabled(not self._running)

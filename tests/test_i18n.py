@@ -49,6 +49,16 @@ class I18nTests(unittest.TestCase):
         set_language(LANGUAGE_EN)
         sources = (
             "Проверки",
+            "Качество пространственных данных",
+            "Качество атрибутивных данных",
+            "Проверки геометрии, системы координат, файлов и наборов "
+            "данных.",
+            "Проверки имён полей, дублей имён и заполненности атрибутов.",
+            "Выполнить выбранные проверки",
+            "По умолчанию",
+            "Отметить все проверки закладки",
+            "Снять все отметки закладки",
+            "Вернуть отметки проверок по умолчанию",
             "Выберите проверки",
             "Отметьте проверки, которые нужно выполнить для найденных файлов. Нажмите «i» справа, чтобы открыть подробное описание с примерами.",
             "Уточнить размер",
@@ -58,9 +68,9 @@ class I18nTests(unittest.TestCase):
             "Читает систему координат слоёв, обновляет колонку "
             "«Система координат» и отмечает отсутствующую, неизвестную "
             "или смешанную СК.",
-            "Уточнить количество элементов и проверить пустые слои",
-            "Считает количество элементов, обновляет колонку "
-            "«Элементов» и отмечает пустые слои и файлы без объектов.",
+            "Уточнить количество элементов",
+            "Считает количество элементов и обновляет колонку "
+            "«Элементов».",
             "Проверка JSON на формат GEOJSON",
             "Проверяет файлы .json и .geojson по полю type. Файлы, "
             "не являющиеся GeoJSON, исключаются из списка.",
@@ -78,6 +88,17 @@ class I18nTests(unittest.TestCase):
             "Проверяет нелатинские символы, длину имени (не более "
             "10 символов DBF), пробелы, недопустимые символы и дубли "
             "после усечения.",
+            "Проверка дублей имён полей",
+            "Ищет имена атрибутивных полей, совпадающие без учёта "
+            "регистра в одном слое.",
+            "Для каждого векторного слоя ZGeo сравнивает имена "
+            "полей после приведения к нижнему регистру. Поля "
+            "Name и name считаются дублями.",
+            "Сравнение выполняется только внутри одного слоя; "
+            "одинаковые имена в разных слоях не считаются дублями.",
+            "Поля Name и name в одном слое — отмечается дубль.",
+            "Поля CODE и code в одном слое — отмечается дубль.",
+            "Поле name в двух разных слоях — дублем не считается.",
             "Проверка набора данных",
             "Проверяет обязательные файлы набора, наличие .cpg и "
             "корректность указанной кодировки DBF.",
@@ -133,8 +154,9 @@ class I18nTests(unittest.TestCase):
             "Нет файлов для выбранных проверок",
             "Проверки: уточнить размер, систему координат и количество "
             "элементов, проверить читаемость файлов, JSON и GeoJSON, имена "
-            "полей, заполненность атрибутов, имена и пути файлов, набор "
-            "данных, целостность GeoPackage/SQLite, метаданные и CRS, .prj, "
+            "полей, дубли имён полей, заполненность атрибутов, управляющие и "
+            "невидимые символы, имена и пути файлов, набор данных, "
+            "целостность GeoPackage/SQLite, метаданные и CRS, .prj, "
             "геометрии, топологию, дубли, координаты.",
             "Проверка JSON на формат GeoJSON: 0 из {}",
             "Проверка JSON: {} из {} · {}",
@@ -192,6 +214,7 @@ class I18nTests(unittest.TestCase):
             "Поле «{}»: недопустимые символы: {}",
             "Слой «{}»: после усечения до {} символов совпадают "
             "имена полей: {}",
+            "Слой «{}»: имена полей совпадают без учёта регистра: {}",
             "У части слоёв не определена система координат",
             "Смешанные системы координат: {}",
             "Слой «{}»: некорректных геометрий: {} (самопересечения: {}, "
@@ -200,8 +223,6 @@ class I18nTests(unittest.TestCase):
             "Слой «{}»: координаты — NaN/Inf: {}, слишком большие: {}, "
             "вне диапазона CRS: {}, похоже на перепутанные широту и "
             "долготу: {}",
-            "Файл не содержит объектов",
-            "Слой «{}» не содержит объектов",
             "Система координат не определена",
             "Нелатинское имя поля: {}",
             "Геометрия отсутствует (null)",
@@ -375,6 +396,214 @@ class I18nTests(unittest.TestCase):
             if source not in EN_TRANSLATIONS
         )
         self.assertEqual(missing, [])
+
+
+    def test_control_character_messages_have_english_translations(
+        self,
+    ) -> None:
+        set_language(LANGUAGE_EN)
+        sources = (
+            "Управляющие и невидимые символы",
+            "Слой «{}»: в поле «{}» управляющие или невидимые символы "
+            "найдены у {} из {} объектов: {}",
+            "Слой «{}»: в поле «{}» управляющие или невидимые символы "
+            "найдены у {} из {} объектов: {}; пример: «{}»",
+        )
+        for source in sources:
+            translated = tr(source)
+            self.assertNotEqual(translated, source)
+            self.assertNotIn("Провер", translated)
+        self.assertEqual(
+            tr("Управляющие и невидимые символы"),
+            "Control and invisible characters",
+        )
+
+
+    def test_attribute_duplicate_messages_have_english_translations(
+        self,
+    ) -> None:
+        set_language(LANGUAGE_EN)
+        sources = (
+            "Дубли по атрибутам (очень долго!)",
+            "Подробный список",
+            "Закрыть",
+            "Слой «{}»: полные дубли строк — объектов {} с полностью "
+            "совпадающими атрибутами (объекты: {})",
+            "Слой «{}»: дубли составного ключа по текстовым полям — "
+            "объектов {} с одинаковыми значениями (объекты: {})",
+            "Слой «{}»: поле «{}» — значения совпадают без учёта регистра и "
+            "лишних пробелов: {} (объектов {} из {})",
+            "Слой «{}»: поле «{}» — частичное вхождение: «{}» входит в «{}» "
+            "({}%, объекты: {})",
+        )
+        for source in sources:
+            translated = tr(source)
+            self.assertNotEqual(translated, source)
+            self.assertNotIn("Провер", translated)
+        self.assertEqual(
+            tr("Дубли по атрибутам (очень долго!)"),
+            "Attribute duplicates (very slow!)",
+        )
+
+
+    def test_blank_string_messages_have_english_translations(self) -> None:
+        set_language(LANGUAGE_EN)
+        sources = (
+            "Пустые строки",
+            "Слой «{}»: пустые строки вместо NULL — "
+            "затронуто полей {} из {}: {}",
+            "Поле «{}»: пустые строки у {} из {} объектов ({}%)",
+            "{} — {} из {}",
+        )
+        for source in sources:
+            translated = tr(source)
+            self.assertNotEqual(translated, source)
+            self.assertNotIn("Провер", translated)
+        self.assertEqual(tr("Пустые строки"), "Blank strings")
+
+
+    def test_edge_space_messages_have_english_translations(self) -> None:
+        set_language(LANGUAGE_EN)
+        sources = (
+            "Пробелы по краям значений",
+            "Слой «{}»: пробелы по краям значений — "
+            "затронуто полей {} из {}: {}",
+            "Поле «{}»: пробелы по краям у {} из {} объектов ({}%); "
+            "в начале {}, в конце {}",
+            "Поле «{}»: пробелы по краям у {} из {} объектов ({}%); "
+            "в начале {}, в конце {}; пример: {}",
+        )
+        for source in sources:
+            translated = tr(source)
+            self.assertNotEqual(translated, source)
+            self.assertNotIn("Провер", translated)
+        self.assertEqual(
+            tr("Пробелы по краям значений"), "Leading and trailing spaces"
+        )
+
+
+    def test_inner_space_messages_have_english_translations(self) -> None:
+        set_language(LANGUAGE_EN)
+        sources = (
+            "Двойные пробелы внутри значений",
+            "Слой «{}»: двойные пробелы внутри значений — "
+            "затронуто полей {} из {}: {}",
+            "Поле «{}»: двойные пробелы внутри значений у {} из {} "
+            "объектов ({}%)",
+            "Поле «{}»: двойные пробелы внутри значений у {} из {} "
+            "объектов ({}%); пример: {}",
+        )
+        for source in sources:
+            translated = tr(source)
+            self.assertNotEqual(translated, source)
+            self.assertNotIn("Провер", translated)
+        self.assertEqual(
+            tr("Двойные пробелы внутри значений"), "Double spaces inside values"
+        )
+
+
+    def test_numeric_text_messages_have_english_translations(self) -> None:
+        set_language(LANGUAGE_EN)
+        sources = (
+            "Числа, записанные как текст",
+            "Слой «{}»: числа, записанные как текст — "
+            "затронуто полей {} из {}: {}",
+            "Поле «{}»: числа, записанные как текст, у {} из {} "
+            "объектов ({}%); целых {}, дробных {}",
+            "Поле «{}»: числа, записанные как текст, у {} из {} "
+            "объектов ({}%); целых {}, дробных {}; пример: «{}»",
+        )
+        for source in sources:
+            translated = tr(source)
+            self.assertNotEqual(translated, source)
+            self.assertNotIn("Провер", translated)
+        self.assertEqual(
+            tr("Числа, записанные как текст"), "Numbers stored as text"
+        )
+
+
+    def test_text_length_messages_have_english_translations(self) -> None:
+        set_language(LANGUAGE_EN)
+        sources = (
+            "Аномальная длина текста",
+            "Слой «{}»: аномальная длина текста — "
+            "затронуто полей {} из {}: {}",
+            "Поле «{}»: значения аномальной длины у {} из {} "
+            "объектов ({}%); среднее {}, отклонение {}, самая длинная "
+            "{} символов (объекты: {})",
+            "Поле «{}»: значения аномальной длины у {} из {} "
+            "объектов ({}%); среднее {}, отклонение {}, самая длинная "
+            "{} символов (объекты: {}); пример: {}",
+        )
+        for source in sources:
+            translated = tr(source)
+            self.assertNotEqual(translated, source)
+            self.assertNotIn("Провер", translated)
+        self.assertEqual(
+            tr("Аномальная длина текста"), "Abnormal text length"
+        )
+
+
+    def test_date_range_messages_have_english_translations(self) -> None:
+        set_language(LANGUAGE_EN)
+        sources = (
+            "Даты вне разумного диапазона",
+            "Слой «{}»: даты вне разумного диапазона — "
+            "затронуто полей {} из {}: {}",
+            "Поле «{}»: даты вне разумного диапазона у {} из {} "
+            "объектов ({}%); годы от {} до {} (объекты: {}); "
+            "значения: {}",
+        )
+        for source in sources:
+            translated = tr(source)
+            self.assertNotEqual(translated, source)
+            self.assertNotIn("Провер", translated)
+        self.assertEqual(
+            tr("Даты вне разумного диапазона"),
+            "Dates outside a reasonable range",
+        )
+
+
+    def test_project_button_messages_have_english_translations(self) -> None:
+        set_language(LANGUAGE_EN)
+        sources = (
+            "Добавить в текущий проект",
+            "Добавить выбранные файлы слоями в текущий проект",
+            "Добавляю файлы в проект: {}",
+            "Добавлено слоёв в проект: {}",
+            "Слои уже есть в проекте: {}",
+            "Добавлено слоёв в проект: {} · уже есть: {}",
+            "Не удалось добавить слои:\n\n{}",
+            "Нечего добавлять: выбранные файлы не открылись",
+        )
+        for source in sources:
+            translated = tr(source)
+            self.assertNotEqual(translated, source)
+            self.assertNotIn("Провер", translated)
+        self.assertEqual(
+            tr("Добавить в текущий проект"), "Add to current project"
+        )
+
+
+    def test_suspicious_field_name_messages_have_english_translations(
+        self,
+    ) -> None:
+        set_language(LANGUAGE_EN)
+        sources = (
+            "Подозрительные имена полей",
+            "Слой «{}»: подозрительное имя поля «{}» — {}",
+            "имя обозначает отсутствующее значение",
+            "имя состоит только из цифр",
+            "техническое имя после импорта",
+            "имя поля пустое",
+        )
+        for source in sources:
+            translated = tr(source)
+            self.assertNotEqual(translated, source)
+            self.assertNotIn("Провер", translated)
+        self.assertEqual(
+            tr("Подозрительные имена полей"), "Suspicious field names"
+        )
 
     def test_readability_messages_have_english_translations(self) -> None:
         set_language(LANGUAGE_EN)

@@ -127,6 +127,25 @@ EN_TRANSLATIONS = {
         "Show only files with problems found by checks"
     ),
     "Открыть в проводнике": "Open in Explorer",
+    "Добавить в текущий проект": "Add to current project",
+    "Добавить выбранные файлы слоями в текущий проект": (
+        "Add the selected files as layers to the current project"
+    ),
+    "Добавляю файлы в проект: {}": "Adding files to the project: {}",
+    "Добавлено слоёв в проект: {}": "Layers added to the project: {}",
+    "Слои уже есть в проекте: {}": (
+        "The layers are already in the project: {}"
+    ),
+    "Добавлено слоёв в проект: {} · уже есть: {}": (
+        "Layers added to the project: {} · already present: {}"
+    ),
+    "Не удалось добавить слои:\n\n{}": (
+        "Could not add layers:\n\n{}"
+    ),
+    "Нечего добавлять: выбранные файлы не открылись": (
+        "Nothing to add: the selected files could not be opened"
+    ),
+
     "Скопировать в …": "Copy to …",
     "Скопировать выбранные файлы и сопутствующие файлы в папку": (
         "Copy selected files and sidecar files to a folder"
@@ -164,6 +183,636 @@ EN_TRANSLATIONS = {
         "Export the list to Excel or HTML"
     ),
     "Проверки": "Checks",
+    "Качество пространственных данных": "Spatial data quality",
+    "Качество атрибутивных данных": "Attribute data quality",
+    "Проверки геометрии, системы координат, файлов и наборов данных.": (
+        "Checks for geometry, CRS, files and datasets."
+    ),
+    "Проверки имён полей, дублей имён и заполненности атрибутов.": (
+        "Checks for field names, duplicate names and attribute "
+        "completeness."
+    ),
+    "Выполнить выбранные проверки": "Run selected checks",
+    "По умолчанию": "Defaults",
+    "Управляющие и невидимые символы": "Control and invisible characters",
+    "Дубли по атрибутам (очень долго!)": "Attribute duplicates (very slow!)",
+    "Пустые строки": "Blank strings",
+    "Пробелы по краям значений": "Leading and trailing spaces",
+    "Двойные пробелы внутри значений": "Double spaces inside values",
+    "Числа, записанные как текст": "Numbers stored as text",
+    "Аномальная длина текста": "Abnormal text length",
+    "Даты вне разумного диапазона": "Dates outside a reasonable range",
+    "Подозрительные имена полей": "Suspicious field names",
+    "Ищет технические имена после импорта и имена, "
+    "обозначающие отсутствующее значение.": (
+        "Looks for technical names produced by an import and names that "
+        "mean a missing value."
+    ),
+    "ZGeo читает имена полей каждого векторного слоя и "
+    "отмечает пустое имя, имена, обозначающие отсутствие "
+    "значения (NULL, None, NaN, Nil, Undefined), имена из "
+    "одних цифр и технические имена после импорта: Field1, "
+    "field_2, Column3, Unnamed: 0, Attribute1.": (
+        "ZGeo reads the field names of every vector layer and flags an empty "
+        "name, names that mean a missing value (NULL, None, NaN, Nil, "
+        "Undefined), names made of digits only and technical names produced "
+        "by an import: Field1, field_2, Column3, Unnamed: 0, Attribute1."
+    ),
+    "Такие имена появляются при импорте таблиц и текстовых "
+    "файлов без заголовков, при склейке источников и после "
+    "конвертации из Excel. В справочнике их нет, поэтому "
+    "слой нельзя сопоставить с эталонной схемой, а отчёты "
+    "и подписи получают бессмысленные заголовки.": (
+        "Such names appear when tables and text files without headers are "
+        "imported, when sources are concatenated and after a conversion from "
+        "Excel. They are not in the dictionary, so the layer cannot be "
+        "matched to the reference schema and reports and labels get "
+        "meaningless headings."
+    ),
+    "Осмысленные короткие имена (id, code, name, OBJECTID) "
+    "проблемой не считаются. Проверка только сообщает о "
+    "проблемах и не переименовывает поля.": (
+        "Meaningful short names (id, code, name, OBJECTID) are not reported. "
+        "The check only reports problems and does not rename fields."
+    ),
+    "Поле Field1 — техническое имя после импорта.": (
+        "The field Field1 — a technical name produced by an import."
+    ),
+    "Поле NULL — имя обозначает отсутствующее значение.": (
+        "The field NULL — the name means a missing value."
+    ),
+    "Поле 2024 — имя состоит только из цифр.": (
+        "The field 2024 — the name is made of digits only."
+    ),
+    "Поля OBJECTID и name — проблемы нет.": (
+        "The fields OBJECTID and name — no problem."
+    ),
+    "Слой «{}»: подозрительное имя поля «{}» — {}": (
+        "Layer \"{}\": suspicious field name \"{}\" — {}"
+    ),
+    "имя обозначает отсутствующее значение": (
+        "the name means a missing value"
+    ),
+    "имя состоит только из цифр": "the name is made of digits only",
+    "техническое имя после импорта": (
+        "a technical name produced by an import"
+    ),
+    "имя поля пустое": "the field name is empty",
+
+    "Ищет даты и отметки времени раньше 1900 года и позже "
+    "текущего года.": (
+        "Looks for dates and timestamps earlier than 1900 and later than "
+        "the current year."
+    ),
+    "ZGeo читает поля дат, отметок времени и текстовые "
+    "поля, разбирает значения как дату и отмечает годы "
+    "раньше 1900 и позже текущего года.": (
+        "ZGeo reads date, timestamp and text fields, parses the values as "
+        "dates and flags years earlier than 1900 and later than the current "
+        "year."
+    ),
+    "Поддерживаются записи ГГГГ-ММ-ДД, ДД.ММ.ГГГГ, "
+    "ДД/ММ/ГГГГ и ГГГГ/ММ/ДД, в том числе с временем "
+    "через «T» или пробел. Нулевая дата вида 0000-00-00 "
+    "тоже отмечается.": (
+        "The formats YYYY-MM-DD, DD.MM.YYYY, DD/MM/YYYY and YYYY/MM/DD are "
+        "supported, including a time part after \"T\" or a space. The zero "
+        "date 0000-00-00 is reported as well."
+    ),
+    "Так выглядят даты, записанные в неверном формате, и "
+    "результат подстановки нулевой даты. Такие значения "
+    "ломают временные фильтры и хронологию в отчётах: "
+    "сортировка по дате ставит их в начало или в конец "
+    "списка.": (
+        "This is how dates written in a wrong format and the result of a "
+        "zero-date substitution look. Such values break time filters and the "
+        "chronology in reports: sorting by date puts them at the beginning "
+        "or at the end of the list."
+    ),
+    "В отчёте по каждому полю показываются число объектов, "
+    "доля, минимальный и максимальный найденный год, "
+    "объекты и сами значения.": (
+        "For every field the report shows the number of features, the "
+        "share, the minimum and maximum year found, the features and the "
+        "values themselves."
+    ),
+    "Значение 1899-12-30 — отмечается как дата раньше "
+    "1900 года.": (
+        "The value 1899-12-30 — reported as a date earlier than 1900."
+    ),
+    "Значение 0000-00-00 — отмечается нулевая дата.": (
+        "The value 0000-00-00 — the zero date is reported."
+    ),
+    "Значение 2999-01-01 — отмечается как дата позже "
+    "текущего года.": (
+        "The value 2999-01-01 — reported as a date later than the current "
+        "year."
+    ),
+    "Значение 2024-05-01 — проблемы нет.": (
+        "The value 2024-05-01 — no problem."
+    ),
+    "Слой «{}»: даты вне разумного диапазона — "
+    "затронуто полей {} из {}: {}": (
+        "Layer \"{}\": dates outside a reasonable range — {} of {} fields "
+        "affected: {}"
+    ),
+    "Поле «{}»: даты вне разумного диапазона у {} из {} "
+    "объектов ({}%); годы от {} до {} (объекты: {}); "
+    "значения: {}": (
+        "Field \"{}\": dates outside a reasonable range in {} of {} "
+        "features ({}%); years from {} to {} (features: {}); values: {}"
+    ),
+
+    "Считает среднюю длину значения и стандартное отклонение "
+    "и ищет значения длиннее среднего более чем на три "
+    "отклонения.": (
+        "Computes the average value length and the standard deviation and "
+        "looks for values longer than the average by more than three "
+        "deviations."
+    ),
+    "Для каждого текстового поля ZGeo считает длину "
+    "каждого непустого значения, среднюю длину и "
+    "стандартное отклонение, а затем отмечает значения "
+    "длиннее среднего более чем на три отклонения.": (
+        "For every text field ZGeo measures the length of each non-empty "
+        "value, computes the average length and the standard deviation, and "
+        "then flags values longer than the average by more than three "
+        "deviations."
+    ),
+    "Так находятся обрезанные поля справочника и, "
+    "наоборот, значения со склеенным или лишним текстом: "
+    "в поле из двух-трёх слов появляется целая строка "
+    "адреса или несколько значений через разделитель.": (
+        "This finds truncated dictionary fields and, conversely, values with "
+        "concatenated or extra text: a field of two or three words suddenly "
+        "contains a full address line or several values separated by a "
+        "delimiter."
+    ),
+    "Проверка работает только по длине и не читает "
+    "содержимое, поэтому подсказка показывает среднее, "
+    "отклонение, самую длинную длину и пример значения. "
+    "Для полей с малым числом значений (меньше трёх) и с "
+    "одинаковой длиной всех значений проверка ничего не "
+    "отмечает.": (
+        "The check works on lengths only and does not read the content, so "
+        "the tooltip shows the average, the deviation, the longest length "
+        "and a sample value. Fields with few values (fewer than three) and "
+        "fields where every value has the same length produce no findings."
+    ),
+    "Поле name со значениями «Москва», «Тверь», «Омск» и "
+    "одним значением «Москва, Тверь, Омск, Тула, Сочи» — "
+    "отмечается одно аномальное значение.": (
+        "The name field with the values \"Москва\", \"Тверь\", "
+        "\"Омск\" and one value \"Москва, Тверь, Омск, Тула, Сочи\" — "
+        "one abnormal value is reported."
+    ),
+    "Поле code со значениями одинаковой длины — проблем "
+    "нет.": (
+        "The code field with values of the same length — no problems."
+    ),
+    "Поле из двух значений — проверка не применяется, "
+    "статистики слишком мало.": (
+        "A field with two values — the check does not apply, there is too "
+        "little statistics."
+    ),
+    "Слой «{}»: аномальная длина текста — "
+    "затронуто полей {} из {}: {}": (
+        "Layer \"{}\": abnormal text length — {} of {} fields affected: {}"
+    ),
+    "Поле «{}»: значения аномальной длины у {} из {} "
+    "объектов ({}%); среднее {}, отклонение {}, самая длинная "
+    "{} символов (объекты: {})": (
+        "Field \"{}\": abnormal length values in {} of {} features ({}%); "
+        "average {}, deviation {}, longest {} characters (features: {})"
+    ),
+    "Поле «{}»: значения аномальной длины у {} из {} "
+    "объектов ({}%); среднее {}, отклонение {}, самая длинная "
+    "{} символов (объекты: {}); пример: {}": (
+        "Field \"{}\": abnormal length values in {} of {} features ({}%); "
+        "average {}, deviation {}, longest {} characters (features: {}); "
+        "sample: {}"
+    ),
+
+    "Ищет текстовые столбцы, где значения являются числами: "
+    "идентификаторы, площади, коды.": (
+        "Looks for text columns whose values are numbers: identifiers, "
+        "areas, codes."
+    ),
+    "Для каждого векторного слоя и таблицы ZGeo читает "
+    "текстовые поля и проверяет значения: число состоит из "
+    "цифр, не более чем одного десятичного разделителя "
+    "(точки или запятой), знака и экспоненты. Пробелы "
+    "внутри значения, буквы и повторные разделители "
+    "делают значение нечисловым.": (
+        "For every vector layer and table ZGeo reads the text fields and "
+        "checks the values: a number consists of digits, at most one "
+        "decimal separator (a dot or a comma), a sign and an exponent. "
+        "Spaces inside the value, letters and repeated separators make the "
+        "value non-numeric."
+    ),
+    "Обычно так выглядят поля, которые нужно хранить "
+    "числом: идентификаторы, площади, коды. Из-за "
+    "текстового типа сравнение идёт по алфавиту («10» "
+    "меньше «9») и невозможны арифметические операции.": (
+        "This is how fields that should be stored as numbers usually look: "
+        "identifiers, areas, codes. Because of the text type the comparison "
+        "is alphabetical (\"10\" is less than \"9\") and arithmetic "
+        "operations are impossible."
+    ),
+    "В отчёте по каждому полю показывается число объектов, "
+    "доля, сколько значений целых и сколько дробных, и "
+    "пример значения. Ведущие нули не мешают: «007» тоже "
+    "считается числом, записанным как текст.": (
+        "For every field the report shows the number of features, the "
+        "share, how many values are integer and how many are real, and a "
+        "sample value. Leading zeros do not matter: \"007\" also counts "
+        "as a number stored as text."
+    ),
+    "Поле code типа «текст» со значениями «10», «9», «007» "
+    "— отмечается 3 числа, записанных как текст.": (
+        "A text field code with the values \"10\", \"9\", \"007\" — "
+        "3 numbers stored as text are reported."
+    ),
+    "Поле area со значениями «12.5» и «7» — отмечается "
+    "два числа, одно дробное.": (
+        "The field area with the values \"12.5\" and \"7\" — two "
+        "numbers are reported, one of them real."
+    ),
+    "Значение «12a» или «1 234» — числом не считается.": (
+        "The value \"12a\" or \"1 234\" does not count as a number."
+    ),
+    "Слой «{}»: числа, записанные как текст — "
+    "затронуто полей {} из {}: {}": (
+        "Layer \"{}\": numbers stored as text — {} of {} fields "
+        "affected: {}"
+    ),
+    "Поле «{}»: числа, записанные как текст, у {} из {} "
+    "объектов ({}%); целых {}, дробных {}": (
+        "Field \"{}\": numbers stored as text in {} of {} features "
+        "({}%); integer {}, real {}"
+    ),
+    "Поле «{}»: числа, записанные как текст, у {} из {} "
+    "объектов ({}%); целых {}, дробных {}; пример: «{}»": (
+        "Field \"{}\": numbers stored as text in {} of {} features "
+        "({}%); integer {}, real {}; sample: \"{}\""
+    ),
+
+    "Ищет значения, внутри которых стоят два и более "
+    "пробела подряд.": (
+        "Looks for values containing two or more consecutive spaces."
+    ),
+    "Для каждого векторного слоя и таблицы ZGeo читает "
+    "текстовые поля, отбрасывает пробелы по краям и ищет "
+    "внутри значения последовательности из двух и более "
+    "пробельных символов подряд.": (
+        "For every vector layer and table ZGeo reads the text fields, trims "
+        "the edge spaces and looks for runs of two or more whitespace "
+        "characters inside the value."
+    ),
+    "Обычно это следствие ручного ввода или склейки полей. "
+    "Такие записи не находятся поиском по точному значению "
+    "и выглядят неряшливо в отчётах, а сравнение с "
+    "нормализованным значением даёт ложное несовпадение.": (
+        "This is usually the result of manual input or field concatenation. "
+        "Such records are not found by an exact value search and look "
+        "untidy in reports, while a comparison with the normalized value "
+        "gives a false mismatch."
+    ),
+    "Пробелы по краям значения проверяет отдельная "
+    "проверка «Пробелы по краям значений», пустые строки — "
+    "проверка «Пустые строки». В отчёте по каждому полю "
+    "показывается число объектов, доля и пример значения, "
+    "где пробелы заменены видимыми символами: «Москва··"
+    "Сити».": (
+        "Edge spaces are covered by the \"Leading and trailing spaces\" "
+        "check and empty values by the \"Blank strings\" check. For every "
+        "field the report shows the number of features, the share and a "
+        "sample value with spaces replaced by visible symbols: "
+        "\"Москва··Сити\"."
+    ),
+    "Значение «Москва  Сити» с двумя пробелами — "
+    "отмечается 1 объект.": (
+        "The value \"Москва  Сити\" with two spaces — one feature is "
+        "reported."
+    ),
+    "Склейка полей дала «улица  Ленина   1» — отмечается "
+    "как двойные пробелы внутри значения.": (
+        "Field concatenation produced \"улица  Ленина   1\" — reported as "
+        "double spaces inside the value."
+    ),
+    "Значение «Москва Сити» с одним пробелом — проблемы "
+    "нет.": (
+        "The value \"Москва Сити\" with a single space — no problem."
+    ),
+    "Слой «{}»: двойные пробелы внутри значений — "
+    "затронуто полей {} из {}: {}": (
+        "Layer \"{}\": double spaces inside values — {} of {} fields "
+        "affected: {}"
+    ),
+    "Поле «{}»: двойные пробелы внутри значений у {} из {} "
+    "объектов ({}%)": (
+        "Field \"{}\": double spaces inside values in {} of {} features "
+        "({}%)"
+    ),
+    "Поле «{}»: двойные пробелы внутри значений у {} из {} "
+    "объектов ({}%); пример: {}": (
+        "Field \"{}\": double spaces inside values in {} of {} features "
+        "({}%); sample: {}"
+    ),
+
+    "Ищет значения с ведущими или замыкающими пробелами, "
+    "табуляцией и переводами строк.": (
+        "Looks for values with leading or trailing spaces, tabs and line "
+        "breaks."
+    ),
+    "Для каждого векторного слоя и таблицы ZGeo читает "
+    "текстовые поля и сравнивает значение с его версией "
+    "без пробелов по краям. Учитываются пробел, табуляция, "
+    "перевод строки, возврат каретки, вертикальная "
+    "табуляция и перевод формата.": (
+        "For every vector layer and table ZGeo reads the text fields and "
+        "compares each value with its trimmed version. A space, tab, line "
+        "feed, carriage return, vertical tab and form feed are counted."
+    ),
+    "Такие значения не совпадают при сравнении и "
+    "соединении: «Москва» и «Москва » считаются разными. "
+    "Из-за этого ломаются справочники, фильтры и связи "
+    "между слоями, а группировка даёт лишние группы.": (
+        "Such values do not match in comparisons and joins: \"Москва\" "
+        "and \"Москва \" are considered different. This breaks "
+        "dictionaries, filters and relations between layers, and grouping "
+        "produces extra groups."
+    ),
+    "Значения, состоящие только из пробелов, эта проверка "
+    "пропускает — для них есть проверка «Пустые строки». "
+    "В отчёте по каждому полю показывается число объектов, "
+    "доля, сколько значений с пробелами в начале и сколько "
+    "в конце, и пример значения с видимыми символами "
+    "пробелов: «·Москва·», «\\tТверь».": (
+        "Values consisting only of spaces are skipped by this check — the "
+        "\"Blank strings\" check covers them. For every field the report "
+        "shows the number of features, the share, how many values have "
+        "leading and trailing spaces, and a sample value with visible "
+        "space symbols: \"·Москва·\", \"\\tТверь\"."
+    ),
+    "Значение «Москва » с пробелом в конце — отмечается "
+    "1 объект.": (
+        "The value \"Москва \" with a trailing space — one feature is "
+        "reported."
+    ),
+    "Значение «  Тверь» с двумя пробелами в начале — "
+    "отмечается как пробелы в начале.": (
+        "The value \"  Тверь\" with two leading spaces — reported as "
+        "leading spaces."
+    ),
+    "Значение с табуляцией в начале — отмечается «\\t» в "
+    "примере.": (
+        "A value with a leading tab — \"\\t\" is shown in the sample."
+    ),
+    "Значение «Москва» без пробелов по краям — проблемы нет.": (
+        "The value \"Москва\" without leading or trailing spaces — no "
+        "problem."
+    ),
+    "Слой «{}»: пробелы по краям значений — "
+    "затронуто полей {} из {}: {}": (
+        "Layer \"{}\": leading or trailing spaces — {} of {} fields "
+        "affected: {}"
+    ),
+    "Поле «{}»: пробелы по краям у {} из {} объектов ({}%); "
+    "в начале {}, в конце {}": (
+        "Field \"{}\": leading or trailing spaces in {} of {} features "
+        "({}%); leading {}, trailing {}"
+    ),
+    "Поле «{}»: пробелы по краям у {} из {} объектов ({}%); "
+    "в начале {}, в конце {}; пример: {}": (
+        "Field \"{}\": leading or trailing spaces in {} of {} features "
+        "({}%); leading {}, trailing {}; sample: {}"
+    ),
+
+    "Ищет текстовые поля, где значение пустое или состоит "
+    "только из пробелов.": (
+        "Looks for text fields whose value is empty or consists only of "
+        "spaces."
+    ),
+    "Для каждого векторного слоя и таблицы ZGeo читает "
+    "текстовые поля и считает пустыми значения, которые "
+    "являются пустой строкой или состоят только из "
+    "пробелов, табуляции и переводов строк.": (
+        "For every vector layer and table ZGeo reads the text fields and "
+        "treats as blank the values that are an empty string or consist "
+        "only of spaces, tabs and line breaks."
+    ),
+    "Для пользователя такие значения не отличаются от "
+    "NULL, но ведут себя иначе в запросах: условие IS NULL "
+    "их не находит, а сортировка и группировка дают "
+    "отдельную группу, поэтому одна и та же «пустота» "
+    "попадает в разные места отчётов.": (
+        "For the user such values are indistinguishable from NULL, but "
+        "they behave differently in queries: an IS NULL condition does not "
+        "find them, and sorting and grouping produce a separate group, so "
+        "the same \"emptiness\" lands in different places in reports."
+    ),
+    "В подсказке показывается сводка по слою: сколько "
+    "полей затронуто и сколько пустых строк в каждом, а в "
+    "отчёте — доля пустых строк по каждому полю. Проверка "
+    "только сообщает о проблемах и не меняет данные.": (
+        "The tooltip shows a per-layer summary: how many fields are "
+        "affected and how many blank strings each one has, while the "
+        "report shows the blank share per field. The check only reports "
+        "problems and does not modify data."
+    ),
+    "Поле name: у 12 из 200 объектов пустая строка — "
+    "отмечается 6% пустых строк.": (
+        "The name field: 12 of 200 features have an empty string — 6% "
+        "blank strings are reported."
+    ),
+    "Поле address: значение из трёх пробелов — считается "
+    "пустой строкой.": (
+        "The address field: a value of three spaces counts as a blank "
+        "string."
+    ),
+    "Поле code: NULL у 5 объектов и пустая строка ни у "
+    "одного — проблемой не считается.": (
+        "The code field: NULL for 5 features and an empty string for "
+        "none — not reported as a problem."
+    ),
+    "Слой «{}»: пустые строки вместо NULL — "
+    "затронуто полей {} из {}: {}": (
+        "Layer \"{}\": blank strings instead of NULL — {} of {} fields "
+        "affected: {}"
+    ),
+    "Поле «{}»: пустые строки у {} из {} объектов ({}%)": (
+        "Field \"{}\": blank strings in {} of {} features ({}%)"
+    ),
+    "{} — {} из {}": "{} — {} of {}",
+
+    "Подробный список": "Detailed list",
+    "Двойной щелчок открывает подробный список: {}": (
+        "Double-click opens the detailed list: {}"
+    ),
+    "Закрыть": "Close",
+    "Ищет полные дубли строк, дубли составного ключа, совпадения без "
+    "учёта регистра и пробелов и частичные вхождения значений.": (
+        "Looks for full row duplicates, composite key duplicates, matches "
+        "ignoring case and extra spaces, and partial value occurrences."
+    ),
+    "Полные дубли строк: объекты, у которых совпадают все "
+    "атрибутивные столбцы. Дубли составного ключа: объекты, у "
+    "которых совпадают все текстовые столбцы слоя.": (
+        "Full row duplicates: features where every attribute column "
+        "matches. Composite key duplicates: features where every text "
+        "column of the layer matches."
+    ),
+    "Совпадения без учёта регистра и лишних пробелов: значения "
+    "приводятся к нижнему регистру, повторяющиеся пробелы сжимаются, "
+    "после чего сравниваются. «Москва» и «москва » считаются дублями.": (
+        "Matches ignoring case and extra spaces: values are lower-cased and "
+        "repeated spaces are collapsed before comparison. \"Москва\" and "
+        "\"москва \" count as duplicates."
+    ),
+    "Частичные вхождения: значение целиком входит в другое значение "
+    "того же поля, например «ЯмалоНенецкий автономный окру» входит в "
+    "«ЯмалоНенецкий автономный округ». Показывается процент вхождения "
+    "— доля длины короткого значения в длинном.": (
+        "Partial occurrences: a value is fully contained in another value "
+        "of the same field, for example \"Yamalo-Nenets autonomous okru\" "
+        "is contained in \"Yamalo-Nenets autonomous okrug\". The "
+        "occurrence percent is shown — the length of the short value "
+        "relative to the long one."
+    ),
+    "Проверка читает все объекты слоя и сравнивает значения попарно, "
+    "поэтому на больших наборах данных может работать очень долго. "
+    "Для защиты от зависания проверяется не более 50 000 объектов на "
+    "слой, частичные вхождения — не более чем по 1000 значениям на "
+    "поле, а по каждому виду дублей показывается не более 200 групп. "
+    "Дубли завышают статистику, дают двойные подписи на карте и "
+    "мешают объединять данные из разных источников.": (
+        "The check reads every feature of a layer and compares values "
+        "pairwise, so it can run very long on large datasets. To avoid "
+        "hanging it inspects at most 50 000 features per layer, at most "
+        "1000 values per field for partial occurrences and shows at most "
+        "200 groups per duplicate kind. Duplicates inflate statistics, "
+        "produce double labels on the map and prevent merging data from "
+        "different sources."
+    ),
+    "Двойной щелчок по ячейке таблицы результатов открывает подробный "
+    "список найденных дублей с процентами.": (
+        "Double-clicking a results table cell opens the detailed list of "
+        "found duplicates with percentages."
+    ),
+    "Две строки с одинаковыми значениями всех полей — отмечается "
+    "полный дубль строк.": (
+        "Two rows with identical values in every field — a full row "
+        "duplicate is reported."
+    ),
+    "Поля name и code совпадают у двух объектов, остальные поля "
+    "различаются — отмечается дубль составного ключа.": (
+        "The name and code fields match for two features while the others "
+        "differ — a composite key duplicate is reported."
+    ),
+    "Значения «Москва» и «москва » — отмечается совпадение без учёта "
+    "регистра и пробелов.": (
+        "The values \"Москва\" and \"москва \" — a match ignoring case "
+        "and spaces is reported."
+    ),
+    "«ЯмалоНенецкий автономный окру» и «ЯмалоНенецкий автономный "
+    "округ» — частичное вхождение 97.3%.": (
+        "\"Yamalo-Nenets autonomous okru\" and \"Yamalo-Nenets "
+        "autonomous okrug\" — a partial occurrence of 97.3%."
+    ),
+    "Слой «{}»: полные дубли строк — объектов {} с полностью "
+    "совпадающими атрибутами (объекты: {})": (
+        "Layer \"{}\": full row duplicates — {} features with completely "
+        "identical attributes (features: {})"
+    ),
+    "Слой «{}»: дубли составного ключа по текстовым полям — "
+    "объектов {} с одинаковыми значениями (объекты: {})": (
+        "Layer \"{}\": composite key duplicates over text fields — {} "
+        "features with identical values (features: {})"
+    ),
+    "Слой «{}»: поле «{}» — значения совпадают без учёта регистра и "
+    "лишних пробелов: {} (объектов {} из {})": (
+        "Layer \"{}\": field \"{}\" — values match ignoring case and "
+        "extra spaces: {} ({} of {} features)"
+    ),
+    "Слой «{}»: поле «{}» — частичное вхождение: «{}» входит в «{}» "
+    "({}%, объекты: {})": (
+        "Layer \"{}\": field \"{}\" — partial occurrence: \"{}\" is "
+        "contained in \"{}\" ({}%, features: {})"
+    ),
+
+    "Ищет табуляцию, переводы строк, возврат каретки и невидимые "
+    "символы в текстовых значениях.": (
+        "Looks for tabs, line breaks, carriage returns and invisible "
+        "characters in text values."
+    ),
+    "Для каждого векторного слоя и таблицы ZGeo читает текстовые "
+    "поля и ищет управляющие символы: табуляцию (TAB), перевод "
+    "строки (LF), возврат каретки (CR), вертикальную табуляцию, "
+    "перевод формата, NUL и ESC.": (
+        "For every vector layer and table ZGeo reads the text fields and "
+        "looks for control characters: tab (TAB), line feed (LF), carriage "
+        "return (CR), vertical tab, form feed, NUL and ESC."
+    ),
+    "Невидимыми считаются неразрывный и узкий неразрывный пробелы, "
+    "мягкий перенос, символы нулевой ширины, разделители строк и "
+    "абзацев, метка порядка байтов и другие форматирующие символы "
+    "Unicode. Обычный пробел проблемой не считается.": (
+        "Invisible characters include the no-break and narrow no-break "
+        "spaces, the soft hyphen, zero-width characters, line and paragraph "
+        "separators, the byte order mark and other Unicode format "
+        "characters. A regular space is not a problem."
+    ),
+    "Такие символы портят вёрстку подписей и отчётов, ломают разбор "
+    "CSV и мешают сравнению строк: две визуально одинаковые подписи "
+    "оказываются разными. В отчёте показываются названия символов, "
+    "число объектов и пример значения, где управляющие символы "
+    "заменены на \\t, \\n и \\uXXXX.": (
+        "Such characters break the layout of labels and reports, corrupt "
+        "CSV parsing and prevent string comparison: two visually identical "
+        "labels turn out to be different. The report shows the character "
+        "names, the number of features and a sample value with control "
+        "characters replaced by \\t, \\n and \\uXXXX."
+    ),
+    "Значение «Иванов\\tИ.И.» с табуляцией — отмечается TAB (U+0009).": (
+        "The value \"Ivanov\\tI.I.\" with a tab — TAB (U+0009) is reported."
+    ),
+    "Адрес с переводом строки внутри значения — отмечается LF (U+000A).": (
+        "An address with a line break inside the value — LF (U+000A) is "
+        "reported."
+    ),
+    "Название с неразрывным пробелом вместо обычного — отмечается "
+    "NBSP (U+00A0).": (
+        "A name with a no-break space instead of a regular one — "
+        "NBSP (U+00A0) is reported."
+    ),
+    "Строка «Центральный» без управляющих символов — проблемы нет.": (
+        "The string \"Central\" without control characters — no problem."
+    ),
+    "Слой «{}»: в поле «{}» управляющие или невидимые символы "
+    "найдены у {} из {} объектов: {}": (
+        "Layer \"{}\": field \"{}\" has control or invisible "
+        "characters in {} of {} features: {}"
+    ),
+    "Слой «{}»: в поле «{}» управляющие или невидимые символы "
+    "найдены у {} из {} объектов: {}; пример: «{}»": (
+        "Layer \"{}\": field \"{}\" has control or invisible "
+        "characters in {} of {} features: {}; example: \"{}\""
+    ),
+
+    "Результаты проверок": "Check results",
+    "Сохранить таблицу результатов в файл": (
+        "Save the results table to a file"
+    ),
+    "{}_проверки.xlsx": "{}_checks.xlsx",
+    "{}_проверки.html": "{}_checks.html",
+    "ZGeo — проверки": "ZGeo — checks",
+    "Отметить все проверки закладки": "Select every check on this tab",
+    "Снять все отметки закладки": "Clear every check on this tab",
+    "Вернуть отметки проверок по умолчанию": (
+        "Restore the default check selection"
+    ),
+    "Сначала отсканируйте папку.": "Scan a folder first.",
     "Прервать длительную операцию": "Cancel long operation",
     "Ход выполнения": "Progress",
     "Прервать операцию": "Cancel operation",
@@ -249,12 +898,18 @@ EN_TRANSLATIONS = {
     "Проблем не найдено.": "No problems found.",
     "Идёт проверка…": "Check in progress…",
     "Прервать проверки": "Cancel checks",
-    "Проверки: уточнить размер, систему координат и количество элементов, проверить читаемость файлов, JSON и GeoJSON, имена полей, заполненность атрибутов, имена и пути файлов, набор данных, целостность GeoPackage/SQLite, метаданные и CRS, .prj, геометрии, топологию, дубли, координаты.": (
+    "Проверки: уточнить размер, систему координат и количество элементов, "
+    "проверить читаемость файлов, JSON и GeoJSON, имена полей, "
+    "дубли имён полей, заполненность атрибутов, управляющие и невидимые "
+    "символы, имена и пути файлов, набор данных, целостность "
+    "GeoPackage/SQLite, метаданные и CRS, .prj, геометрии, топологию, "
+    "дубли, координаты.": (
         "Checks: refine size, CRS and feature count, check file "
-        "readability, validate JSON and GeoJSON, field names, attribute "
-        "completeness, file names and paths, dataset integrity, "
-        "GeoPackage/SQLite integrity, metadata and CRS, .prj, geometries, "
-        "topology, duplicates, coordinates."
+        "readability, validate JSON and GeoJSON, field names, field name "
+        "duplicates, attribute completeness, control and invisible "
+        "characters, file names and paths, dataset integrity, GeoPackage/"
+        "SQLite integrity, metadata and CRS, PRJ, geometry, topology, "
+        "duplicates, coordinates."
     ),
     "Выберите проверки": "Select checks",
     "Отметьте проверки, которые нужно выполнить для найденных файлов. Нажмите «i» справа, чтобы открыть подробное описание с примерами.": (
@@ -405,6 +1060,9 @@ EN_TRANSLATIONS = {
     "Уточнить количество элементов": "Refine feature count",
     "Считает количество элементов слоёв и обновляет колонку «Элементов».": (
         "Counts layer features and updates the “Features” column."
+    ),
+    "Считает количество элементов и обновляет колонку «Элементов».": (
+        "Counts features and updates the “Features” column."
     ),
     "Проверка JSON на формат GEOJSON": "Check JSON for GeoJSON format",
     "Проверяет файлы .json и .geojson по полю type. Файлы, не являющиеся GeoJSON, исключаются из списка.": (
@@ -603,6 +1261,28 @@ EN_TRANSLATIONS = {
     ),
     "Ищет поля, имена которых совпадают после усечения до 10 символов.": (
         "Finds fields whose names collide after truncation to 10 characters."
+    ),
+    "Проверка дублей имён полей": "Field name duplicates check",
+    "Ищет имена атрибутивных полей, совпадающие без учёта регистра в одном слое.": (
+        "Finds attribute field names that match ignoring case within the "
+        "same layer."
+    ),
+    "Для каждого векторного слоя ZGeo сравнивает имена полей после приведения к нижнему регистру. Поля Name и name считаются дублями.": (
+        "For each vector layer, ZGeo compares field names case-insensitively. "
+        "Fields Name and name are treated as duplicates."
+    ),
+    "Сравнение выполняется только внутри одного слоя; одинаковые имена в разных слоях не считаются дублями.": (
+        "The comparison is limited to a single layer; identical names in "
+        "different layers are not treated as duplicates."
+    ),
+    "Поля Name и name в одном слое — отмечается дубль.": (
+        "Fields Name and name in one layer — duplicate is flagged."
+    ),
+    "Поля CODE и code в одном слое — отмечается дубль.": (
+        "Fields CODE and code in one layer — duplicate is flagged."
+    ),
+    "Поле name в двух разных слоях — дублем не считается.": (
+        "A name field in two different layers is not treated as a duplicate."
     ),
     "Проверка кодировки DBF и .cpg": "DBF encoding and .cpg check",
     "Проверяет наличие файла .cpg и корректность указанной кодировки DBF.": (
@@ -818,6 +1498,30 @@ EN_TRANSLATIONS = {
     "Для растров количество элементов не подсчитывается.": (
         "Feature counts are not calculated for rasters."
     ),
+    "Для каждого слоя ZGeo считает объекты через провайдеры QGIS и обновляет колонку «Элементов». Для файлов с несколькими слоями количество суммируется.": (
+        "For each layer ZGeo counts the features through QGIS providers and "
+        "updates the “Features” column. For files with several layers the "
+        "counts are summed."
+    ),
+    "Проверка только заполняет колонку и не отмечает файлы как проблемные: пустые слои и файлы без объектов ищут проверки атрибутивных данных.": (
+        "The check only fills the column and does not flag files as "
+        "problematic: empty layers and files without features are found by "
+        "the attribute data checks."
+    ),
+    "Для растров количество элементов не подсчитывается, в колонке остаётся «—».": (
+        "Raster feature counts are not calculated, the column keeps “—”."
+    ),
+    "Слой roads: 1 245 объектов — колонка обновлена.": (
+        "Layer roads: 1 245 features — the column is updated."
+    ),
+    "GeoPackage из двух слоёв: 1 245 и 380 объектов — в колонке 1 625.": (
+        "A GeoPackage with two layers: 1 245 and 380 features — the column "
+        "shows 1 625."
+    ),
+    "Слой buildings: 0 объектов — колонка показывает 0, проблема не отмечается.": (
+        "Layer buildings: 0 features — the column shows 0, no problem is "
+        "reported."
+    ),
     "Слой roads: 1 245 объектов — проблема не найдена.": (
         "roads layer: 1,245 features — no problem found."
     ),
@@ -998,6 +1702,9 @@ EN_TRANSLATIONS = {
         "Layer “{}”: field names collide after truncation to {} characters: "
         "{}"
     ),
+    "Слой «{}»: имена полей совпадают без учёта регистра: {}": (
+        "Layer “{}”: field names match ignoring case: {}"
+    ),
     "У части слоёв не определена система координат": (
         "Some layers have no CRS"
     ),
@@ -1069,13 +1776,6 @@ EN_TRANSLATIONS = {
     "Читает систему координат слоёв, обновляет колонку «Система координат» и отмечает отсутствующую, неизвестную или смешанную СК.": (
         "Reads the CRS of layers, updates the “CRS” column and flags "
         "missing, unknown or mixed CRS."
-    ),
-    "Уточнить количество элементов и проверить пустые слои": (
-        "Refine feature count and check empty layers"
-    ),
-    "Считает количество элементов, обновляет колонку «Элементов» и отмечает пустые слои и файлы без объектов.": (
-        "Counts features, updates the “Features” column and flags empty "
-        "layers and files without features."
     ),
     "Проверка имён полей": "Field name check",
     "Проверяет нелатинские символы, длину имени (не более 10 символов DBF), пробелы, недопустимые символы и дубли после усечения.": (
