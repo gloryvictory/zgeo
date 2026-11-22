@@ -36,12 +36,15 @@ $excludedNames = @(
     ".empryo",
     ".git",
     ".gitignore",
+    "AGENTS.md",
     ".idea",
     ".vscode"
 )
 
-$excludedDirectories = $excludedNames | Where-Object { $_ -ne ".gitignore" }
-$excludedFiles = @(".gitignore")
+$excludedDirectories = $excludedNames | Where-Object {
+    $_ -ne ".gitignore" -and $_ -ne "AGENTS.md"
+}
+$excludedFiles = @(".gitignore", "AGENTS.md")
 
 $arguments = @(
     $pluginRoot,

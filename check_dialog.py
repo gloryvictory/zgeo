@@ -47,12 +47,15 @@ CHECK_COUNT_QUALITY = "count_quality"
 CHECK_FIELD_NAMES = "field_names"
 CHECK_FIELD_NAME_DUPLICATES = "field_name_duplicates"
 CHECK_ATTRIBUTE_FILL = "attribute_fill"
+CHECK_EMPTY_FIELDS = "empty_fields"
 CHECK_CONTROL_CHARS = "control_chars"
 CHECK_ATTRIBUTE_DUPLICATES = "attribute_duplicates"
 CHECK_BLANK_STRINGS = "blank_strings"
 CHECK_EDGE_SPACES = "edge_spaces"
 CHECK_INNER_SPACES = "inner_spaces"
 CHECK_NUMERIC_TEXT = "numeric_text"
+CHECK_MIXED_TYPES = "mixed_types"
+CHECK_TEXT_ENCODING = "text_encoding"
 CHECK_TEXT_LENGTH = "text_length"
 CHECK_DATE_RANGE = "date_range"
 CHECK_SUSPICIOUS_FIELD_NAMES = "suspicious_field_names"
@@ -64,7 +67,9 @@ CHECK_GEOMETRY = "geometry_quality"
 CHECK_COORDINATES = "coordinates_quality"
 CHECK_TOPOLOGY = "topology_quality"
 CHECK_DUPLICATES = "duplicate_features"
+CHECK_DUPLICATES_COMBINED = "duplicate_combined"
 CHECK_FILE_PATHS = "file_paths"
+CHECK_CONTENT_MISMATCH = "content_mismatch"
 
 CHECK_CATEGORY_SPATIAL = "spatial"
 CHECK_CATEGORY_ATTRIBUTE = "attribute"
@@ -84,8 +89,10 @@ SPATIAL_CHECK_KEYS = frozenset(
         CHECK_GEOMETRY,
         CHECK_TOPOLOGY,
         CHECK_DUPLICATES,
+        CHECK_DUPLICATES_COMBINED,
         CHECK_COORDINATES,
         CHECK_FILE_PATHS,
+        CHECK_CONTENT_MISMATCH,
     }
 )
 
@@ -94,12 +101,15 @@ ATTRIBUTE_CHECK_KEYS = frozenset(
         CHECK_FIELD_NAMES,
         CHECK_FIELD_NAME_DUPLICATES,
         CHECK_ATTRIBUTE_FILL,
+        CHECK_EMPTY_FIELDS,
         CHECK_CONTROL_CHARS,
         CHECK_ATTRIBUTE_DUPLICATES,
         CHECK_BLANK_STRINGS,
         CHECK_EDGE_SPACES,
         CHECK_INNER_SPACES,
         CHECK_NUMERIC_TEXT,
+        CHECK_MIXED_TYPES,
+        CHECK_TEXT_ENCODING,
         CHECK_TEXT_LENGTH,
         CHECK_DATE_RANGE,
         CHECK_SUSPICIOUS_FIELD_NAMES,
@@ -156,17 +166,21 @@ PROBLEM_CHECKS = frozenset(
         CHECK_READABILITY,
         CHECK_FILE_PATHS,
         CHECK_GEOJSON_QUALITY,
+        CHECK_CONTENT_MISMATCH,
         CHECK_CRS_QUALITY,
         CHECK_COUNT_QUALITY,
         CHECK_FIELD_NAMES,
         CHECK_FIELD_NAME_DUPLICATES,
         CHECK_ATTRIBUTE_FILL,
+        CHECK_EMPTY_FIELDS,
         CHECK_CONTROL_CHARS,
         CHECK_ATTRIBUTE_DUPLICATES,
         CHECK_BLANK_STRINGS,
         CHECK_EDGE_SPACES,
         CHECK_INNER_SPACES,
         CHECK_NUMERIC_TEXT,
+        CHECK_MIXED_TYPES,
+        CHECK_TEXT_ENCODING,
         CHECK_TEXT_LENGTH,
         CHECK_DATE_RANGE,
         CHECK_SUSPICIOUS_FIELD_NAMES,
@@ -177,6 +191,7 @@ PROBLEM_CHECKS = frozenset(
         CHECK_GEOMETRY,
         CHECK_TOPOLOGY,
         CHECK_DUPLICATES,
+        CHECK_DUPLICATES_COMBINED,
         CHECK_COORDINATES,
     }
 )
@@ -188,12 +203,15 @@ LAYER_PROBLEM_CHECKS = frozenset(
         CHECK_FIELD_NAMES,
         CHECK_FIELD_NAME_DUPLICATES,
         CHECK_ATTRIBUTE_FILL,
+        CHECK_EMPTY_FIELDS,
         CHECK_CONTROL_CHARS,
         CHECK_ATTRIBUTE_DUPLICATES,
         CHECK_BLANK_STRINGS,
         CHECK_EDGE_SPACES,
         CHECK_INNER_SPACES,
         CHECK_NUMERIC_TEXT,
+        CHECK_MIXED_TYPES,
+        CHECK_TEXT_ENCODING,
         CHECK_TEXT_LENGTH,
         CHECK_DATE_RANGE,
         CHECK_SUSPICIOUS_FIELD_NAMES,
@@ -202,6 +220,7 @@ LAYER_PROBLEM_CHECKS = frozenset(
         CHECK_GEOMETRY,
         CHECK_TOPOLOGY,
         CHECK_DUPLICATES,
+        CHECK_DUPLICATES_COMBINED,
         CHECK_COORDINATES,
     }
 )
@@ -344,6 +363,52 @@ def check_definitions(
                 tr(
                     "Файлы Roads.shp и roads.shp различаются только "
                     "регистром — отмечается совпадение имён."
+                ),
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_CONTENT_MISMATCH,
+            label=tr("Несоответствие расширения и содержимого"),
+            description=tr(
+                "Проверяет, что файл действительно того формата, который "
+                "указан его расширением."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "ZGeo читает первые килобайты файла и сравнивает их с "
+                    "сигнатурами известных форматов: база SQLite "
+                    "(GeoPackage, SQLite, SpatiaLite, MBTiles), Shapefile, "
+                    "ZIP (KMZ, XLSX), TIFF (GeoTIFF), JPEG 2000, NetCDF, "
+                    "HDF, Parquet, Arrow, FlatGeobuf, PMTiles, OLE2 (XLS), "
+                    "JSON и XML."
+                ),
+                tr(
+                    "Так находятся файлы, переименованные в другой формат "
+                    "или сохранённые с ошибкой: «шейпфайл», внутри "
+                    "которого лежит таблица Excel или ZIP-архив, "
+                    ".gpkg без заголовка SQLite, .tif с текстом. QGIS "
+                    "такого не показывает и падает при открытии или "
+                    "открывает файл пустым слоем."
+                ),
+                tr(
+                    "Пустые и слишком короткие файлы проверкой не "
+                    "считаются — для них есть проверка читаемости "
+                    "файлов. Сопоставление выполняется только по "
+                    "содержимому, файл не изменяется."
+                ),
+            ),
+            examples=(
+                tr(
+                    "Файл roads.shp, внутри которого ZIP-архив — "
+                    "отмечается несоответствие расширения и содержимого."
+                ),
+                tr(
+                    "Файл data.gpkg без заголовка SQLite — отмечается "
+                    "вместо базы SQLite другой формат."
+                ),
+                tr(
+                    "Файл dem.tif с настоящим TIFF внутри — проблемы нет."
                 ),
             ),
         ),
@@ -526,6 +591,45 @@ def check_definitions(
                 tr(
                     "Слой из 1000 объектов, где 98% объектов не имеют "
                     "атрибутов — отмечается как почти пустой."
+                ),
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_EMPTY_FIELDS,
+            label=tr("Поля-пустышки (100% NULL)"),
+            description=tr(
+                "Ищет столбцы, у которых все значения NULL или пустые "
+                "строки."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "Для каждого векторного слоя и таблицы ZGeo читает "
+                    "объекты и считает пустыми значения NULL и строки, "
+                    "состоящие только из пробелов. Поле считается "
+                    "пустышкой, если ни у одного объекта нет заполненного "
+                    "значения."
+                ),
+                tr(
+                    "Такие столбцы нечего экспортировать: они занимают "
+                    "место в схеме, создают пустые атрибуты, мешают "
+                    "обязательным ограничениям и могут ломать схему и "
+                    "обмен данными. Проверка только сообщает о проблемах "
+                    "и не удаляет поля."
+                ),
+                tr("Для растров проверка не применяется."),
+            ),
+            examples=(
+                tr(
+                    "Поле comment: NULL у всех 500 объектов — отмечается."
+                ),
+                tr(
+                    "Поле code: у всех объектов пустая строка — "
+                    "отмечается."
+                ),
+                tr(
+                    "Поле name: заполнено хотя бы у одного объекта — "
+                    "проблемой не считается."
                 ),
             ),
         ),
@@ -830,6 +934,50 @@ def check_definitions(
             ),
         ),
         CheckDefinition(
+            key=CHECK_MIXED_TYPES,
+            label=tr("Смешанные типы в поле"),
+            description=tr(
+                "Ищет текстовые столбцы, где в одном поле встречаются "
+                "числа и текст."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "Для каждого векторного слоя и таблицы ZGeo читает "
+                    "текстовые поля. Значение считается числом, если оно "
+                    "состоит из цифр, знака, одного десятичного "
+                    "разделителя и экспоненты; остальные непустые "
+                    "значения считаются текстом. NULL и пустые строки "
+                    "не учитываются."
+                ),
+                tr(
+                    "Если в одном поле есть и числа, и текст, Excel и SQL "
+                    "могут определить тип столбца по-разному: часть "
+                    "значений станет числом, часть останется текстом. "
+                    "Это ломает сортировку, суммы, фильтры, импорт "
+                    "в Excel и запросы SQL."
+                ),
+                tr(
+                    "В отчёте по каждому полю показывается число числовых "
+                    "и текстовых значений, доли и примеры. Проверка только "
+                    "сообщает о проблемах и не меняет данные."
+                ),
+                tr("Для растров проверка не применяется."),
+            ),
+            examples=(
+                tr(
+                    "Поле code: «10», «20», «N/A» — смешанные типы."
+                ),
+                tr(
+                    "Поле area: «12.5», «7», «нет данных» — смешанные "
+                    "типы."
+                ),
+                tr(
+                    "Поле name: только «Москва» и «Тверь» — проблемы нет."
+                ),
+            ),
+        ),
+        CheckDefinition(
             key=CHECK_TEXT_LENGTH,
             label=tr("Аномальная длина текста"),
             description=tr(
@@ -969,6 +1117,55 @@ def check_definitions(
                 ),
                 tr(
                     "Поля OBJECTID и name — проблемы нет."
+                ),
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_TEXT_ENCODING,
+            label=tr("Кодировка текста (кракозябры)"),
+            description=tr(
+                "Ищет значения, которые выглядят как текст, прочитанный "
+                "не в той кодировке: «ÐœÐ¾ÑÐºÐ²Ð°» вместо «Москва»."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "Для каждого векторного слоя и таблицы ZGeo читает "
+                    "текстовые поля и проверяет значения: их пытаются "
+                    "закодировать обратно в однобайтовую кодировку "
+                    "(latin-1, cp1252, cp1251) и снова прочитать как "
+                    "UTF-8. Если получается осмысленный другой текст, "
+                    "значение считается кракозябрами."
+                ),
+                tr(
+                    "Такие значения появляются, когда файл сохранён не в "
+                    "той кодировке или когда UTF-8 прочитали как "
+                    "однобайтовую кодировку: «ÐœÐ¾ÑÐºÐ²Ð°», «ÐŸÑ€Ð¸Ð²ÐµÑ‚», "
+                    "«â€™». Их невозможно найти поиском, они ломают "
+                    "сортировку и сравнение с эталонными значениями, а в "
+                    "отчётах и подписях выглядят как мусор."
+                ),
+                tr(
+                    "Обычный текст, латиница с диакритикой (ESPAÑA, café) "
+                    "и кириллица в правильной кодировке проблемой не "
+                    "считаются. В отчёте показываются число объектов, "
+                    "доля, пример значения и исправленный текст, если "
+                    "его удалось восстановить. Проверка только сообщает "
+                    "о проблемах и не меняет данные."
+                ),
+                tr("Для растров проверка не применяется."),
+            ),
+            examples=(
+                tr(
+                    "Значение «ÐœÐ¾ÑÐºÐ²Ð°» — кракозябры, исправляется на "
+                    "«Москва»."
+                ),
+                tr(
+                    "Значение «ÐŸÑ€Ð¸Ð²ÐµÑ‚» — кракозябры, исправляется на "
+                    "«Привет»."
+                ),
+                tr(
+                    "Значения «Москва», «ESPAÑA» и «café» — проблемы нет."
                 ),
             ),
         ),
@@ -1130,6 +1327,55 @@ def check_definitions(
                 tr(
                     "В .prj географическая система, а слой в "
                     "проекционной — отмечается несовпадение типа CRS."
+                ),
+            ),
+        ),
+        CheckDefinition(
+            key=CHECK_DUPLICATES_COMBINED,
+            label=tr("Дубли по атрибутам и геометрии"),
+            description=tr(
+                "Ищет объекты, у которых совпадают и значения всех "
+                "атрибутов, и геометрия."
+            ),
+            checked=False,
+            details=(
+                tr(
+                    "Для каждого векторного слоя ZGeo сравнивает объекты "
+                    "по паре «все атрибуты + геометрия»: атрибуты "
+                    "берутся как есть, геометрия — побайтово по WKB, "
+                    "включая тип, число вершин и все координаты."
+                ),
+                tr(
+                    "Отдельные проверки находят дубли только по "
+                    "геометрии и только по атрибутам. Здесь отмечаются "
+                    "объекты, которые совпадают целиком: это копии одной "
+                    "записи, попавшие в слой дважды. Такие дубли "
+                    "задваивают суммы и площади, дают двойные подписи на "
+                    "карте и мешают объединять данные из разных "
+                    "источников."
+                ),
+                tr(
+                    "Объекты с одинаковой геометрией, но разными "
+                    "атрибутами, и объекты с одинаковыми атрибутами, но "
+                    "разной геометрией этой проверкой не отмечаются — "
+                    "для них есть проверки дублей геометрии и дублей по "
+                    "атрибутам."
+                ),
+                tr("Для таблиц без геометрии проверка не применяется."),
+            ),
+            examples=(
+                tr(
+                    "Две строки с одинаковыми значениями всех полей и "
+                    "одинаковыми координатами — отмечается дубль по "
+                    "атрибутам и геометрии."
+                ),
+                tr(
+                    "Одинаковые атрибуты, но точки сдвинуты на 10 метров "
+                    "— дублем по атрибутам и геометрии не считается."
+                ),
+                tr(
+                    "Одинаковая геометрия, но разные атрибуты — дублем "
+                    "по атрибутам и геометрии не считается."
                 ),
             ),
         ),

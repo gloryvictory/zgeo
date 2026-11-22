@@ -197,9 +197,161 @@ EN_TRANSLATIONS = {
     "Управляющие и невидимые символы": "Control and invisible characters",
     "Дубли по атрибутам (очень долго!)": "Attribute duplicates (very slow!)",
     "Пустые строки": "Blank strings",
+    "Несоответствие расширения и содержимого": (
+        "Extension and content mismatch"
+    ),
+    "Проверяет, что файл действительно того формата, который "
+    "указан его расширением.": (
+        "Checks that a file really is the format its extension declares."
+    ),
+    "ZGeo читает первые килобайты файла и сравнивает их с "
+    "сигнатурами известных форматов: база SQLite "
+    "(GeoPackage, SQLite, SpatiaLite, MBTiles), Shapefile, "
+    "ZIP (KMZ, XLSX), TIFF (GeoTIFF), JPEG 2000, NetCDF, "
+    "HDF, Parquet, Arrow, FlatGeobuf, PMTiles, OLE2 (XLS), "
+    "JSON и XML.": (
+        "ZGeo reads the first kilobytes of the file and compares them with "
+        "the signatures of known formats: SQLite database (GeoPackage, "
+        "SQLite, SpatiaLite, MBTiles), Shapefile, ZIP (KMZ, XLSX), TIFF "
+        "(GeoTIFF), JPEG 2000, NetCDF, HDF, Parquet, Arrow, FlatGeobuf, "
+        "PMTiles, OLE2 (XLS), JSON and XML."
+    ),
+    "Так находятся файлы, переименованные в другой формат "
+    "или сохранённые с ошибкой: «шейпфайл», внутри "
+    "которого лежит таблица Excel или ZIP-архив, "
+    ".gpkg без заголовка SQLite, .tif с текстом. QGIS "
+    "такого не показывает и падает при открытии или "
+    "открывает файл пустым слоем.": (
+        "This finds files renamed to another format or saved with an error: a "
+        "\"shapefile\" that actually contains an Excel table or a ZIP "
+        "archive, a .gpkg without the SQLite header, a .tif holding text. "
+        "QGIS does not show this and either fails to open the file or opens "
+        "it as an empty layer."
+    ),
+    "Пустые и слишком короткие файлы проверкой не "
+    "считаются — для них есть проверка читаемости "
+    "файлов. Сопоставление выполняется только по "
+    "содержимому, файл не изменяется.": (
+        "Empty and too short files are not covered by this check — the file "
+        "readability check handles them. The comparison uses the content "
+        "only and the file is not modified."
+    ),
+    "Файл roads.shp, внутри которого ZIP-архив — "
+    "отмечается несоответствие расширения и содержимого.": (
+        "The file roads.shp that actually holds a ZIP archive — an extension "
+        "and content mismatch is reported."
+    ),
+    "Файл data.gpkg без заголовка SQLite — отмечается "
+    "вместо базы SQLite другой формат.": (
+        "The file data.gpkg without the SQLite header — another format is "
+        "reported instead of a SQLite database."
+    ),
+    "Файл dem.tif с настоящим TIFF внутри — проблемы нет.": (
+        "The file dem.tif with a real TIFF inside — no problem."
+    ),
+    "Файл «{}»: расширение {} не соответствует содержимому — "
+    "в файле {}": (
+        "File \"{}\": extension {} does not match the content — the file "
+        "contains {}"
+    ),
+    "база SQLite": "an SQLite database",
+    "ZIP-архив": "a ZIP archive",
+    "растровое изображение TIFF": "a TIFF raster image",
+    "файл Shapefile": "a Shapefile",
+    "документ OLE2 (старый формат Microsoft Office)": (
+        "an OLE2 document (legacy Microsoft Office format)"
+    ),
+    "файл Parquet": "a Parquet file",
+    "файл Arrow": "an Arrow file",
+    "файл FlatGeobuf": "a FlatGeobuf file",
+    "архив PMTiles": "a PMTiles archive",
+    "файл NetCDF": "a NetCDF file",
+    "файл HDF5": "an HDF5 file",
+    "файл HDF4": "an HDF4 file",
+    "изображение JPEG 2000": "a JPEG 2000 image",
+    "изображение": "an image",
+    "документ PDF": "a PDF document",
+    "сжатый архив": "a compressed archive",
+    "исполняемый файл": "an executable file",
+    "текст JSON": "JSON text",
+    "текст XML": "XML text",
+    "текст": "text",
+    "двоичные данные неизвестного формата": (
+        "binary data of an unknown format"
+    ),
     "Пробелы по краям значений": "Leading and trailing spaces",
     "Двойные пробелы внутри значений": "Double spaces inside values",
     "Числа, записанные как текст": "Numbers stored as text",
+    "Смешанные типы в поле": "Mixed types in a field",
+    "Кодировка текста (кракозябры)": "Text encoding (mojibake)",
+    "Ищет значения, которые выглядят как текст, прочитанный "
+    "не в той кодировке: «ÐœÐ¾ÑÐºÐ²Ð°» вместо «Москва».": (
+        "Looks for values that look like text read with the wrong "
+        "encoding: \"ÐœÐ¾ÑÐºÐ²Ð°\" instead of \"Москва\"."
+    ),
+    "Для каждого векторного слоя и таблицы ZGeo читает "
+    "текстовые поля и проверяет значения: их пытаются "
+    "закодировать обратно в однобайтовую кодировку "
+    "(latin-1, cp1252, cp1251) и снова прочитать как "
+    "UTF-8. Если получается осмысленный другой текст, "
+    "значение считается кракозябрами.": (
+        "For every vector layer and table ZGeo reads the text fields and "
+        "checks the values: each value is encoded back into a single-byte "
+        "encoding (latin-1, cp1252, cp1251) and decoded as UTF-8 again. If "
+        "this produces different meaningful text, the value is treated as "
+        "mojibake."
+    ),
+    "Такие значения появляются, когда файл сохранён не в "
+    "той кодировке или когда UTF-8 прочитали как "
+    "однобайтовую кодировку: «ÐœÐ¾ÑÐºÐ²Ð°», «ÐŸÑ€Ð¸Ð²ÐµÑ‚», "
+    "«â€™». Их невозможно найти поиском, они ломают "
+    "сортировку и сравнение с эталонными значениями, а в "
+    "отчётах и подписях выглядят как мусор.": (
+        "Such values appear when a file is saved with the wrong encoding or "
+        "when UTF-8 is read as a single-byte encoding: \"ÐœÐ¾ÑÐºÐ²Ð°\", "
+        "\"ÐŸÑ€Ð¸Ð²ÐµÑ‚\", \"â€™\". They cannot be found by search, "
+        "they break sorting and comparison with reference values, and they "
+        "look like garbage in reports and labels."
+    ),
+    "Обычный текст, латиница с диакритикой (ESPAÑA, café) "
+    "и кириллица в правильной кодировке проблемой не "
+    "считаются. В отчёте показываются число объектов, "
+    "доля, пример значения и исправленный текст, если "
+    "его удалось восстановить. Проверка только сообщает "
+    "о проблемах и не меняет данные.": (
+        "Ordinary text, Latin letters with diacritics (ESPAÑA, café) and "
+        "correctly encoded Cyrillic are not reported. The report shows the "
+        "number of features, the share, a sample value and the repaired text "
+        "when it could be restored. The check only reports problems and does "
+        "not modify data."
+    ),
+    "Значение «ÐœÐ¾ÑÐºÐ²Ð°» — кракозябры, исправляется на "
+    "«Москва».": (
+        "The value \"ÐœÐ¾ÑÐºÐ²Ð°\" — mojibake, repaired to \"Москва\"."
+    ),
+    "Значение «ÐŸÑ€Ð¸Ð²ÐµÑ‚» — кракозябры, исправляется на "
+    "«Привет».": (
+        "The value \"ÐŸÑ€Ð¸Ð²ÐµÑ‚\" — mojibake, repaired to \"Привет\"."
+    ),
+    "Значения «Москва», «ESPAÑA» и «café» — проблемы нет.": (
+        "The values \"Москва\", \"ESPAÑA\" and \"café\" — no problem."
+    ),
+    "Слой «{}»: текст в неверной кодировке — "
+    "затронуто полей {} из {}: {}": (
+        "Layer \"{}\": text in the wrong encoding — {} of {} fields "
+        "affected: {}"
+    ),
+    "Поле «{}»: текст в неверной кодировке у {} из {} "
+    "объектов ({}%); пример: «{}»": (
+        "Field \"{}\": text in the wrong encoding in {} of {} features "
+        "({}%); sample: \"{}\""
+    ),
+    "Поле «{}»: текст в неверной кодировке у {} из {} "
+    "объектов ({}%); пример: «{}», исправляется на «{}»": (
+        "Field \"{}\": text in the wrong encoding in {} of {} features "
+        "({}%); sample: \"{}\", repaired to \"{}\""
+    ),
+
     "Аномальная длина текста": "Abnormal text length",
     "Даты вне разумного диапазона": "Dates outside a reasonable range",
     "Подозрительные имена полей": "Suspicious field names",
@@ -455,6 +607,63 @@ EN_TRANSLATIONS = {
     "объектов ({}%); целых {}, дробных {}; пример: «{}»": (
         "Field \"{}\": numbers stored as text in {} of {} features "
         "({}%); integer {}, real {}; sample: \"{}\""
+    ),
+    "Ищет текстовые столбцы, где в одном поле встречаются "
+    "числа и текст.": (
+        "Finds text columns where numbers and text occur in the same field."
+    ),
+    "Для каждого векторного слоя и таблицы ZGeo читает "
+    "текстовые поля. Значение считается числом, если оно "
+    "состоит из цифр, знака, одного десятичного "
+    "разделителя и экспоненты; остальные непустые "
+    "значения считаются текстом. NULL и пустые строки "
+    "не учитываются.": (
+        "For every vector layer and table, ZGeo reads the text fields. A "
+        "value counts as a number if it consists of digits, a sign, at most "
+        "one decimal separator and an exponent; all other non-empty values "
+        "count as text. NULL and empty strings are ignored."
+    ),
+    "Если в одном поле есть и числа, и текст, Excel и SQL "
+    "могут определить тип столбца по-разному: часть "
+    "значений станет числом, часть останется текстом. "
+    "Это ломает сортировку, суммы, фильтры, импорт "
+    "в Excel и запросы SQL.": (
+        "If a field contains both numbers and text, Excel and SQL may "
+        "determine the column type differently: some values become numbers "
+        "and some remain text. This breaks sorting, sums, filters, Excel "
+        "import and SQL queries."
+    ),
+    "В отчёте по каждому полю показывается число числовых "
+    "и текстовых значений, доли и примеры. Проверка только "
+    "сообщает о проблемах и не меняет данные.": (
+        "For every field the report shows the number of numeric and text "
+        "values, their shares and samples. The check only reports problems "
+        "and does not change the data."
+    ),
+    "Поле code: «10», «20», «N/A» — смешанные типы.": (
+        "Field code: “10”, “20”, “N/A” — mixed types."
+    ),
+    "Поле area: «12.5», «7», «нет данных» — смешанные "
+    "типы.": (
+        "Field area: “12.5”, “7”, “no data” — mixed types."
+    ),
+    "Поле name: только «Москва» и «Тверь» — проблемы нет.": (
+        "Field name: only “Moscow” and “Tver” — no problem."
+    ),
+    "{} — числа {}, текст {}": "{} — numbers {}, text {}",
+    "Слой «{}»: смешанные типы в поле — "
+    "затронуто полей {} из {}: {}": (
+        "Layer “{}”: mixed types in a field — {} of {} fields affected: {}"
+    ),
+    "Поле «{}»: смешанные типы — числа: {} ({}%), "
+    "текст: {} ({}%) из {} объектов": (
+        "Field “{}”: mixed types — numbers: {} ({}%), text: {} ({}%) of "
+        "{} features"
+    ),
+    "Поле «{}»: смешанные типы — числа: {} ({}%), "
+    "текст: {} ({}%) из {} объектов; примеры: «{}» и «{}»": (
+        "Field “{}”: mixed types — numbers: {} ({}%), text: {} ({}%) of "
+        "{} features; samples: “{}” and “{}”"
     ),
 
     "Ищет значения, внутри которых стоят два и более "
@@ -900,16 +1109,17 @@ EN_TRANSLATIONS = {
     "Прервать проверки": "Cancel checks",
     "Проверки: уточнить размер, систему координат и количество элементов, "
     "проверить читаемость файлов, JSON и GeoJSON, имена полей, "
-    "дубли имён полей, заполненность атрибутов, управляющие и невидимые "
-    "символы, имена и пути файлов, набор данных, целостность "
+    "дубли имён полей, заполненность атрибутов, поля-пустышки, "
+    "управляющие и невидимые символы, смешанные типы в поле, "
+    "имена и пути файлов, набор данных, целостность "
     "GeoPackage/SQLite, метаданные и CRS, .prj, геометрии, топологию, "
     "дубли, координаты.": (
         "Checks: refine size, CRS and feature count, check file "
         "readability, validate JSON and GeoJSON, field names, field name "
-        "duplicates, attribute completeness, control and invisible "
-        "characters, file names and paths, dataset integrity, GeoPackage/"
-        "SQLite integrity, metadata and CRS, PRJ, geometry, topology, "
-        "duplicates, coordinates."
+        "duplicates, attribute completeness, empty fields, control and "
+        "invisible characters, mixed types in a field, file names and "
+        "paths, dataset integrity, GeoPackage/SQLite integrity, metadata "
+        "and CRS, PRJ, geometry, topology, duplicates, coordinates."
     ),
     "Выберите проверки": "Select checks",
     "Отметьте проверки, которые нужно выполнить для найденных файлов. Нажмите «i» справа, чтобы открыть подробное описание с примерами.": (
@@ -1392,6 +1602,37 @@ EN_TRANSLATIONS = {
         "Two lines partially follow the same segment — a line overlap is "
         "reported."
     ),
+    "Дубли по атрибутам и геометрии": "Attribute and geometry duplicates",
+    "Ищет объекты, у которых совпадают и значения всех атрибутов, и геометрия.": (
+        "Looks for features where both all attribute values and the geometry match."
+    ),
+    "Для каждого векторного слоя ZGeo сравнивает объекты по паре «все атрибуты + геометрия»: атрибуты берутся как есть, геометрия — побайтово по WKB, включая тип, число вершин и все координаты.": (
+        "For every vector layer ZGeo compares features by the pair \"all attributes + geometry\": attributes are taken as is and the geometry byte by byte as WKB, including type, vertex count and all coordinates."
+    ),
+    "Отдельные проверки находят дубли только по геометрии и только по атрибутам. Здесь отмечаются объекты, которые совпадают целиком: это копии одной записи, попавшие в слой дважды. Такие дубли задваивают суммы и площади, дают двойные подписи на карте и мешают объединять данные из разных источников.": (
+        "Separate checks find duplicates by geometry only and by attributes only. Here features that match completely are reported: they are copies of one record that ended up in the layer twice. Such duplicates double sums and areas, produce double labels on the map and prevent merging data from different sources."
+    ),
+    "Объекты с одинаковой геометрией, но разными атрибутами, и объекты с одинаковыми атрибутами, но разной геометрией этой проверкой не отмечаются — для них есть проверки дублей геометрии и дублей по атрибутам.": (
+        "Features with the same geometry but different attributes, and features with the same attributes but different geometry, are not reported by this check — the geometry duplicates and attribute duplicates checks cover them."
+    ),
+    "Для таблиц без геометрии проверка не применяется.": (
+        "The check does not apply to tables without geometry."
+    ),
+    "Две строки с одинаковыми значениями всех полей и одинаковыми координатами — отмечается дубль по атрибутам и геометрии.": (
+        "Two rows with identical values in every field and identical coordinates — an attribute and geometry duplicate is reported."
+    ),
+    "Одинаковые атрибуты, но точки сдвинуты на 10 метров — дублем по атрибутам и геометрии не считается.": (
+        "Identical attributes but points shifted by 10 meters — not reported as an attribute and geometry duplicate."
+    ),
+    "Одинаковая геометрия, но разные атрибуты — дублем по атрибутам и геометрии не считается.": (
+        "Identical geometry but different attributes — not reported as an attribute and geometry duplicate."
+    ),
+    "Дубль по атрибутам и геометрии: объект {} совпадает с объектом {}": (
+        "Attribute and geometry duplicate: feature {} matches feature {}"
+    ),
+    "Слой «{}»: дублей по атрибутам и геометрии: {}, групп: {}": (
+        "Layer \"{}\": attribute and geometry duplicates: {}, groups: {}"
+    ),
     "Проверка дублей объектов": "Duplicate features check",
     "Ищет объекты с полностью совпадающей геометрией.": (
         "Finds features with completely identical geometry."
@@ -1813,6 +2054,34 @@ EN_TRANSLATIONS = {
     "Слой из 1000 объектов, где 98% объектов не имеют атрибутов — отмечается как почти пустой.": (
         "A layer with 1000 features where 98% of features have no "
         "attributes — reported as almost empty."
+    ),
+    "Поля-пустышки (100% NULL)": "Empty fields (100% NULL)",
+    "Ищет столбцы, у которых все значения NULL или пустые строки.": (
+        "Finds columns whose values are all NULL or empty strings."
+    ),
+    "Для каждого векторного слоя и таблицы ZGeo читает объекты и считает пустыми значения NULL и строки, состоящие только из пробелов. Поле считается пустышкой, если ни у одного объекта нет заполненного значения.": (
+        "For each vector layer and table, ZGeo reads the features and "
+        "treats NULL values and whitespace-only strings as empty. A field "
+        "is considered empty if no feature has a filled value."
+    ),
+    "Такие столбцы нечего экспортировать: они занимают место в схеме, создают пустые атрибуты, мешают обязательным ограничениям и могут ломать схему и обмен данными. Проверка только сообщает о проблемах и не удаляет поля.": (
+        "Such columns have nothing to export: they take up space in the "
+        "schema, create empty attributes, interfere with required "
+        "constraints and can break the schema and data exchange. The check "
+        "only reports problems and does not delete fields."
+    ),
+    "Поле comment: NULL у всех 500 объектов — отмечается.": (
+        "Field comment: NULL in all 500 features — reported."
+    ),
+    "Поле code: у всех объектов пустая строка — отмечается.": (
+        "Field code: every feature has an empty string — reported."
+    ),
+    "Поле name: заполнено хотя бы у одного объекта — проблемой не считается.": (
+        "Field name: filled in at least one feature — not considered a "
+        "problem."
+    ),
+    "Поле «{}»: 100% пустых значений (NULL или пустые строки) — {} из {}": (
+        "Field “{}”: 100% empty values (NULL or empty strings) — {} of {}"
     ),
     "Проверка набора данных": "Dataset integrity check",
     "Проверяет обязательные файлы набора, наличие .cpg и корректность указанной кодировки DBF.": (

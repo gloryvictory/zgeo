@@ -18,7 +18,10 @@ from .attribute_check import (
     escape_inner_spaces,
     has_inner_spaces,
     date_year_out_of_range,
+    escape_mojibake,
+    looks_like_mojibake,
     numeric_text_kind,
+    repair_mojibake,
 )
 from .file_info import vector_layers
 from .quality_check import (
@@ -27,6 +30,7 @@ from .quality_check import (
     FieldEdgeSpaceStats,
     FieldInnerSpaceStats,
     FieldDateRangeStats,
+    FieldEncodingStats,
     FieldNumericTextStats,
     FieldTextLengthStats,
     FieldFillStats,
@@ -35,6 +39,7 @@ from .quality_check import (
     LayerEdgeSpaceStats,
     LayerInnerSpaceStats,
     LayerDateRangeStats,
+    LayerEncodingStats,
     LayerNumericTextStats,
     LayerTextLengthStats,
     LayerFillStats,
@@ -43,16 +48,30 @@ from .quality_check import (
     blank_string_issues,
     control_character_issues,
     edge_space_issues,
+    empty_field_issues,
     inner_space_issues,
     date_range_issues,
     length_outlier_positions,
     length_statistics,
+    mixed_type_issues,
     numeric_text_issues,
     suspicious_field_name_issues,
+    text_encoding_issues,
     text_length_issues,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _fill_stats(geo_file) -> List[LayerFillStats]:
+    """Собрать статистику заполнения по всем векторным слоям."""
+
+    stats: List[LayerFillStats] = []
+    for layer in vector_layers(geo_file):
+        layer_stats = _inspect_layer(layer)
+        if layer_stats is not None:
+            stats.append(layer_stats)
+    return stats
 
 
 def inspect_attribute_fill(
@@ -60,14 +79,17 @@ def inspect_attribute_fill(
 ) -> Tuple[List[QualityIssue], bool]:
     """Проверить NULL/пустые строки и заполненность полей всех слоёв."""
 
-    stats: List[LayerFillStats] = []
-    for layer in vector_layers(geo_file):
-        layer_stats = _inspect_layer(layer)
-        if layer_stats is not None:
-            stats.append(layer_stats)
+    stats = _fill_stats(geo_file)
     return attribute_fill_issues(stats), bool(stats)
 
 
+def inspect_empty_fields(
+    geo_file,
+) -> Tuple[List[QualityIssue], bool]:
+    """Найти поля, у которых все значения пустые (100% NULL)."""
+
+    stats = _fill_stats(geo_file)
+    return empty_field_issues(stats), bool(stats)
 
 
 
@@ -75,6 +97,74 @@ def inspect_attribute_fill(
 
 
 
+
+
+
+
+def inspect_text_encoding(
+    geo_file,
+) -> Tuple[List[QualityIssue], bool]:
+    """Проверить текст в неверной кодировке (кракозябры)."""
+
+    stats: List[LayerEncodingStats] = []
+    for layer in vector_layers(geo_file):
+        layer_stats = _inspect_encoding_layer(layer)
+        if layer_stats is not None:
+            stats.append(layer_stats)
+    return text_encoding_issues(stats), bool(stats)
+
+
+def _inspect_encoding_layer(
+    layer: QgsVectorLayer,
+) -> Optional[LayerEncodingStats]:
+    indexes = [
+        (index, field.name())
+        for index, field in enumerate(layer.fields())
+        if field.type() == QVariant.String
+    ]
+    if not indexes:
+        return None
+
+    affected = {index: 0 for index, _name in indexes}
+    examples = {index: "" for index, _name in indexes}
+    repairs = {index: "" for index, _name in indexes}
+    feature_count = 0
+
+    try:
+        for feature in layer.getFeatures():
+            values = feature.attributes()
+            feature_count += 1
+            for index, _name in indexes:
+                value = values[index] if index < len(values) else None
+                if not isinstance(value, str) or not value.strip():
+                    continue
+                if not looks_like_mojibake(value):
+                    continue
+                affected[index] += 1
+                if not examples[index]:
+                    examples[index] = escape_mojibake(value)
+                    repairs[index] = repair_mojibake(value)
+    except Exception:
+        return None
+
+    if feature_count <= 0:
+        return None
+
+    layer_name = layer.name().strip() or "—"
+    return LayerEncodingStats(
+        layer=layer_name,
+        feature_count=feature_count,
+        fields=tuple(
+            FieldEncodingStats(
+                name=name,
+                total=feature_count,
+                affected=affected[index],
+                example=examples[index],
+                repaired=repairs[index],
+            )
+            for index, name in indexes
+        ),
+    )
 
 def inspect_suspicious_field_names(
     geo_file,
@@ -251,17 +341,33 @@ def _inspect_length_layer(
         fields=tuple(fields),
     )
 
-def inspect_numeric_text(
-    geo_file,
-) -> Tuple[List[QualityIssue], bool]:
-    """Проверить текстовые поля, где значения записаны числами."""
+def _numeric_text_stats(geo_file) -> List[LayerNumericTextStats]:
+    """Собрать статистику числовых и текстовых значений по слоям."""
 
     stats: List[LayerNumericTextStats] = []
     for layer in vector_layers(geo_file):
         layer_stats = _inspect_numeric_layer(layer)
         if layer_stats is not None:
             stats.append(layer_stats)
+    return stats
+
+
+def inspect_numeric_text(
+    geo_file,
+) -> Tuple[List[QualityIssue], bool]:
+    """Проверить текстовые поля, где значения записаны числами."""
+
+    stats = _numeric_text_stats(geo_file)
     return numeric_text_issues(stats), bool(stats)
+
+
+def inspect_mixed_types(
+    geo_file,
+) -> Tuple[List[QualityIssue], bool]:
+    """Проверить текстовые поля, где смешаны числа и текст."""
+
+    stats = _numeric_text_stats(geo_file)
+    return mixed_type_issues(stats), bool(stats)
 
 
 def _inspect_numeric_layer(
@@ -278,7 +384,9 @@ def _inspect_numeric_layer(
     numeric = {index: 0 for index, _name in indexes}
     integer = {index: 0 for index, _name in indexes}
     real = {index: 0 for index, _name in indexes}
+    text = {index: 0 for index, _name in indexes}
     examples = {index: "" for index, _name in indexes}
+    text_examples = {index: "" for index, _name in indexes}
     feature_count = 0
 
     try:
@@ -290,15 +398,18 @@ def _inspect_numeric_layer(
                 if not isinstance(value, str):
                     continue
                 kind = numeric_text_kind(value)
-                if not kind:
-                    continue
-                numeric[index] += 1
-                if kind == "integer":
-                    integer[index] += 1
-                else:
-                    real[index] += 1
-                if not examples[index]:
-                    examples[index] = value.strip()
+                if kind:
+                    numeric[index] += 1
+                    if kind == "integer":
+                        integer[index] += 1
+                    else:
+                        real[index] += 1
+                    if not examples[index]:
+                        examples[index] = value.strip()
+                elif value.strip():
+                    text[index] += 1
+                    if not text_examples[index]:
+                        text_examples[index] = value.strip()
     except Exception:
         return None
 
@@ -317,6 +428,8 @@ def _inspect_numeric_layer(
                 integer=integer[index],
                 real=real[index],
                 example=examples[index],
+                text=text[index],
+                text_example=text_examples[index],
             )
             for index, name in indexes
         ),

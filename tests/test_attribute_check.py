@@ -6,6 +6,9 @@ from zgeo.attribute_check import (
     date_year_out_of_range,
     edge_whitespace,
     escape_control_characters,
+    escape_mojibake,
+    looks_like_mojibake,
+    repair_mojibake,
     escape_edge_whitespace,
     escape_inner_spaces,
     has_inner_spaces,
@@ -69,6 +72,37 @@ class DateParsingTests(unittest.TestCase):
             date_year_out_of_range("2024-05-01", max_year=2026)
         )
         self.assertIsNone(date_year_out_of_range("abc", max_year=2026))
+
+
+class MojibakeTests(unittest.TestCase):
+    def test_latin1_mojibake_is_repaired(self) -> None:
+        broken = "Москва".encode("utf-8").decode("latin-1")
+        self.assertTrue(looks_like_mojibake(broken))
+        self.assertEqual(repair_mojibake(broken), "Москва")
+
+    def test_cp1251_mojibake_is_repaired(self) -> None:
+        broken = "Привет мир".encode("utf-8").decode("cp1251")
+        self.assertTrue(looks_like_mojibake(broken))
+        self.assertEqual(repair_mojibake(broken), "Привет мир")
+
+    def test_marker_based_detection(self) -> None:
+        self.assertTrue(looks_like_mojibake("ÐœÐ¾ÑÐºÐ²Ð°"))
+        self.assertTrue(looks_like_mojibake("ÐŸÑ€Ð¸Ð²ÐµÑ‚"))
+
+    def test_clean_text_is_not_reported(self) -> None:
+        for value in ("Москва", "ESPAÑA", "café", "Привет", "hello", ""):
+            with self.subTest(value=value):
+                self.assertFalse(looks_like_mojibake(value))
+                self.assertEqual(repair_mojibake(value), "")
+
+    def test_plain_latin_is_skipped(self) -> None:
+        self.assertFalse(looks_like_mojibake("Moscow"))
+        self.assertEqual(repair_mojibake("Moscow"), "")
+
+    def test_escape_is_truncated(self) -> None:
+        escaped = escape_mojibake("x" * 100, limit=10)
+        self.assertEqual(escaped, "x" * 10 + "…")
+        self.assertEqual(escape_mojibake("  short  "), "short")
 
 
 class NumericTextTests(unittest.TestCase):

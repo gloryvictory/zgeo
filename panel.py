@@ -53,25 +53,31 @@ from qgis.PyQt.QtWidgets import (
 
 from .charts import BarChart, BarDatum
 from .check_timing import TimingRecord, build_timing_rows
+from .content_check import inspect_content_mismatch
 from .copy_files import build_copy_plan, copy_plan
 from .check_dialog import (
     CHECK_ATTRIBUTE_DUPLICATES,
     CHECK_ATTRIBUTE_FILL,
     CHECK_BLANK_STRINGS,
+    CHECK_EMPTY_FIELDS,
     CHECK_CONTROL_CHARS,
     CHECK_CATEGORY_ATTRIBUTE,
     CHECK_CATEGORY_SPATIAL,
     CHECK_EDGE_SPACES,
     CHECK_INNER_SPACES,
     CHECK_NUMERIC_TEXT,
+    CHECK_MIXED_TYPES,
+    CHECK_TEXT_ENCODING,
     CHECK_TEXT_LENGTH,
     CHECK_DATE_RANGE,
     CHECK_SUSPICIOUS_FIELD_NAMES,
+    CHECK_CONTENT_MISMATCH,
     CHECK_COORDINATES,
     CHECK_CRS_QUALITY,
     CHECK_COUNT_QUALITY,
     CHECK_DATASET_INTEGRITY,
     CHECK_DUPLICATES,
+    CHECK_DUPLICATES_COMBINED,
     CHECK_FIELD_NAME_DUPLICATES,
     CHECK_FIELD_NAMES,
     CHECK_FILE_PATHS,
@@ -98,7 +104,10 @@ from .attribute_fill import (
     inspect_blank_strings,
     inspect_control_characters,
     inspect_edge_spaces,
+    inspect_empty_fields,
     inspect_inner_spaces,
+    inspect_mixed_types,
+    inspect_text_encoding,
     inspect_numeric_text,
     inspect_date_range,
     inspect_suspicious_field_names,
@@ -119,6 +128,7 @@ from .file_info import (
 )
 from .formatting import format_size
 from .geometry_check import (
+    inspect_duplicate_attributes_geometry,
     inspect_duplicate_geometries,
     inspect_geometry_and_coordinates,
 )
@@ -176,11 +186,15 @@ ICON_PATH = Path(__file__).with_name("icon.svg")
 VALUE_CHECKS = frozenset(
     {CHECK_SIZE, CHECK_CRS_QUALITY, CHECK_COUNT_QUALITY}
 )
+DETAIL_COUNTED_CHECKS = frozenset(
+    {CHECK_DUPLICATES, CHECK_DUPLICATES_COMBINED}
+)
 CHECKS_TOOLTIP = (
     "Проверки: уточнить размер, систему координат и количество элементов, "
     "проверить читаемость файлов, JSON и GeoJSON, имена полей, "
-    "дубли имён полей, заполненность атрибутов, управляющие и невидимые "
-    "символы, имена и пути файлов, набор данных, целостность "
+    "дубли имён полей, заполненность атрибутов, поля-пустышки, "
+    "управляющие и невидимые символы, смешанные типы в поле, "
+    "имена и пути файлов, набор данных, целостность "
     "GeoPackage/SQLite, метаданные и CRS, .prj, геометрии, топологию, "
     "дубли, координаты."
 )
@@ -3066,7 +3080,10 @@ class ZGeoPanel(QDockWidget):
 
         path_key = str(geo_file.path)
         if applicable:
-            count = len(issues)
+            if check in DETAIL_COUNTED_CHECKS:
+                count = sum(1 for issue in issues if issue.detail_only)
+            else:
+                count = len(issues)
             text = "0" if count == 0 else str(count)
         else:
             count = None
@@ -3130,7 +3147,7 @@ class ZGeoPanel(QDockWidget):
                 if geo_file.extension in (".shp", ".mif", ".tab")
             ]
 
-        if check == CHECK_READABILITY:
+        if check in (CHECK_READABILITY, CHECK_CONTENT_MISMATCH):
             return list(self._files)
 
         if check == CHECK_GPKG_INTEGRITY:
@@ -3347,6 +3364,8 @@ class ZGeoPanel(QDockWidget):
 
         if check == CHECK_ATTRIBUTE_FILL:
             return inspect_attribute_fill(geo_file)
+        if check == CHECK_EMPTY_FIELDS:
+            return inspect_empty_fields(geo_file)
         if check == CHECK_CONTROL_CHARS:
             return inspect_control_characters(geo_file)
         if check == CHECK_BLANK_STRINGS:
@@ -3357,6 +3376,10 @@ class ZGeoPanel(QDockWidget):
             return inspect_inner_spaces(geo_file)
         if check == CHECK_NUMERIC_TEXT:
             return inspect_numeric_text(geo_file)
+        if check == CHECK_MIXED_TYPES:
+            return inspect_mixed_types(geo_file)
+        if check == CHECK_TEXT_ENCODING:
+            return inspect_text_encoding(geo_file)
         if check == CHECK_TEXT_LENGTH:
             return inspect_text_length(geo_file)
         if check == CHECK_DATE_RANGE:
@@ -3365,6 +3388,8 @@ class ZGeoPanel(QDockWidget):
             return inspect_suspicious_field_names(geo_file)
         if check == CHECK_ATTRIBUTE_DUPLICATES:
             return inspect_attribute_duplicates(geo_file)
+        if check == CHECK_CONTENT_MISMATCH:
+            return inspect_content_mismatch(geo_file, check)
         if check == CHECK_READABILITY:
             return self._inspect_readability(geo_file)
         if check == CHECK_GPKG_INTEGRITY:
@@ -3379,6 +3404,8 @@ class ZGeoPanel(QDockWidget):
             return self._inspect_prj_file(geo_file)
         if check == CHECK_DUPLICATES:
             return self._inspect_duplicates(geo_file)
+        if check == CHECK_DUPLICATES_COMBINED:
+            return self._inspect_duplicates_combined(geo_file)
         if check == CHECK_FILE_PATHS:
             return self._inspect_file_paths(geo_file)
 
@@ -3611,6 +3638,18 @@ class ZGeoPanel(QDockWidget):
         found, applicable = inspect_duplicate_geometries(geo_file)
         issues = [
             replace(issue, check=CHECK_DUPLICATES) for issue in found
+        ]
+        return issues, applicable
+
+    def _inspect_duplicates_combined(
+        self, geo_file: GeoFile
+    ) -> Tuple[List[QualityIssue], bool]:
+        """Найти объекты, совпадающие и по атрибутам, и по геометрии."""
+
+        found, applicable = inspect_duplicate_attributes_geometry(geo_file)
+        issues = [
+            replace(issue, check=CHECK_DUPLICATES_COMBINED)
+            for issue in found
         ]
         return issues, applicable
 

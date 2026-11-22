@@ -32,6 +32,8 @@ $stagingPlugin = Join-Path $stagingRoot $pluginName
 
 try {
     New-Item -ItemType Directory -Path $stagingPlugin -Force | Out-Null
+
+
     New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 
     $excludedNames = @(
@@ -42,6 +44,7 @@ try {
         ".empryo",
         ".git",
         ".gitignore",
+        "AGENTS.md",
         ".idea",
         ".vscode"
     )

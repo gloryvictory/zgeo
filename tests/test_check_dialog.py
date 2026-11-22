@@ -199,6 +199,28 @@ class CheckDefinitionsTests(unittest.TestCase):
             "CHECK_SUSPICIOUS_FIELD_NAMES", _definition_keys()
         )
 
+    def test_text_encoding_check_is_registered(self) -> None:
+        constants = _check_constants()
+        self.assertEqual(
+            constants.get("CHECK_TEXT_ENCODING"), "text_encoding"
+        )
+        self.assertIn("CHECK_TEXT_ENCODING", _definition_keys())
+
+    def test_content_mismatch_check_is_registered(self) -> None:
+        constants = _check_constants()
+        self.assertEqual(
+            constants.get("CHECK_CONTENT_MISMATCH"), "content_mismatch"
+        )
+        self.assertIn("CHECK_CONTENT_MISMATCH", _definition_keys())
+
+    def test_combined_duplicates_check_is_registered(self) -> None:
+        constants = _check_constants()
+        self.assertEqual(
+            constants.get("CHECK_DUPLICATES_COMBINED"),
+            "duplicate_combined",
+        )
+        self.assertIn("CHECK_DUPLICATES_COMBINED", _definition_keys())
+
     def test_results_cells_open_a_details_dialog(self) -> None:
         tree = _module()
         class_node = next(
@@ -228,6 +250,20 @@ class CheckDefinitionsTests(unittest.TestCase):
         )
         self.assertIn("CHECK_TOPOLOGY", _definition_keys())
 
+    def test_empty_fields_check_is_registered(self) -> None:
+        constants = _check_constants()
+        self.assertEqual(
+            constants.get("CHECK_EMPTY_FIELDS"), "empty_fields"
+        )
+        self.assertIn("CHECK_EMPTY_FIELDS", _definition_keys())
+
+    def test_mixed_types_check_is_registered(self) -> None:
+        constants = _check_constants()
+        self.assertEqual(
+            constants.get("CHECK_MIXED_TYPES"), "mixed_types"
+        )
+        self.assertIn("CHECK_MIXED_TYPES", _definition_keys())
+
     def test_new_checks_are_disabled_by_default(self) -> None:
         unchecked = set()
         for node in ast.walk(_module()):
@@ -255,20 +291,25 @@ class CheckDefinitionsTests(unittest.TestCase):
         self.assertIn("CHECK_READABILITY", unchecked)
         self.assertIn("CHECK_GPKG_INTEGRITY", unchecked)
         self.assertIn("CHECK_DUPLICATES", unchecked)
+        self.assertIn("CHECK_DUPLICATES_COMBINED", unchecked)
         self.assertIn("CHECK_FILE_PATHS", unchecked)
+        self.assertIn("CHECK_CONTENT_MISMATCH", unchecked)
         self.assertIn("CHECK_GEOMETRY", unchecked)
         self.assertIn("CHECK_COORDINATES", unchecked)
         self.assertIn("CHECK_GEOJSON_QUALITY", unchecked)
         self.assertIn("CHECK_ATTRIBUTE_FILL", unchecked)
+        self.assertIn("CHECK_EMPTY_FIELDS", unchecked)
         self.assertIn("CHECK_CONTROL_CHARS", unchecked)
         self.assertIn("CHECK_ATTRIBUTE_DUPLICATES", unchecked)
         self.assertIn("CHECK_BLANK_STRINGS", unchecked)
         self.assertIn("CHECK_EDGE_SPACES", unchecked)
         self.assertIn("CHECK_INNER_SPACES", unchecked)
         self.assertIn("CHECK_NUMERIC_TEXT", unchecked)
+        self.assertIn("CHECK_MIXED_TYPES", unchecked)
         self.assertIn("CHECK_TEXT_LENGTH", unchecked)
         self.assertIn("CHECK_DATE_RANGE", unchecked)
         self.assertIn("CHECK_SUSPICIOUS_FIELD_NAMES", unchecked)
+        self.assertIn("CHECK_TEXT_ENCODING", unchecked)
         self.assertIn("CHECK_TOPOLOGY", unchecked)
 
     def test_all_checks_belong_to_exactly_one_quality_tab(self) -> None:
@@ -289,15 +330,18 @@ class CheckDefinitionsTests(unittest.TestCase):
                 "CHECK_FIELD_NAMES",
                 "CHECK_FIELD_NAME_DUPLICATES",
                 "CHECK_ATTRIBUTE_FILL",
+                "CHECK_EMPTY_FIELDS",
                 "CHECK_CONTROL_CHARS",
                 "CHECK_ATTRIBUTE_DUPLICATES",
                 "CHECK_BLANK_STRINGS",
                 "CHECK_EDGE_SPACES",
                 "CHECK_INNER_SPACES",
                 "CHECK_NUMERIC_TEXT",
+                "CHECK_MIXED_TYPES",
                 "CHECK_TEXT_LENGTH",
                 "CHECK_DATE_RANGE",
                 "CHECK_SUSPICIOUS_FIELD_NAMES",
+                "CHECK_TEXT_ENCODING",
             },
         )
 

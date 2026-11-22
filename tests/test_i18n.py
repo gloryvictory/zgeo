@@ -154,10 +154,11 @@ class I18nTests(unittest.TestCase):
             "Нет файлов для выбранных проверок",
             "Проверки: уточнить размер, систему координат и количество "
             "элементов, проверить читаемость файлов, JSON и GeoJSON, имена "
-            "полей, дубли имён полей, заполненность атрибутов, управляющие и "
-            "невидимые символы, имена и пути файлов, набор данных, "
-            "целостность GeoPackage/SQLite, метаданные и CRS, .prj, "
-            "геометрии, топологию, дубли, координаты.",
+            "полей, дубли имён полей, заполненность атрибутов, "
+            "поля-пустышки, управляющие и невидимые символы, смешанные типы "
+            "в поле, имена и пути файлов, набор данных, целостность "
+            "GeoPackage/SQLite, метаданные и CRS, .prj, геометрии, "
+            "топологию, дубли, координаты.",
             "Проверка JSON на формат GeoJSON: 0 из {}",
             "Проверка JSON: {} из {} · {}",
             "Проверка JSON завершена: проверено {} · исключено {}",
@@ -522,6 +523,27 @@ class I18nTests(unittest.TestCase):
         )
 
 
+    def test_mixed_type_messages_have_english_translations(self) -> None:
+        set_language(LANGUAGE_EN)
+        sources = (
+            "Смешанные типы в поле",
+            "{} — числа {}, текст {}",
+            "Слой «{}»: смешанные типы в поле — "
+            "затронуто полей {} из {}: {}",
+            "Поле «{}»: смешанные типы — числа: {} ({}%), "
+            "текст: {} ({}%) из {} объектов",
+            "Поле «{}»: смешанные типы — числа: {} ({}%), "
+            "текст: {} ({}%) из {} объектов; примеры: «{}» и «{}»",
+        )
+        for source in sources:
+            translated = tr(source)
+            self.assertNotEqual(translated, source)
+            self.assertNotIn("Провер", translated)
+        self.assertEqual(
+            tr("Смешанные типы в поле"), "Mixed types in a field"
+        )
+
+
     def test_text_length_messages_have_english_translations(self) -> None:
         set_language(LANGUAGE_EN)
         sources = (
@@ -603,6 +625,69 @@ class I18nTests(unittest.TestCase):
             self.assertNotIn("Провер", translated)
         self.assertEqual(
             tr("Подозрительные имена полей"), "Suspicious field names"
+        )
+
+
+    def test_text_encoding_messages_have_english_translations(self) -> None:
+        set_language(LANGUAGE_EN)
+        sources = (
+            "Кодировка текста (кракозябры)",
+            "Слой «{}»: текст в неверной кодировке — "
+            "затронуто полей {} из {}: {}",
+            "Поле «{}»: текст в неверной кодировке у {} из {} "
+            "объектов ({}%); пример: «{}»",
+            "Поле «{}»: текст в неверной кодировке у {} из {} "
+            "объектов ({}%); пример: «{}», исправляется на «{}»",
+        )
+        for source in sources:
+            translated = tr(source)
+            self.assertNotEqual(translated, source)
+            self.assertNotIn("Провер", translated)
+        self.assertEqual(
+            tr("Кодировка текста (кракозябры)"), "Text encoding (mojibake)"
+        )
+
+    def test_content_mismatch_messages_have_english_translations(
+        self,
+    ) -> None:
+        set_language(LANGUAGE_EN)
+        sources = (
+            "Несоответствие расширения и содержимого",
+            "Файл «{}»: расширение {} не соответствует содержимому — "
+            "в файле {}",
+            "база SQLite",
+            "ZIP-архив",
+            "растровое изображение TIFF",
+            "файл Shapefile",
+            "текст JSON",
+            "двоичные данные неизвестного формата",
+        )
+        for source in sources:
+            translated = tr(source)
+            self.assertNotEqual(translated, source)
+            self.assertNotIn("Провер", translated)
+        self.assertEqual(
+            tr("Несоответствие расширения и содержимого"),
+            "Extension and content mismatch",
+        )
+
+    def test_combined_duplicate_messages_have_english_translations(
+        self,
+    ) -> None:
+        set_language(LANGUAGE_EN)
+        sources = (
+            "Дубли по атрибутам и геометрии",
+            "Дубль по атрибутам и геометрии: объект {} совпадает с объектом {}",
+            "Слой «{}»: дублей по атрибутам и геометрии: {}, групп: {}",
+            "Для таблиц без геометрии проверка не применяется.",
+        )
+        for source in sources:
+            translated = tr(source)
+            self.assertNotEqual(translated, source)
+            self.assertNotIn("Провер", translated)
+        self.assertEqual(
+            tr("Дубли по атрибутам и геометрии"),
+            "Attribute and geometry duplicates",
         )
 
     def test_readability_messages_have_english_translations(self) -> None:

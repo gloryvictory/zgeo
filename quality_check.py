@@ -386,6 +386,40 @@ class LayerTextLengthStats:
     def affected_fields(self) -> int:
         return sum(1 for field in self.fields if field.count)
 
+
+@dataclass(frozen=True)
+class FieldEncodingStats:
+    """Текст в неверной кодировке в одном текстовом поле."""
+
+    name: str
+    total: int
+    affected: int = 0
+    example: str = ""
+    repaired: str = ""
+
+    @property
+    def share(self) -> float:
+        if self.total <= 0:
+            return 0.0
+        return min(max(self.affected / self.total, 0.0), 1.0)
+
+
+@dataclass(frozen=True)
+class LayerEncodingStats:
+    """Текст в неверной кодировке в одном слое."""
+
+    layer: str
+    feature_count: int
+    fields: Tuple[FieldEncodingStats, ...]
+
+    @property
+    def affected_total(self) -> int:
+        return sum(field.affected for field in self.fields)
+
+    @property
+    def affected_fields(self) -> int:
+        return sum(1 for field in self.fields if field.affected)
+
 @dataclass(frozen=True)
 class FieldNumericTextStats:
     """Числа, записанные как текст, в одном текстовом поле."""
@@ -396,12 +430,20 @@ class FieldNumericTextStats:
     integer: int = 0
     real: int = 0
     example: str = ""
+    text: int = 0
+    text_example: str = ""
 
     @property
     def share(self) -> float:
         if self.total <= 0:
             return 0.0
         return min(max(self.numeric / self.total, 0.0), 1.0)
+
+    @property
+    def text_share(self) -> float:
+        if self.total <= 0:
+            return 0.0
+        return min(max(self.text / self.total, 0.0), 1.0)
 
 
 @dataclass(frozen=True)
@@ -419,6 +461,16 @@ class LayerNumericTextStats:
     @property
     def affected_fields(self) -> int:
         return sum(1 for field in self.fields if field.numeric)
+
+    @property
+    def mixed_fields(self) -> Tuple[FieldNumericTextStats, ...]:
+        return tuple(
+            field for field in self.fields if field.numeric and field.text
+        )
+
+    @property
+    def mixed_field_count(self) -> int:
+        return len(self.mixed_fields)
 
 @dataclass(frozen=True)
 class FieldInnerSpaceStats:
@@ -1582,6 +1634,33 @@ def coordinate_problem(
     return None
 
 
+def empty_field_issues(
+    layers: Sequence[LayerFillStats],
+) -> List[QualityIssue]:
+    """Найти поля, у которых все значения пустые (100% NULL)."""
+
+    issues: List[QualityIssue] = []
+
+    for layer in layers:
+        if layer.feature_count <= 0:
+            continue
+        for field in layer.fields:
+            if field.total <= 0 or field.empty < field.total:
+                continue
+            issues.append(
+                QualityIssue(
+                    "empty_fields",
+                    "Поле «{}»: 100% пустых значений "
+                    "(NULL или пустые строки) — {} из {}",
+                    (field.name, field.empty, field.total),
+                    layer=layer.layer,
+                    location=field.name,
+                )
+            )
+
+    return issues
+
+
 def attribute_fill_issues(
     layers: Sequence[LayerFillStats],
     *,
@@ -1861,6 +1940,80 @@ def text_length_issues(
 
     return issues
 
+
+def text_encoding_issues(
+    layers: Sequence[LayerEncodingStats],
+    *,
+    field_limit: int = 8,
+) -> List[QualityIssue]:
+    """Отметить поля с текстом в неверной кодировке."""
+
+    issues: List[QualityIssue] = []
+
+    for layer in layers:
+        if layer.feature_count <= 0:
+            continue
+        affected_fields = [
+            field for field in layer.fields if field.affected
+        ]
+        if not affected_fields:
+            continue
+
+        parts = [
+            tr(
+                "{} — {} из {}",
+                field.name,
+                field.affected,
+                field.total,
+            )
+            for field in affected_fields[:field_limit]
+        ]
+        if len(affected_fields) > field_limit:
+            parts.append("…")
+        issues.append(
+            QualityIssue(
+                "text_encoding",
+                "Слой «{}»: текст в неверной кодировке — "
+                "затронуто полей {} из {}: {}",
+                (
+                    layer.layer,
+                    len(affected_fields),
+                    len(layer.fields),
+                    ", ".join(parts),
+                ),
+                layer=layer.layer,
+                location="Атрибуты",
+            )
+        )
+
+        for field in affected_fields:
+            args: List[object] = [
+                field.name,
+                field.affected,
+                field.total,
+                _fill_percent(field.share),
+                field.example,
+            ]
+            message = (
+                "Поле «{}»: текст в неверной кодировке у {} из {} "
+                "объектов ({}%); пример: «{}»"
+            )
+            if field.repaired:
+                message = message + ", исправляется на «{}»"
+                args.append(field.repaired)
+            issues.append(
+                QualityIssue(
+                    "text_encoding",
+                    message,
+                    tuple(args),
+                    layer=layer.layer,
+                    location=field.name,
+                    detail_only=True,
+                )
+            )
+
+    return issues
+
 def numeric_text_issues(
     layers: Sequence[LayerNumericTextStats],
     *,
@@ -1934,6 +2087,80 @@ def numeric_text_issues(
             )
 
     return issues
+
+
+def mixed_type_issues(
+    layers: Sequence[LayerNumericTextStats],
+    *,
+    field_limit: int = 8,
+) -> List[QualityIssue]:
+    """Отметить текстовые поля, где смешаны числа и текст."""
+
+    issues: List[QualityIssue] = []
+
+    for layer in layers:
+        if layer.feature_count <= 0:
+            continue
+        mixed_fields = list(layer.mixed_fields)
+        if not mixed_fields:
+            continue
+
+        parts = [
+            tr(
+                "{} — числа {}, текст {}",
+                field.name,
+                field.numeric,
+                field.text,
+            )
+            for field in mixed_fields[:field_limit]
+        ]
+        if len(mixed_fields) > field_limit:
+            parts.append("…")
+        issues.append(
+            QualityIssue(
+                "mixed_types",
+                "Слой «{}»: смешанные типы в поле — "
+                "затронуто полей {} из {}: {}",
+                (
+                    layer.layer,
+                    len(mixed_fields),
+                    len(layer.fields),
+                    ", ".join(parts),
+                ),
+                layer=layer.layer,
+                location="Атрибуты",
+            )
+        )
+
+        for field in mixed_fields:
+            args: List[object] = [
+                field.name,
+                field.numeric,
+                _fill_percent(field.share),
+                field.text,
+                _fill_percent(field.text_share),
+                field.total,
+            ]
+            message = (
+                "Поле «{}»: смешанные типы — числа: {} ({}%), "
+                "текст: {} ({}%) из {} объектов"
+            )
+            if field.example and field.text_example:
+                message = message + "; примеры: «{}» и «{}»"
+                args.extend([field.example, field.text_example])
+            issues.append(
+                QualityIssue(
+                    "mixed_types",
+                    message,
+                    tuple(args),
+                    layer=layer.layer,
+                    location=field.name,
+                    detail_only=True,
+                )
+            )
+
+    return issues
+
 
 def inner_space_issues(
     layers: Sequence[LayerInnerSpaceStats],
@@ -2245,3 +2472,58 @@ def topology_summary_issues(
 
 
 
+
+
+def combined_duplicate_issues(
+    layer_name: str,
+    entries: Sequence[Tuple[int, object]],
+    *,
+    max_detail: int = 1000,
+) -> List[QualityIssue]:
+    """Найти объекты, у которых совпадают и атрибуты, и геометрия.
+
+    entries — пары «идентификатор объекта, ключ»; ключом служит пара из
+    значений всех атрибутов и WKB геометрии, поэтому совпадают только
+    объекты с одинаковыми атрибутами и одинаковой геометрией.
+    """
+
+    seen: Dict[object, int] = {}
+    counts: Dict[object, int] = {}
+    details: List[QualityIssue] = []
+    duplicates = 0
+
+    for feature_id, key in entries:
+        counts[key] = counts.get(key, 0) + 1
+        original = seen.get(key)
+        if original is None:
+            seen[key] = feature_id
+            continue
+        duplicates += 1
+        if len(details) < max_detail:
+            details.append(
+                QualityIssue(
+                    "duplicate_combined",
+                    "Дубль по атрибутам и геометрии: объект {} "
+                    "совпадает с объектом {}",
+                    (feature_id, original),
+                    layer=layer_name,
+                    feature_id=feature_id,
+                    location="Атрибуты и геометрия",
+                    detail_only=True,
+                )
+            )
+
+    if not duplicates:
+        return []
+
+    groups = sum(1 for value in counts.values() if value > 1)
+    details.append(
+        QualityIssue(
+            "duplicate_combined",
+            "Слой «{}»: дублей по атрибутам и геометрии: {}, групп: {}",
+            (layer_name, duplicates, groups),
+            layer=layer_name,
+            location="Атрибуты и геометрия",
+        )
+    )
+    return details

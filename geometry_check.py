@@ -24,6 +24,7 @@ from .file_info import vector_layers
 from .i18n import tr
 from .quality_check import (
     QualityIssue,
+    combined_duplicate_issues,
     coordinate_problem,
     duplicate_geometry_issues,
 )
@@ -206,6 +207,57 @@ def inspect_duplicate_geometries(
 
     return issues, applicable
 
+
+def inspect_duplicate_attributes_geometry(
+    geo_file,
+) -> Tuple[List[QualityIssue], bool]:
+    """Найти объекты, совпадающие и по атрибутам, и по геометрии."""
+
+    try:
+        layers = vector_layers(geo_file)
+    except Exception:
+        return [], False
+
+    issues: List[QualityIssue] = []
+    applicable = False
+
+    for layer in layers:
+        if not layer.isSpatial():
+            continue
+        applicable = True
+
+        entries: List[Tuple[int, object]] = []
+        try:
+            for feature_index, feature in enumerate(
+                layer.getFeatures(), start=1
+            ):
+                geometry = feature.geometry()
+                if (
+                    geometry is None
+                    or geometry.isNull()
+                    or geometry.isEmpty()
+                ):
+                    continue
+                feature_id = feature.id()
+                if feature_id is None or feature_id < 0:
+                    feature_id = feature_index
+                key = (
+                    tuple(feature.attributes()),
+                    bytes(geometry.asWkb()),
+                )
+                entries.append((feature_id, key))
+        except Exception:
+            _LOGGER.debug(
+                "Skipping layer while checking combined duplicates",
+                exc_info=True,
+            )
+            continue
+
+        issues.extend(
+            combined_duplicate_issues(layer.name(), entries)
+        )
+
+    return issues, applicable
 
 def _detail(
     check: str,

@@ -1,5 +1,38 @@
 ZGeo change log
 ===============
+Version 1.41.0 — 2026-11-22
+Previous GitHub release: v1.40.0 (2026-11-21)
+
+Overview
+--------
+ZGeo 1.41.0 adds three attribute data checks and two spatial checks: text
+encoding (mojibake), mixed types in a field, empty fields, extension and
+content mismatch, and duplicates by attributes and geometry; 32 checks in
+total.
+
+Changes in 1.41.0
+-----------------
+- Added a "Text encoding (mojibake)" check: text values that look like UTF-8
+  read with a single-byte encoding, such as "ÐœÐ¾ÑÐºÐ²Ð°" instead of "Москва",
+  reported per field with feature counts, shares, a sample and the repaired
+  text when it can be restored.
+- Added a "Mixed types in a field" check: text columns where numbers and text
+  appear in the same field, which makes Excel and SQL infer the column type
+  differently and breaks sorting, sums and filters, reported per field with
+  numeric/text counts, shares and examples.
+- Added an "Empty fields (100% NULL)" check: columns whose values are all NULL
+  or empty strings, which have nothing to export, take up space in the schema
+  and can break data exchange, reported per layer and field.
+- Added an "Extension and content mismatch" check: files whose content does not
+  match the extension, detected by magic signatures (SQLite, Shapefile, ZIP,
+  TIFF, JPEG 2000, NetCDF, HDF, Parquet, Arrow, FlatGeobuf, PMTiles, OLE2,
+  JSON, XML), reported with the detected content kind.
+- Added an "Attribute and geometry duplicates" check: features where both all
+  attribute values and the WKB geometry match, reported per layer with matching
+  pairs, duplicate and group counts; the geometry-only and attributes-only
+  checks stay as they are.
+- The results table counts duplicate findings per pair instead of counting the
+  summary line, so the number matches the detailed list.
 
 Version 1.40.0 — 2026-11-21
 Previous GitHub release: v1.39.0 (2026-11-19)
@@ -8,7 +41,7 @@ Overview
 --------
 ZGeo 1.40.0 moves the checks to two quality tabs, adds a results table with
 per-file statistics and a detailed issue dialog, an "Add to current project"
-button, and ten new attribute data checks (27 checks total).
+button, and eleven new attribute data checks (27 checks total).
 
 Changes in 1.40.0
 -----------------
@@ -57,7 +90,7 @@ Changes in 1.40.0
 - Added a "Dates outside a reasonable range" check: date, timestamp and text
   fields with years before 1900 or after the current year, including the zero
   date, reported with year bounds, feature ids and values.
-- Added a "Suspicious field names" check (27 checks total): empty names,
+- Added a "Suspicious field names" check: empty names,
   NULL/None/NaN names, digit-only names and technical import names such as
   Field1, Column3 or Unnamed: 0, reported per field with the reason.
 

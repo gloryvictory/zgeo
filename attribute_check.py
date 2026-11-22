@@ -206,6 +206,70 @@ def looks_numeric_text(value: str) -> bool:
     return bool(numeric_text_kind(value))
 
 
+
+MOJIBAKE_SOURCE_ENCODINGS = ("latin-1", "cp1252", "cp1251")
+MOJIBAKE_MARKERS = "ÐÑÃÂ"
+MOJIBAKE_SEQUENCES = ("â€", "ï»¿", "ÐŸ", "Ð¾", "Ð¡")
+
+
+def repair_mojibake(value: str, limit: int = 80) -> str:
+    """Вернуть исправленный текст, если значение похоже на кракозябры.
+
+    Кракозябры появляются, когда UTF-8 читают как однобайтовую
+    кодировку: «ÐœÐ¾ÑÐºÐ²Ð°» вместо «Москва». Значение пытаются
+    закодировать обратно в однобайтовую кодировку и снова прочитать
+    как UTF-8; если получается другой осмысленный не-ASCII текст,
+    возвращается он. Иначе возвращается пустая строка.
+    """
+
+    text = (value or "").strip()
+    if len(text) < 2 or text.isascii():
+        return ""
+
+    for source in MOJIBAKE_SOURCE_ENCODINGS:
+        try:
+            raw = text.encode(source)
+        except (UnicodeEncodeError, LookupError):
+            continue
+        try:
+            decoded = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        if decoded == text or not decoded.strip() or decoded.isascii():
+            continue
+        return decoded[:limit]
+    return ""
+
+
+def mojibake_markers(value: str) -> int:
+    """Оценить, сколько в значении признаков неверной кодировки."""
+
+    text = value or ""
+    score = sum(text.count(marker) for marker in MOJIBAKE_MARKERS)
+    for sequence in MOJIBAKE_SEQUENCES:
+        score += 2 * text.count(sequence)
+    return score
+
+
+def looks_like_mojibake(value: str) -> bool:
+    """Вернуть True, если значение похоже на текст в неверной кодировке."""
+
+    if not value or len(value.strip()) < 2 or value.isascii():
+        return False
+    if repair_mojibake(value):
+        return True
+    return mojibake_markers(value) >= 2
+
+
+def escape_mojibake(value: str, limit: int = 60) -> str:
+    """Обрезать значение для отчёта."""
+
+    text = (value or "").strip()
+    if len(text) > limit:
+        return text[:limit] + "…"
+    return text
+
+
 INNER_SPACE_RUN = 2
 
 
