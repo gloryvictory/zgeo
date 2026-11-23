@@ -330,6 +330,33 @@ class I18nTests(unittest.TestCase):
         )
         self.assertEqual(missing, [])
 
+    def test_navigation_messages_have_english_translations(self) -> None:
+        path = (
+            Path(__file__).resolve().parents[1]
+            / "problem_navigation.py"
+        )
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        sources = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            function = node.func
+            if not isinstance(function, ast.Name) or function.id != "tr":
+                continue
+            if not node.args:
+                continue
+            argument = node.args[0]
+            if isinstance(argument, ast.Constant) and isinstance(
+                argument.value, str
+            ):
+                sources.add(argument.value)
+        missing = sorted(
+            source
+            for source in sources
+            if source not in EN_TRANSLATIONS
+        )
+        self.assertEqual(missing, [])
+
     def test_geojson_quality_messages_have_english_translations(
         self,
     ) -> None:
@@ -427,6 +454,7 @@ class I18nTests(unittest.TestCase):
         sources = (
             "Дубли по атрибутам (очень долго!)",
             "Подробный список",
+            "Не удалось открыть объект: {}",
             "Закрыть",
             "Слой «{}»: полные дубли строк — объектов {} с полностью "
             "совпадающими атрибутами (объекты: {})",
@@ -688,6 +716,36 @@ class I18nTests(unittest.TestCase):
         self.assertEqual(
             tr("Дубли по атрибутам и геометрии"),
             "Attribute and geometry duplicates",
+        )
+
+    def test_navigation_messages_have_english_translations(self) -> None:
+        set_language(LANGUAGE_EN)
+        sources = (
+            "Загрузить в текущий проект и показать на карте",
+            "Загружаю объекты в проект: {}",
+            "Не удалось показать объекты: {}",
+            "Загружено слоёв: {} · выбрано объектов: {}",
+            "Открыто файлов: {}",
+            "Ошибок: {}",
+            "В выбранной ячейке нет объектов для показа",
+            "Открыт слой «{}», выбрано объектов: {}",
+            "Объекты не найдены, показан весь слой «{}»",
+            "Не удалось открыть слой «{}»: {}",
+            "Открыт слой «{}», выбран объект {}",
+            "Объект {} не найден, показан весь слой «{}»",
+            "Открыт слой «{}»",
+            "Открыт файл: {}",
+            "Файл показан в проводнике: {}",
+            "Открыта папка: {}",
+            "Не удалось открыть: {}",
+        )
+        for source in sources:
+            translated = tr(source)
+            self.assertNotEqual(translated, source)
+            self.assertNotIn("Провер", translated)
+        self.assertEqual(
+            tr("Загрузить в текущий проект и показать на карте"),
+            "Load into the current project and show on the map",
         )
 
     def test_readability_messages_have_english_translations(self) -> None:

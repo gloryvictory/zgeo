@@ -221,6 +221,111 @@ class CheckDefinitionsTests(unittest.TestCase):
         )
         self.assertIn("CHECK_DUPLICATES_COMBINED", _definition_keys())
 
+    def test_results_table_has_a_context_menu(self) -> None:
+        tree = _module()
+        class_node = next(
+            (
+                node
+                for node in tree.body
+                if isinstance(node, ast.ClassDef)
+                and node.name == "CheckResultsTable"
+            ),
+            None,
+        )
+        self.assertIsNotNone(class_node)
+        methods = {
+            node.name
+            for node in class_node.body
+            if isinstance(node, ast.FunctionDef)
+        }
+        self.assertIn("_show_context_menu", methods)
+        self.assertIn("_entries_at", methods)
+        self.assertIn("_request_load", methods)
+        source = ast.unparse(class_node)
+        self.assertIn("customContextMenuRequested", source)
+        self.assertIn("loadRequested", source)
+        self.assertIn("Загрузить в текущий проект и показать на карте", source)
+
+    def test_details_dialog_can_load_entries(self) -> None:
+        tree = _module()
+        class_node = next(
+            (
+                node
+                for node in tree.body
+                if isinstance(node, ast.ClassDef)
+                and node.name == "CheckDetailsDialog"
+            ),
+            None,
+        )
+        self.assertIsNotNone(class_node)
+        methods = {
+            node.name
+            for node in class_node.body
+            if isinstance(node, ast.FunctionDef)
+        }
+        self.assertIn("_activate_load", methods)
+        self.assertIn("_show_issue_menu", methods)
+        self.assertIn("loadRequested", ast.unparse(class_node))
+
+    def test_problem_cells_are_highlighted(self) -> None:
+        tree = _module()
+        class_node = next(
+            (
+                node
+                for node in tree.body
+                if isinstance(node, ast.ClassDef)
+                and node.name == "CheckResultsTable"
+            ),
+            None,
+        )
+        self.assertIsNotNone(class_node)
+        source = ast.unparse(class_node)
+        self.assertIn("setBackground", source)
+        self.assertIn("PROBLEM_CELL_COLOR", source)
+        set_cell = next(
+            (
+                node
+                for node in class_node.body
+                if isinstance(node, ast.FunctionDef)
+                and node.name == "_set_cell"
+            ),
+            None,
+        )
+        self.assertIsNotNone(set_cell)
+        argument_names = [arg.arg for arg in set_cell.args.args]
+        self.assertIn("failed", argument_names)
+        module_source = ast.unparse(tree)
+        self.assertIn("QColor(255, 205, 220)", module_source)
+
+    def test_load_button_click_does_not_pass_checked_flag(self) -> None:
+        tree = _module()
+        class_node = next(
+            (
+                node
+                for node in tree.body
+                if isinstance(node, ast.ClassDef)
+                and node.name == "CheckDetailsDialog"
+            ),
+            None,
+        )
+        self.assertIsNotNone(class_node)
+        source = ast.unparse(class_node)
+        self.assertNotIn("load_button.clicked.connect(self._activate_load)", source)
+        self.assertIn("lambda _checked=False: self._activate_load()", source)
+        activate = next(
+            (
+                node
+                for node in class_node.body
+                if isinstance(node, ast.FunctionDef)
+                and node.name == "_activate_load"
+            ),
+            None,
+        )
+        self.assertIsNotNone(activate)
+        body = ast.unparse(activate)
+        self.assertIn("isinstance(entries, IssueEntry)", body)
+        self.assertIn("isinstance(entries, (list, tuple))", body)
+
     def test_results_cells_open_a_details_dialog(self) -> None:
         tree = _module()
         class_node = next(
@@ -242,6 +347,31 @@ class CheckDefinitionsTests(unittest.TestCase):
         source = ast.unparse(class_node)
         self.assertIn("cellDoubleClicked", source)
         self.assertIn("CheckDetailsDialog", source)
+
+    def test_details_dialog_can_activate_an_issue(self) -> None:
+        tree = _module()
+        names = {
+            node.name
+            for node in tree.body
+            if isinstance(node, ast.ClassDef)
+        }
+        self.assertIn("IssueEntry", names)
+        class_node = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef)
+            and node.name == "CheckDetailsDialog"
+        )
+        methods = {
+            node.name
+            for node in class_node.body
+            if isinstance(node, ast.FunctionDef)
+        }
+        self.assertIn("_activate_item", methods)
+        source = ast.unparse(class_node)
+        self.assertIn("issueActivated", source)
+        self.assertIn("itemDoubleClicked", source)
+        self.assertIn("QListWidget", source)
 
     def test_topology_check_is_registered(self) -> None:
         constants = _check_constants()

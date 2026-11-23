@@ -245,7 +245,7 @@ def _build_index(entries: Sequence[_Entry]) -> QgsSpatialIndex:
     index = QgsSpatialIndex()
     for entry in entries:
         try:
-            index.insertFeature(
+            index.addFeature(
                 entry.key, entry.geometry.boundingBox()
             )
         except Exception:

@@ -1,5 +1,47 @@
 ZGeo change log
 ===============
+Version 1.41.1 — 2026-11-23
+Previous GitHub release: v1.41.0 (2026-11-22)
+
+Overview
+--------
+ZGeo 1.41.1 turns the check report into a working tool: a right click on a
+results cell loads the layers into the project and shows only the problem
+features, problem cells are highlighted in pink, and the toolbar survives QGIS
+restarts. Also fixes the topology spatial index deprecation and the date check
+for QDate values.
+
+Changes in 1.41.1
+-----------------
+- A right click on a results table cell offers "Load into the current project
+  and show on the map": the layer is opened or added, only the features of
+  that cell are selected, the map zooms to their extent and the attribute
+  table opens; file findings open the folder or the .prj file instead.
+- "Load into the current project and show on the map" adds the layer to the map
+  canvas layer set, not only to the project tree, so the features are actually
+  visible; the extent is transformed into the canvas CRS and a missing
+  zoomToFeatureIds falls back to setExtent.
+- Fixed a crash in the file navigation: Path.name was called as a method.
+- "Load into the current project and show on the map" no longer opens Explorer:
+  findings without features are skipped and counted in the status bar, and only
+  a .prj finding opens the .prj file itself.
+- The topology check uses QgsSpatialIndex.addFeature instead of the deprecated
+  insertFeature, so QGIS 3.40+ no longer logs a DeprecationWarning.
+- "Load into the current project and show on the map" now works for checks that
+  report per field: the finding carries the ids of the affected features, so the
+  layer is added, only those features are selected, the map zooms to them and
+  the attribute table opens; the date check reads QDate/QDateTime values.
+- The toolbar no longer disappears after QGIS is restarted: a restored toolbar
+  is reused instead of being deleted, hiding on shutdown is not saved, and the
+  user choice is stored in QgsSettings and applied on the next start.
+- The ZGeo toolbar is restored when QGIS hides it after startup or after a
+  project is opened: visibility is checked on several timers and on the
+  initializationCompleted and projectRead signals.
+- Results table cells with findings are highlighted in pink, with a legend next
+  to the table title.
+- The detailed issue dialog also has that button and the same context menu on
+  a single finding.
+
 Version 1.41.0 — 2026-11-22
 Previous GitHub release: v1.40.0 (2026-11-21)
 
@@ -34,6 +76,14 @@ Changes in 1.41.0
 - The results table counts duplicate findings per pair instead of counting the
   summary line, so the number matches the detailed list.
 
+Unreleased
+----------
+- A right click on a results table cell offers "Load into the current project
+  and show on the map": the layer is opened or added, only the features of
+  that cell are selected, the map zooms to their extent and the attribute
+  table opens; file findings open the folder or the .prj file instead.
+- The detailed issue dialog also has that button and the same context menu on
+  a single finding.
 Version 1.40.0 — 2026-11-21
 Previous GitHub release: v1.39.0 (2026-11-19)
 

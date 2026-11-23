@@ -54,6 +54,17 @@ def open_folder(path: Path) -> List[str]:
     return []
 
 
+def open_file(path: Path) -> List[str]:
+    """Открыть файл программой, назначенной в системе по умолчанию."""
+
+    path = Path(path)
+    try:
+        _open_file(path)
+    except OSError as error:
+        return ["{}: {}".format(path, error)]
+    return []
+
+
 def _launch(program: str, *arguments: str) -> None:
     """Запустить системную программу с фиксированным путём и без shell."""
 
@@ -68,6 +79,15 @@ def _launch(program: str, *arguments: str) -> None:
 def _open_folder(path: Path) -> None:
     if sys.platform.startswith("win"):
         _launch(_WINDOWS_EXPLORER, str(path))
+    elif sys.platform == "darwin":
+        _launch(_MACOS_OPEN, str(path))
+    else:
+        _launch(_LINUX_OPEN, str(path))
+
+
+def _open_file(path: Path) -> None:
+    if sys.platform.startswith("win"):
+        os.startfile(str(path))  # type: ignore[attr-defined]  # nosec B606
     elif sys.platform == "darwin":
         _launch(_MACOS_OPEN, str(path))
     else:

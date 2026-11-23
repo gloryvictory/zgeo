@@ -29,8 +29,16 @@ class ProjectLoaderSourceTests(unittest.TestCase):
     def test_expected_entry_points_exist(self) -> None:
         functions = _functions()
         self.assertIn("load_files_into_project", functions)
+        self.assertIn("ensure_file_layer", functions)
+        self.assertIn("_match_layer", functions)
         self.assertIn("_file_layers", functions)
         self.assertIn("_normalized_source", functions)
+
+    def test_ensure_layer_reuses_existing_source(self) -> None:
+        source = ast.unparse(_functions()["ensure_file_layer"])
+        self.assertIn("addMapLayer", source)
+        self.assertIn("_normalized_source", source)
+        self.assertIn("_match_layer", source)
 
     def test_loader_adds_vector_and_raster_layers(self) -> None:
         source = ast.unparse(_functions()["_file_layers"])

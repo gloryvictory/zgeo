@@ -117,6 +117,18 @@ class QualityIssue:
     feature_id: Optional[int] = None
     location: str = ""
     detail_only: bool = False
+    feature_ids: Tuple[int, ...] = ()
+
+    @property
+    def all_feature_ids(self) -> Tuple[int, ...]:
+        """Все объекты замечания — для выделения на карте."""
+
+        ids: List[int] = []
+        for feature_id in (self.feature_id, *self.feature_ids):
+            if feature_id is None or feature_id in ids:
+                continue
+            ids.append(feature_id)
+        return tuple(ids)
 
 
 @dataclass(frozen=True)
@@ -244,6 +256,7 @@ class FieldControlStats:
     features_with_chars: int
     characters: Tuple[str, ...] = ()
     example: str = ""
+    feature_ids: Tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -318,6 +331,14 @@ class FieldDateRangeStats:
     latest: int = 0
 
     @property
+    def feature_ids(self) -> Tuple[int, ...]:
+        """Объекты с датой вне диапазона."""
+
+        return tuple(
+            feature_id for feature_id, _value in self.invalid
+        )
+
+    @property
     def count(self) -> int:
         return len(self.invalid)
 
@@ -366,6 +387,14 @@ class FieldTextLengthStats:
         return min(max(self.count / self.total, 0.0), 1.0)
 
     @property
+    def feature_ids(self) -> Tuple[int, ...]:
+        """Объекты с аномальной длиной значения."""
+
+        return tuple(
+            feature_id for feature_id, _length in self.outliers
+        )
+
+    @property
     def longest(self) -> int:
         return max((length for _id, length in self.outliers), default=0)
 
@@ -396,6 +425,7 @@ class FieldEncodingStats:
     affected: int = 0
     example: str = ""
     repaired: str = ""
+    feature_ids: Tuple[int, ...] = ()
 
     @property
     def share(self) -> float:
@@ -432,6 +462,8 @@ class FieldNumericTextStats:
     example: str = ""
     text: int = 0
     text_example: str = ""
+    feature_ids: Tuple[int, ...] = ()
+    text_feature_ids: Tuple[int, ...] = ()
 
     @property
     def share(self) -> float:
@@ -480,6 +512,7 @@ class FieldInnerSpaceStats:
     total: int
     affected: int
     example: str = ""
+    feature_ids: Tuple[int, ...] = ()
 
     @property
     def share(self) -> float:
@@ -514,6 +547,7 @@ class FieldEdgeSpaceStats:
     leading: int = 0
     trailing: int = 0
     example: str = ""
+    feature_ids: Tuple[int, ...] = ()
 
     @property
     def share(self) -> float:
@@ -545,6 +579,7 @@ class FieldBlankStats:
     name: str
     total: int
     blank: int
+    feature_ids: Tuple[int, ...] = ()
 
     @property
     def share(self) -> float:
@@ -1935,6 +1970,7 @@ def text_length_issues(
                     layer=layer.layer,
                     location=field.name,
                     detail_only=True,
+                    feature_ids=field.feature_ids,
                 )
             )
 
@@ -2156,6 +2192,7 @@ def mixed_type_issues(
                     layer=layer.layer,
                     location=field.name,
                     detail_only=True,
+                    feature_ids=field.feature_ids,
                 )
             )
 

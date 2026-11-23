@@ -6,8 +6,8 @@ import html
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from qgis.PyQt.QtCore import Qt, pyqtSignal
-from qgis.PyQt.QtGui import QFont
+from qgis.PyQt.QtCore import Qt, QTimer, pyqtSignal
+from qgis.PyQt.QtGui import QBrush, QColor, QFont
 from qgis.PyQt.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -18,6 +18,8 @@ from qgis.PyQt.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMenu,
     QPushButton,
     QScrollArea,
@@ -31,12 +33,13 @@ from qgis.PyQt.QtWidgets import (
 )
 
 from .i18n import tr
+from .quality_check import QualityIssue
 from .table_export import (
     export_rows_with_dialog,
     export_rows_with_html_dialog,
 )
 
-from .i18n import tr
+PROBLEM_CELL_COLOR = QColor(255, 205, 220)
 
 CHECK_SIZE = "refine_size"
 CHECK_READABILITY = "readability"
@@ -236,6 +239,22 @@ class CheckDefinition:
     checked: bool = True
     details: Tuple[str, ...] = ()
     examples: Tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class IssueEntry:
+    """Замечание в подробном списке и путь к его файлу."""
+
+    issue: QualityIssue
+    path: str
+
+    @property
+    def text(self) -> str:
+        return tr(self.issue.message, *self.issue.args)
+
+    @property
+    def can_navigate(self) -> bool:
+        return bool(self.path)
 
 
 def check_definitions(
@@ -1967,10 +1986,13 @@ def _apply_font(
 class CheckDetailsDialog(QDialog):
     """Подробный список замечаний по одной ячейке результатов."""
 
+    issueActivated = pyqtSignal(object)
+    loadRequested = pyqtSignal(object)
+
     def __init__(
         self,
         title: str,
-        details: Sequence[str],
+        entries: Sequence[IssueEntry],
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
@@ -1987,24 +2009,127 @@ class CheckDetailsDialog(QDialog):
         _apply_font(caption, 1, bold=True)
         layout.addWidget(caption)
 
-        self.browser = QTextBrowser()
-        self.browser.setOpenExternalLinks(False)
-        self.browser.setReadOnly(True)
-        self.browser.setPlainText("\n".join(details))
-        layout.addWidget(self.browser, 1)
+        hint = QLabel(tr("Двойной щелчок открывает объект на карте"))
+        hint.setWordWrap(True)
+        _apply_font(hint, -1)
+        layout.addWidget(hint)
+
+        self.issue_list = QListWidget()
+        self.issue_list.setWordWrap(True)
+        self.issue_list.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        for entry in entries:
+            item = QListWidgetItem(entry.text)
+            item.setData(Qt.ItemDataRole.UserRole, entry)
+            item.setToolTip(entry.text)
+            self.issue_list.addItem(item)
+        layout.addWidget(self.issue_list, 1)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Close, parent=self
         )
+        self.show_button = QPushButton(tr("Показать"))
+        self.show_button.setEnabled(False)
+        buttons.addButton(
+            self.show_button, QDialogButtonBox.ButtonRole.ActionRole
+        )
+        self.load_button = QPushButton(
+            tr("Загрузить в текущий проект и показать на карте")
+        )
+        self.load_button.setEnabled(bool(entries))
+        buttons.addButton(
+            self.load_button, QDialogButtonBox.ButtonRole.ActionRole
+        )
+        self.load_button.clicked.connect(
+            lambda _checked=False: self._activate_load()
+        )
         buttons.rejected.connect(self.reject)
+        self.show_button.clicked.connect(self._activate_current)
         close_button = buttons.button(QDialogButtonBox.StandardButton.Close)
         if close_button is not None:
             close_button.setText(tr("Закрыть"))
         layout.addWidget(buttons)
 
+        self.issue_list.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self.issue_list.customContextMenuRequested.connect(
+            self._show_issue_menu
+        )
+        self._entries = tuple(entries)
+        self.issue_list.itemDoubleClicked.connect(self._activate_item)
+        self.issue_list.currentItemChanged.connect(
+            lambda current, _previous: self._update_show_button(current)
+        )
+        if self.issue_list.count():
+            self.issue_list.setCurrentRow(0)
+        self._update_show_button(self.issue_list.currentItem())
+
+    def _show_issue_menu(self, position) -> None:
+        """Меню перехода к одному замечанию списка."""
+
+        item = self.issue_list.itemAt(position)
+        if item is None:
+            return
+        entry = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(entry, IssueEntry) or not entry.can_navigate:
+            return
+
+        menu = QMenu(self)
+        load_action = menu.addAction(
+            tr("Загрузить в текущий проект и показать на карте")
+        )
+        load_action.triggered.connect(
+            lambda _checked=False: self._activate_load([entry])
+        )
+        menu.exec(self.issue_list.viewport().mapToGlobal(position))
+
+    def _activate_load(self, entries=None) -> None:
+        """Загрузить замечания в проект и показать объекты на карте."""
+
+        if isinstance(entries, IssueEntry):
+            chosen = (entries,)
+        elif isinstance(entries, (list, tuple)):
+            chosen = tuple(
+                entry for entry in entries
+                if isinstance(entry, IssueEntry)
+            )
+        else:
+            current = self.issue_list.currentItem()
+            entry = current.data(Qt.ItemDataRole.UserRole) if current else None
+            chosen = (entry,) if isinstance(entry, IssueEntry) else ()
+        if not chosen:
+            return
+        self.accept()
+        QTimer.singleShot(
+            0, lambda: self.loadRequested.emit(chosen)
+        )
+
+    def _update_show_button(self, item: Optional[QListWidgetItem]) -> None:
+        entry = item.data(Qt.ItemDataRole.UserRole) if item else None
+        self.show_button.setEnabled(
+            isinstance(entry, IssueEntry) and entry.can_navigate
+        )
+
+    def _activate_current(self) -> None:
+        self._activate_item(self.issue_list.currentItem())
+
+    def _activate_item(self, item: Optional[QListWidgetItem]) -> None:
+        if item is None:
+            return
+        entry = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(entry, IssueEntry) or not entry.can_navigate:
+            return
+        self.accept()
+        QTimer.singleShot(0, lambda: self.issueActivated.emit(entry))
+
 
 class CheckResultsTable(QWidget):
     """Таблица результатов: строки — файлы, колонки — проверки."""
+
+    issueActivated = pyqtSignal(object)
+    loadRequested = pyqtSignal(object)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -2013,7 +2138,7 @@ class CheckResultsTable(QWidget):
         self._labels: Dict[str, str] = {}
         self._column_by_check: Dict[str, int] = {}
         self._row_by_path: Dict[str, int] = {}
-        self._details: Dict[Tuple[int, int], Tuple[str, ...]] = {}
+        self._details: Dict[Tuple[int, int], Tuple[IssueEntry, ...]] = {}
         self._running = False
 
         layout = QVBoxLayout(self)
@@ -2026,6 +2151,9 @@ class CheckResultsTable(QWidget):
         self.title_label = QLabel(tr("Результаты проверок"))
         _apply_font(self.title_label, 0, bold=True)
         header.addWidget(self.title_label)
+        self.legend_label = QLabel(tr("Розовые ячейки — найдены проблемы"))
+        _apply_font(self.legend_label, -1)
+        header.addWidget(self.legend_label)
         header.addStretch(1)
         self.header_actions = QHBoxLayout()
         self.header_actions.setContentsMargins(0, 0, 0, 0)
@@ -2050,6 +2178,12 @@ class CheckResultsTable(QWidget):
         )
         self.table.setMinimumHeight(120)
         self.table.cellDoubleClicked.connect(self._show_cell_details)
+        self.table.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self.table.customContextMenuRequested.connect(
+            self._show_context_menu
+        )
         layout.addWidget(self.table, 1)
 
         self.export_button = QToolButton()
@@ -2125,7 +2259,7 @@ class CheckResultsTable(QWidget):
         check: str,
         text: str,
         number: Optional[int] = None,
-        details: Optional[Sequence[str]] = None,
+        issues: Optional[Sequence[QualityIssue]] = None,
     ) -> None:
         """Записать статистику проверки для одного файла."""
 
@@ -2133,10 +2267,15 @@ class CheckResultsTable(QWidget):
         column = self._column_by_check.get(check)
         if row is None or column is None:
             return
-        self._set_cell(row, column, text, number)
+        entries = tuple(
+            IssueEntry(issue=issue, path=path_key) for issue in issues
+        ) if issues else ()
+        self._set_cell(
+            row, column, text, number, bool(entries)
+        )
         item = self.table.item(row, column)
-        if details:
-            self._details[(row, column)] = tuple(details)
+        if entries:
+            self._details[(row, column)] = entries
             if item is not None:
                 item.setToolTip(
                     tr(
@@ -2187,6 +2326,7 @@ class CheckResultsTable(QWidget):
         column: int,
         text: str,
         number: Optional[int],
+        failed: bool = False,
     ) -> None:
         item = self.table.item(row, column)
         if item is None:
@@ -2194,6 +2334,10 @@ class CheckResultsTable(QWidget):
             self.table.setItem(row, column, item)
         item.setText(text)
         item.setData(Qt.ItemDataRole.UserRole, number)
+        if failed:
+            item.setBackground(QBrush(PROBLEM_CELL_COLOR))
+        else:
+            item.setBackground(QBrush())
         item.setTextAlignment(
             Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
         )
@@ -2201,7 +2345,7 @@ class CheckResultsTable(QWidget):
     def _show_cell_details(self, row: int, column: int) -> None:
         """Открыть подробный список замечаний для ячейки таблицы."""
 
-        details = self._details.get((row, column))
+        details = self._entries_at(row, column)
         if not details:
             return
 
@@ -2212,7 +2356,61 @@ class CheckResultsTable(QWidget):
         caption = "{}: {}".format(file_name, title) if title else file_name
 
         dialog = CheckDetailsDialog(caption, details, self)
+        dialog.issueActivated.connect(self.issueActivated.emit)
+        dialog.loadRequested.connect(self.loadRequested.emit)
         dialog.exec()
+
+    def _show_context_menu(self, position) -> None:
+        """Открыть меню перехода к объектам проблемной ячейки."""
+
+        item = self.table.itemAt(position)
+        if item is None:
+            return
+        row = item.row()
+        column = item.column()
+        entries = self._entries_at(row, column)
+
+        menu = QMenu(self)
+        load_action = menu.addAction(
+            tr("Загрузить в текущий проект и показать на карте")
+        )
+        load_action.setEnabled(bool(entries))
+        load_action.triggered.connect(
+            lambda _checked=False: self._request_load(row, column)
+        )
+        if entries:
+            details_action = menu.addAction(tr("Подробный список"))
+            details_action.triggered.connect(
+                lambda _checked=False: self._show_cell_details(row, column)
+            )
+        menu.exec(self.table.viewport().mapToGlobal(position))
+
+    def _entries_at(self, row: int, column: int) -> Tuple[IssueEntry, ...]:
+        """Замечания ячейки, а для колонки «Файл» — все замечания строки."""
+
+        direct = self._details.get((row, column))
+        if direct:
+            return direct
+        if column != 0:
+            return ()
+
+        collected: List[IssueEntry] = []
+        seen = set()
+        for index in range(self.table.columnCount()):
+            for entry in self._details.get((row, index), ()):
+                key = (entry.path, id(entry.issue))
+                if key in seen:
+                    continue
+                seen.add(key)
+                collected.append(entry)
+        return tuple(collected)
+
+    def _request_load(self, row: int, column: int) -> None:
+        """Попросить показать объекты ячейки на карте."""
+
+        entries = self._entries_at(row, column)
+        if entries:
+            self.loadRequested.emit(entries)
 
     def _update_export_buttons(self) -> None:
         enabled = self.has_results() and not self._running
@@ -2267,6 +2465,9 @@ class CheckResultsTable(QWidget):
 
     def retranslate_ui(self) -> None:
         self.title_label.setText(tr("Результаты проверок"))
+        self.legend_label.setText(
+            tr("Розовые ячейки — найдены проблемы")
+        )
         self.export_button.setText(tr("Экспорт"))
         self.export_button.setToolTip(
             tr("Сохранить таблицу результатов в файл")
@@ -2288,6 +2489,8 @@ class CheckCategoryPage(QWidget):
     """Закладка с проверками одной категории качества."""
 
     runRequested = pyqtSignal(str, object)
+    issueActivated = pyqtSignal(object)
+    loadRequested = pyqtSignal(object)
 
     def __init__(
         self,
@@ -2345,6 +2548,8 @@ class CheckCategoryPage(QWidget):
         self.selection.setMinimumHeight(120)
 
         self.results = CheckResultsTable()
+        self.results.issueActivated.connect(self.issueActivated.emit)
+        self.results.loadRequested.connect(self.loadRequested.emit)
         self.results.header_actions.addWidget(self.run_button)
 
         self.splitter = QSplitter(Qt.Orientation.Vertical)
@@ -2387,10 +2592,10 @@ class CheckCategoryPage(QWidget):
         check: str,
         text: str,
         number: Optional[int] = None,
-        details: Optional[Sequence[str]] = None,
+        issues: Optional[Sequence[QualityIssue]] = None,
     ) -> None:
         self.results.set_result(
-            path_key, check, text, number, details
+            path_key, check, text, number, issues
         )
 
     def clear_results(self) -> None:

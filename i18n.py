@@ -855,10 +855,54 @@ EN_TRANSLATIONS = {
     ),
     "{} — {} из {}": "{} — {} of {}",
 
-    "Подробный список": "Detailed list",
     "Двойной щелчок открывает подробный список: {}": (
         "Double-click opens the detailed list: {}"
     ),
+    "Двойной щелчок открывает объект на карте": (
+        "Double-click opens the feature on the map"
+    ),
+    "Показать": "Show",
+    "Загрузить в текущий проект и показать на карте": (
+        "Load into the current project and show on the map"
+    ),
+    "Загружаю объекты в проект: {}": "Loading features into the project: {}",
+    "Не удалось показать объекты: {}": "Could not show the features: {}",
+    "Загружено слоёв: {} · выбрано объектов: {}": (
+        "Layers loaded: {} · features selected: {}"
+    ),
+    "Открыто файлов: {}": "Files opened: {}",
+    "Пропущено замечаний без объектов: {}": (
+        "Findings without features skipped: {}"
+    ),
+    "Ошибок: {}": "Errors: {}",
+    "В выбранной ячейке нет объектов для показа": (
+        "The selected cell has no features to show"
+    ),
+    "Открыт слой «{}», выбрано объектов: {}": (
+        "Layer \"{}\" opened, features selected: {}"
+    ),
+    "Объекты не найдены, показан весь слой «{}»": (
+        "Features not found, the whole layer \"{}\" is shown"
+    ),
+    "Не удалось открыть слой «{}»: {}": (
+        "Could not open layer \"{}\": {}"
+    ),
+    "Подробный список": "Detailed list",
+    "Розовые ячейки — найдены проблемы": (
+        "Pink cells mean problems were found"
+    ),
+    "Открыт слой «{}», выбран объект {}": (
+        "Layer \"{}\" opened, feature {} selected"
+    ),
+    "Объект {} не найден, показан весь слой «{}»": (
+        "Feature {} not found, the whole layer \"{}\" is shown"
+    ),
+    "Открыт слой «{}»": "Layer \"{}\" opened",
+    "Открыт файл: {}": "File opened: {}",
+    "Файл показан в проводнике: {}": "File shown in Explorer: {}",
+    "Открыта папка: {}": "Folder opened: {}",
+    "Не удалось открыть: {}": "Could not open: {}",
+    "Не удалось открыть объект: {}": "Could not open the feature: {}",
     "Закрыть": "Close",
     "Ищет полные дубли строк, дубли составного ключа, совпадения без "
     "учёта регистра и пробелов и частичные вхождения значений.": (

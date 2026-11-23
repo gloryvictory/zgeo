@@ -27,6 +27,7 @@ from zgeo.quality_check import (
     LayerNumericTextStats,
     LayerTextLengthStats,
     LayerFillStats,
+    QualityIssue,
     ReadabilityProblem,
     TopologyStats,
     attribute_fill_issues,
@@ -789,6 +790,23 @@ class BlankStringTests(unittest.TestCase):
         self.assertAlmostEqual(layer.fields[1].share, 0.75)
 
 
+    def test_all_feature_ids_combines_primary_and_extra(self) -> None:
+        issue = QualityIssue(
+            "blank_strings",
+            "message",
+            feature_id=5,
+            feature_ids=(5, 7, 9),
+        )
+        self.assertEqual(issue.all_feature_ids, (5, 7, 9))
+
+        issue_no_primary = QualityIssue(
+            "blank_strings",
+            "message",
+            feature_ids=(1, 2),
+        )
+        self.assertEqual(issue_no_primary.all_feature_ids, (1, 2))
+
+        self.assertEqual(QualityIssue("x", "m").all_feature_ids, ())
 class ControlCharacterTests(unittest.TestCase):
     def test_field_with_control_characters_is_reported(self) -> None:
         layer = LayerControlStats(

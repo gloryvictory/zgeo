@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import logging
 from datetime import datetime
 from typing import List, Optional, Sequence, Tuple
@@ -63,6 +64,42 @@ from .quality_check import (
 _LOGGER = logging.getLogger(__name__)
 
 
+def _with_feature_ids(
+    issues: List[QualityIssue],
+    stats: Sequence,
+) -> List[QualityIssue]:
+    """Проставить объекты полям, чтобы замечание можно было показать.
+
+    Проверки по полям возвращают одно замечание на поле; перевод из
+    отчёта к объектам берёт идентификаторы из поля feature_ids.
+    """
+
+    ids_by_layer = {}
+    for layer_stats in stats:
+        fields = {}
+        for field in getattr(layer_stats, "fields", ()):
+            field_ids = tuple(getattr(field, "feature_ids", ()) or ())
+            if field_ids:
+                fields[field.name] = field_ids
+        if fields:
+            ids_by_layer[layer_stats.layer] = fields
+
+    if not ids_by_layer:
+        return issues
+
+    enriched: List[QualityIssue] = []
+    for issue in issues:
+        field_ids = ids_by_layer.get(issue.layer, {}).get(
+            issue.location, ()
+        )
+        if not field_ids or issue.feature_ids:
+            enriched.append(issue)
+            continue
+        enriched.append(
+            replace(issue, feature_ids=tuple(field_ids))
+        )
+    return enriched
+
 def _fill_stats(geo_file) -> List[LayerFillStats]:
     """Собрать статистику заполнения по всем векторным слоям."""
 
@@ -111,7 +148,7 @@ def inspect_text_encoding(
         layer_stats = _inspect_encoding_layer(layer)
         if layer_stats is not None:
             stats.append(layer_stats)
-    return text_encoding_issues(stats), bool(stats)
+    return _with_feature_ids(text_encoding_issues(stats), stats), bool(stats)
 
 
 def _inspect_encoding_layer(
@@ -128,6 +165,7 @@ def _inspect_encoding_layer(
     affected = {index: 0 for index, _name in indexes}
     examples = {index: "" for index, _name in indexes}
     repairs = {index: "" for index, _name in indexes}
+    ids = {index: [] for index, _name in indexes}
     feature_count = 0
 
     try:
@@ -141,6 +179,7 @@ def _inspect_encoding_layer(
                 if not looks_like_mojibake(value):
                     continue
                 affected[index] += 1
+                ids[index].append(feature.id())
                 if not examples[index]:
                     examples[index] = escape_mojibake(value)
                     repairs[index] = repair_mojibake(value)
@@ -161,6 +200,7 @@ def _inspect_encoding_layer(
                 affected=affected[index],
                 example=examples[index],
                 repaired=repairs[index],
+                feature_ids=tuple(ids[index]),
             )
             for index, name in indexes
         ),
@@ -194,7 +234,7 @@ def inspect_date_range(
         layer_stats = _inspect_date_layer(layer, limit)
         if layer_stats is not None:
             stats.append(layer_stats)
-    return date_range_issues(stats), bool(stats)
+    return _with_feature_ids(date_range_issues(stats), stats), bool(stats)
 
 
 def _inspect_date_layer(
@@ -250,12 +290,33 @@ def _inspect_date_layer(
 
 
 def _date_text(value: object) -> str:
-    """Привести значение поля даты к строке для разбора."""
+    """Привести значение поля даты к строке для разбора.
+
+    QDate и QDateTime печатаются как «PyQt6.QtCore.QDate(1899, 1, 1)»,
+    поэтому для них берётся ISO-представление.
+    """
 
     if value is None:
         return ""
     if isinstance(value, str):
         return value
+
+    to_string = getattr(value, "toString", None)
+    if callable(to_string):
+        try:
+            text = to_string("yyyy-MM-dd")
+        except TypeError:
+            text = ""
+        if text:
+            return str(text)
+
+    isoformat = getattr(value, "isoformat", None)
+    if callable(isoformat):
+        try:
+            return str(isoformat())
+        except (TypeError, ValueError):
+            pass
+
     text = str(value)
     return text if text and text not in ("NULL", "None") else ""
 
@@ -269,7 +330,7 @@ def inspect_text_length(
         layer_stats = _inspect_length_layer(layer)
         if layer_stats is not None:
             stats.append(layer_stats)
-    return text_length_issues(stats), bool(stats)
+    return _with_feature_ids(text_length_issues(stats), stats), bool(stats)
 
 
 def _inspect_length_layer(
@@ -358,7 +419,7 @@ def inspect_numeric_text(
     """Проверить текстовые поля, где значения записаны числами."""
 
     stats = _numeric_text_stats(geo_file)
-    return numeric_text_issues(stats), bool(stats)
+    return _with_feature_ids(numeric_text_issues(stats), stats), bool(stats)
 
 
 def inspect_mixed_types(
@@ -367,7 +428,7 @@ def inspect_mixed_types(
     """Проверить текстовые поля, где смешаны числа и текст."""
 
     stats = _numeric_text_stats(geo_file)
-    return mixed_type_issues(stats), bool(stats)
+    return _with_feature_ids(mixed_type_issues(stats), stats), bool(stats)
 
 
 def _inspect_numeric_layer(
@@ -387,6 +448,8 @@ def _inspect_numeric_layer(
     text = {index: 0 for index, _name in indexes}
     examples = {index: "" for index, _name in indexes}
     text_examples = {index: "" for index, _name in indexes}
+    ids = {index: [] for index, _name in indexes}
+    text_ids = {index: [] for index, _name in indexes}
     feature_count = 0
 
     try:
@@ -400,6 +463,7 @@ def _inspect_numeric_layer(
                 kind = numeric_text_kind(value)
                 if kind:
                     numeric[index] += 1
+                    ids[index].append(feature.id())
                     if kind == "integer":
                         integer[index] += 1
                     else:
@@ -408,6 +472,7 @@ def _inspect_numeric_layer(
                         examples[index] = value.strip()
                 elif value.strip():
                     text[index] += 1
+                    text_ids[index].append(feature.id())
                     if not text_examples[index]:
                         text_examples[index] = value.strip()
     except Exception:
@@ -430,6 +495,8 @@ def _inspect_numeric_layer(
                 example=examples[index],
                 text=text[index],
                 text_example=text_examples[index],
+                feature_ids=tuple(ids[index]),
+                text_feature_ids=tuple(text_ids[index]),
             )
             for index, name in indexes
         ),
@@ -445,7 +512,7 @@ def inspect_inner_spaces(
         layer_stats = _inspect_inner_layer(layer)
         if layer_stats is not None:
             stats.append(layer_stats)
-    return inner_space_issues(stats), bool(stats)
+    return _with_feature_ids(inner_space_issues(stats), stats), bool(stats)
 
 
 def _inspect_inner_layer(
@@ -461,6 +528,7 @@ def _inspect_inner_layer(
 
     affected = {index: 0 for index, _name in indexes}
     examples = {index: "" for index, _name in indexes}
+    ids = {index: [] for index, _name in indexes}
     feature_count = 0
 
     try:
@@ -474,6 +542,7 @@ def _inspect_inner_layer(
                 if not has_inner_spaces(value):
                     continue
                 affected[index] += 1
+                ids[index].append(feature.id())
                 if not examples[index]:
                     examples[index] = escape_inner_spaces(value.strip())
     except Exception:
@@ -492,6 +561,7 @@ def _inspect_inner_layer(
                 total=feature_count,
                 affected=affected[index],
                 example=examples[index],
+                feature_ids=tuple(ids[index]),
             )
             for index, name in indexes
         ),
@@ -507,7 +577,7 @@ def inspect_edge_spaces(
         layer_stats = _inspect_edge_layer(layer)
         if layer_stats is not None:
             stats.append(layer_stats)
-    return edge_space_issues(stats), bool(stats)
+    return _with_feature_ids(edge_space_issues(stats), stats), bool(stats)
 
 
 def _inspect_edge_layer(
@@ -525,6 +595,7 @@ def _inspect_edge_layer(
     leading = {index: 0 for index, _name in indexes}
     trailing = {index: 0 for index, _name in indexes}
     examples = {index: "" for index, _name in indexes}
+    ids = {index: [] for index, _name in indexes}
     feature_count = 0
 
     try:
@@ -539,6 +610,7 @@ def _inspect_edge_layer(
                 if not head and not tail:
                     continue
                 affected[index] += 1
+                ids[index].append(feature.id())
                 if head:
                     leading[index] += 1
                 if tail:
@@ -563,6 +635,7 @@ def _inspect_edge_layer(
                 leading=leading[index],
                 trailing=trailing[index],
                 example=examples[index],
+                feature_ids=tuple(ids[index]),
             )
             for index, name in indexes
         ),
@@ -578,7 +651,7 @@ def inspect_blank_strings(
         layer_stats = _inspect_blank_layer(layer)
         if layer_stats is not None:
             stats.append(layer_stats)
-    return blank_string_issues(stats), bool(stats)
+    return _with_feature_ids(blank_string_issues(stats), stats), bool(stats)
 
 
 def _inspect_blank_layer(
@@ -593,6 +666,7 @@ def _inspect_blank_layer(
         return None
 
     blanks = {index: 0 for index, _name in indexes}
+    ids = {index: [] for index, _name in indexes}
     feature_count = 0
 
     try:
@@ -605,6 +679,7 @@ def _inspect_blank_layer(
                     continue
                 if not value.strip():
                     blanks[index] += 1
+                    ids[index].append(feature.id())
     except Exception:
         return None
 
@@ -617,7 +692,10 @@ def _inspect_blank_layer(
         feature_count=feature_count,
         fields=tuple(
             FieldBlankStats(
-                name=name, total=feature_count, blank=blanks[index]
+                name=name,
+                total=feature_count,
+                blank=blanks[index],
+                feature_ids=tuple(ids[index]),
             )
             for index, name in indexes
         ),
@@ -633,7 +711,7 @@ def inspect_control_characters(
         layer_stats = _inspect_control_layer(layer)
         if layer_stats is not None:
             stats.append(layer_stats)
-    return control_character_issues(stats), bool(stats)
+    return _with_feature_ids(control_character_issues(stats), stats), bool(stats)
 
 
 def _inspect_control_layer(
@@ -649,6 +727,7 @@ def _inspect_control_layer(
 
     counts = {index: 0 for index, _name in fields}
     found = {index: [] for index, _name in fields}
+    ids = {index: [] for index, _name in fields}
     examples = {index: "" for index, _name in fields}
     feature_count = 0
 
@@ -664,6 +743,7 @@ def _inspect_control_layer(
                 if not characters:
                     continue
                 counts[index] += 1
+                ids[index].append(feature.id())
                 for character in characters:
                     if character not in found[index]:
                         found[index].append(character)
@@ -685,6 +765,7 @@ def _inspect_control_layer(
                 for character in found[index]
             ),
             example=examples[index],
+            feature_ids=tuple(ids[index]),
         )
         for index, name in fields
         if counts[index]

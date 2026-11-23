@@ -7,6 +7,7 @@ from zgeo.explorer import (
     _MACOS_OPEN,
     _WINDOWS_EXPLORER,
     group_files_by_folder,
+    open_file,
     open_folder,
 )
 
@@ -70,4 +71,31 @@ class OpenFolderTests(unittest.TestCase):
 
         self.assertEqual(len(errors), 1)
         self.assertIn(str(folder), errors[0])
+        self.assertIn("boom", errors[0])
+
+
+class OpenFileTests(unittest.TestCase):
+    def test_windows_uses_default_application(self) -> None:
+        path = Path("C:/data/roads.prj")
+        with patch(
+            "zgeo.explorer.os.startfile", create=True
+        ) as startfile, patch(
+            "zgeo.explorer.sys.platform", "win32"
+        ):
+            errors = open_file(path)
+
+        self.assertEqual(errors, [])
+        startfile.assert_called_once_with(str(path))
+
+    def test_open_file_error_is_reported(self) -> None:
+        path = Path("C:/data/roads.prj")
+        with patch(
+            "zgeo.explorer.os.startfile",
+            side_effect=OSError("boom"),
+            create=True,
+        ), patch("zgeo.explorer.sys.platform", "win32"):
+            errors = open_file(path)
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn(str(path), errors[0])
         self.assertIn("boom", errors[0])

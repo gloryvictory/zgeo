@@ -6,7 +6,7 @@ import time
 from collections import deque
 from dataclasses import replace
 from pathlib import Path
-from typing import Deque, Dict, List, Optional, Set, Tuple
+from typing import Deque, Dict, List, Optional, Sequence, Set, Tuple
 
 from qgis.PyQt.QtCore import (
     QFileInfo,
@@ -92,6 +92,7 @@ from .check_dialog import (
     CHECK_TOPOLOGY,
     PROBLEM_CHECKS,
     CheckCategoryPage,
+    IssueEntry,
     check_category,
     check_category_hint,
     check_category_label,
@@ -117,6 +118,7 @@ from .attribute_duplicates import inspect_attribute_duplicates
 from .dataset_size import DirectoryIndex, measure_geo_file_cached
 from .excel_export import SheetSpec
 from .explorer import open_folder, reveal_files
+from .problem_navigation import load_and_show, navigate_to_issue
 from .project_loader import load_files_into_project
 from .geojson_check import JSON_EXTENSIONS, check_json_file
 from .geojson_quality import validate_geojson_file
@@ -427,6 +429,8 @@ class ZGeoPanel(QDockWidget):
                 self,
             )
             page.runRequested.connect(self._run_checks_from_page)
+            page.issueActivated.connect(self._navigate_to_issue)
+            page.loadRequested.connect(self._load_issues_to_project)
             index = self.tabs.addTab(
                 page, check_category_label(category)
             )
@@ -2535,13 +2539,13 @@ class ZGeoPanel(QDockWidget):
         path_key: str,
         text: str,
         number: Optional[int] = None,
-        details: Optional[List[str]] = None,
+        issues: Optional[Sequence[QualityIssue]] = None,
     ) -> None:
         """Записать значение проверки в таблицу результатов."""
 
         page = self._quality_page_for_check(check)
         if page is not None:
-            page.set_result(path_key, check, text, number, details)
+            page.set_result(path_key, check, text, number, issues)
 
     @staticmethod
     def _update_item_crs(item: QTreeWidgetItem, crs: str) -> None:
@@ -3093,8 +3097,51 @@ class ZGeoPanel(QDockWidget):
             path_key,
             text,
             count,
-            [tr(issue.message, *issue.args) for issue in issues],
+            issues,
         )
+
+    def _load_issues_to_project(
+        self, entries: object
+    ) -> None:
+        """Загрузить слои замечаний в проект и показать только их объекты."""
+
+        chosen = [
+            entry for entry in (entries or ())
+            if isinstance(entry, IssueEntry)
+        ]
+        if not chosen:
+            return
+
+        self._set_status(tr("Загружаю объекты в проект: {}", len(chosen)))
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            outcome = load_and_show(chosen)
+        except Exception as error:
+            QApplication.restoreOverrideCursor()
+            self._set_status(
+                tr("Не удалось показать объекты: {}", error)
+            )
+            return
+        QApplication.restoreOverrideCursor()
+        self._set_status(outcome.message)
+        if not outcome.ok:
+            QMessageBox.warning(
+                self,
+                tr("Загрузить в текущий проект и показать на карте"),
+                outcome.message,
+            )
+
+    def _navigate_to_issue(self, entry: IssueEntry) -> None:
+        """Показать объект замечания на карте или его файл в проводнике."""
+
+        try:
+            outcome = navigate_to_issue(entry.path, entry.issue)
+        except Exception as error:
+            self._set_status(
+                tr("Не удалось открыть объект: {}", error)
+            )
+            return
+        self._set_status(outcome.message)
 
     def _quality_page_for_check(
         self, check: str
