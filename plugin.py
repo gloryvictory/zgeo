@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -17,6 +18,8 @@ except ImportError:  # Qt 6 / PyQt 6
 
 from .i18n import LANGUAGE_KEY, set_language, tr
 from .panel import ZGeoPanel
+
+_LOGGER = logging.getLogger(__name__)
 
 PLUGIN_DIR = Path(__file__).resolve().parent
 MENU_NAME = "&ZGeo"
@@ -214,7 +217,7 @@ class ZGeoPlugin:
 
             candidates.append(QgsProject.instance().projectRead)
         except Exception:
-            pass
+            _LOGGER.debug("QgsProject is unavailable", exc_info=True)
 
         for signal in candidates:
             connect = getattr(signal, "connect", None)

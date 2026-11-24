@@ -1,3 +1,17 @@
+Version 1.41.3 — 2026-11-24
+Previous GitHub release: v1.41.2 (2026-11-24)
+
+Overview
+--------
+ZGeo 1.41.3 removes the two Bandit findings that blocked the plugin repository
+review: silent exception handlers now log the reason at debug level.
+
+Changes in 1.41.3
+-----------------
+- plugin.py: the QgsProject availability probe logs a debug message instead of
+  silently passing (Bandit B110).
+- problem_navigation.py: a failed map canvas refresh logs a debug message
+  instead of silently passing (Bandit B110).
 Version 1.41.2 — 2026-11-24
 Previous GitHub release: v1.41.1 (2026-11-23)
 

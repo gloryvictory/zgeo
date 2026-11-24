@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
@@ -21,6 +22,8 @@ from .issue_navigation import NavigationTarget, navigation_target
 from .project_loader import ensure_file_layer
 from .quality_check import QualityIssue
 from .scanner import GeoFile, get_format
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -347,7 +350,7 @@ def _zoom_to_layer(
         try:
             refresh()
         except Exception:
-            pass
+            _LOGGER.debug("Could not refresh the map canvas", exc_info=True)
     return zoomed
 
 
