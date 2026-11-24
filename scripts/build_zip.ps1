@@ -42,6 +42,8 @@ try {
         "scripts",
         "tests",
         ".empryo",
+        ".ruff_cache",
+        "ruff.toml",
         ".git",
         ".github",
         ".gitignore",

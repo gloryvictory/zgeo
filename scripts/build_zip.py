@@ -23,6 +23,8 @@ EXCLUDED_NAMES = {
     ".git",
     ".gitignore",
     ".github",
+    ".ruff_cache",
+    "ruff.toml",
     "AGENTS.md",
     "agents.md",
     ".idea",
