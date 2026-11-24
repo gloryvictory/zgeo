@@ -190,6 +190,20 @@ def readability_issues(
     return issues
 
 
+def read_failure_issue(
+    check: str, layer_name: str, reason: str
+) -> QualityIssue:
+    """Замечание о том, что проверку для слоя не удалось выполнить."""
+
+    return QualityIssue(
+        check,
+        "Проверка не выполнена для слоя «{}»: {}",
+        (layer_name, reason),
+        layer=layer_name,
+        location="Чтение",
+    )
+
+
 @dataclass(frozen=True)
 class FieldFillStats:
     """Заполненность одного атрибутивного поля."""

@@ -8,7 +8,12 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from zgeo.gpkg_check import SQLITE_EXTENSIONS, inspect_gpkg_integrity
+from zgeo.gpkg_check import (
+    SQLITE_EXTENSIONS,
+    _table_columns,
+    _table_names,
+    inspect_gpkg_integrity,
+)
 
 
 def geo_file(path: Path):
@@ -266,6 +271,14 @@ class GpkgIntegrityTests(unittest.TestCase):
                 self.messages(missing),
                 ["Файл не найден или недоступен"],
             )
+
+    def test_table_read_error_is_not_silent(self) -> None:
+        class BrokenConnection:
+            def execute(self, _query, *_args):
+                raise sqlite3.Error("disk I/O error")
+
+        self.assertIsNone(_table_names(BrokenConnection()))
+        self.assertIsNone(_table_columns(BrokenConnection(), "points"))
 
 
 if __name__ == "__main__":

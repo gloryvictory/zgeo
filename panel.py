@@ -3538,6 +3538,13 @@ class ZGeoPanel(QDockWidget):
         if not vector_layers:
             return [], False
 
+        # Ограничение DBF (длина имени, нелатинские символы, пробелы)
+        # относится только к шейпфайлам. Для GeoPackage, GeoJSON и других
+        # форматов эти имена полей полностью допустимы.
+        extension = (file_info.path.suffix or "").lower()
+        if extension != ".shp":
+            return [], True
+
         issues: List[QualityIssue] = []
         layer_fields = [
             (

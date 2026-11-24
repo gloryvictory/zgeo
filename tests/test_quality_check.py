@@ -56,14 +56,11 @@ from zgeo.quality_check import (
     is_reserved_file_name,
     orphan_sidecars,
     field_name_issues,
-    file_path_issues,
-    invalid_name_characters,
     is_known_encoding,
-    is_reserved_file_name,
-    orphan_sidecars,
     metadata_sidecar_issues,
     prj_file_issues,
     readability_issues,
+    read_failure_issue,
     suspicious_field_name_issues,
     text_encoding_issues,
     suspicious_field_name_reason,
@@ -2055,6 +2052,17 @@ class ReadabilityTests(unittest.TestCase):
             ),
             [],
         )
+
+    def test_read_failure_issue_is_visible(self) -> None:
+        issue = read_failure_issue("attribute_fill", "roads", "broken DBF")
+        self.assertEqual(issue.check, "attribute_fill")
+        self.assertEqual(issue.layer, "roads")
+        self.assertEqual(issue.location, "Чтение")
+        self.assertEqual(
+            issue.message,
+            "Проверка не выполнена для слоя «{}»: {}",
+        )
+        self.assertEqual(issue.args, ("roads", "broken DBF"))
 
 
 class DirectoryFilesTests(unittest.TestCase):

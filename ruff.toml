@@ -1,0 +1,7 @@
+# ZGeo lint configuration.
+# Pyflakes catches real bugs (undefined names, unused imports, duplicate
+# imports) without imposing opinionated style rules. E9 covers syntax errors.
+target-version = "py39"
+
+[lint]
+select = ["E9", "F"]

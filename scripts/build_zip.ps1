@@ -43,6 +43,7 @@ try {
         "tests",
         ".empryo",
         ".git",
+        ".github",
         ".gitignore",
         "AGENTS.md",
         ".idea",

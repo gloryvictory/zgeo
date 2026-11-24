@@ -161,6 +161,8 @@ class I18nTests(unittest.TestCase):
             "топологию, дубли, координаты.",
             "Проверка JSON на формат GeoJSON: 0 из {}",
             "Проверка JSON: {} из {} · {}",
+            "Проверка JSON: {} из {}",
+            "Проверка не выполнена для слоя «{}»: {}",
             "Проверка JSON завершена: проверено {} · исключено {}",
             "Проверка JSON завершена: все файлы соответствуют GeoJSON. "
             "Проверено: {}",
@@ -330,7 +332,9 @@ class I18nTests(unittest.TestCase):
         )
         self.assertEqual(missing, [])
 
-    def test_navigation_messages_have_english_translations(self) -> None:
+    def test_problem_navigation_messages_have_english_translations(
+        self,
+    ) -> None:
         path = (
             Path(__file__).resolve().parents[1]
             / "problem_navigation.py"

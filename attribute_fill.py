@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import List, Optional, Sequence, Tuple
 
 from qgis.core import QgsFieldConstraints, QgsVectorLayer
-from qgis.PyQt.QtCore import QVariant
+from qgis.PyQt.QtCore import QMetaType, QVariant
 
 from .attribute_check import (
     control_characters,
@@ -56,12 +56,73 @@ from .quality_check import (
     length_statistics,
     mixed_type_issues,
     numeric_text_issues,
+    read_failure_issue,
     suspicious_field_name_issues,
     text_encoding_issues,
     text_length_issues,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _field_type_set(qt6_names, qt5_names):
+    """Типы полей для сравнения с QgsField.type() в Qt5 и Qt6."""
+
+    values = []
+    for name in qt6_names:
+        value = getattr(QMetaType.Type, name, None)
+        if value is not None:
+            values.append(value)
+    for name in qt5_names:
+        value = getattr(QVariant, name, None)
+        if value is not None:
+            values.append(value)
+    return frozenset(values)
+
+
+_STRING_TYPES = _field_type_set(("String",), ("String",))
+_DATE_TYPES = _field_type_set(("Date", "DateTime"), ("Date", "DateTime"))
+
+
+class _ReadFailure(Exception):
+    """Ошибка чтения слоя — проверку нельзя считать пройденной."""
+
+
+def _safe_inspect_layer(layer, inspector):
+    """Выполнить чтение слоя, превратив ошибку в результат."""
+
+    try:
+        return inspector(layer), None
+    except _ReadFailure as exc:
+        return None, str(exc)
+
+
+def _collect(inspector, geo_file):
+    """Пройти все слои, разделяя успешные и неудачные чтения."""
+
+    stats = []
+    read_errors = []
+    for layer in vector_layers(geo_file):
+        layer_stats, error = _safe_inspect_layer(layer, inspector)
+        if error is not None:
+            read_errors.append(
+                (layer.name().strip() or "—", error)
+            )
+        elif layer_stats is not None:
+            stats.append(layer_stats)
+    return stats, read_errors
+
+
+def _append_read_failures(
+    issues: List[QualityIssue],
+    check: str,
+    read_errors,
+) -> List[QualityIssue]:
+    """Добавить замечания о слоях, которые не удалось прочитать."""
+
+    for layer_name, error in read_errors:
+        issues.append(read_failure_issue(check, layer_name, error))
+    return issues
 
 
 def _with_feature_ids(
@@ -100,15 +161,10 @@ def _with_feature_ids(
         )
     return enriched
 
-def _fill_stats(geo_file) -> List[LayerFillStats]:
+def _fill_stats(geo_file):
     """Собрать статистику заполнения по всем векторным слоям."""
 
-    stats: List[LayerFillStats] = []
-    for layer in vector_layers(geo_file):
-        layer_stats = _inspect_layer(layer)
-        if layer_stats is not None:
-            stats.append(layer_stats)
-    return stats
+    return _collect(_inspect_layer, geo_file)
 
 
 def inspect_attribute_fill(
@@ -116,8 +172,10 @@ def inspect_attribute_fill(
 ) -> Tuple[List[QualityIssue], bool]:
     """Проверить NULL/пустые строки и заполненность полей всех слоёв."""
 
-    stats = _fill_stats(geo_file)
-    return attribute_fill_issues(stats), bool(stats)
+    stats, read_errors = _fill_stats(geo_file)
+    issues = attribute_fill_issues(stats)
+    _append_read_failures(issues, "attribute_fill", read_errors)
+    return issues, bool(stats) or bool(read_errors)
 
 
 def inspect_empty_fields(
@@ -125,8 +183,10 @@ def inspect_empty_fields(
 ) -> Tuple[List[QualityIssue], bool]:
     """Найти поля, у которых все значения пустые (100% NULL)."""
 
-    stats = _fill_stats(geo_file)
-    return empty_field_issues(stats), bool(stats)
+    stats, read_errors = _fill_stats(geo_file)
+    issues = empty_field_issues(stats)
+    _append_read_failures(issues, "empty_fields", read_errors)
+    return issues, bool(stats) or bool(read_errors)
 
 
 
@@ -143,12 +203,10 @@ def inspect_text_encoding(
 ) -> Tuple[List[QualityIssue], bool]:
     """Проверить текст в неверной кодировке (кракозябры)."""
 
-    stats: List[LayerEncodingStats] = []
-    for layer in vector_layers(geo_file):
-        layer_stats = _inspect_encoding_layer(layer)
-        if layer_stats is not None:
-            stats.append(layer_stats)
-    return _with_feature_ids(text_encoding_issues(stats), stats), bool(stats)
+    stats, read_errors = _collect(_inspect_encoding_layer, geo_file)
+    issues = _with_feature_ids(text_encoding_issues(stats), stats)
+    _append_read_failures(issues, "text_encoding", read_errors)
+    return issues, bool(stats) or bool(read_errors)
 
 
 def _inspect_encoding_layer(
@@ -157,7 +215,7 @@ def _inspect_encoding_layer(
     indexes = [
         (index, field.name())
         for index, field in enumerate(layer.fields())
-        if field.type() == QVariant.String
+        if field.type() in _STRING_TYPES
     ]
     if not indexes:
         return None
@@ -183,8 +241,9 @@ def _inspect_encoding_layer(
                 if not examples[index]:
                     examples[index] = escape_mojibake(value)
                     repairs[index] = repair_mojibake(value)
-    except Exception:
-        return None
+    except Exception as exc:
+        _LOGGER.exception("Failed to read layer %r", layer.name())
+        raise _ReadFailure(str(exc)) from exc
 
     if feature_count <= 0:
         return None
@@ -212,14 +271,22 @@ def inspect_suspicious_field_names(
     """Проверить имена полей на технические и пустые названия."""
 
     layers: List[Tuple[str, Tuple[str, ...]]] = []
+    read_errors = []
     for layer in vector_layers(geo_file):
-        field_names = tuple(field.name() for field in layer.fields())
+        try:
+            field_names = tuple(field.name() for field in layer.fields())
+        except Exception as exc:
+            _LOGGER.exception("Failed to read layer %r", layer.name())
+            read_errors.append(
+                (layer.name().strip() or "—", str(exc))
+            )
+            continue
         if not field_names:
             continue
         layers.append((layer.name().strip() or "—", field_names))
-    if not layers:
-        return [], False
-    return suspicious_field_name_issues(layers), True
+    issues = suspicious_field_name_issues(layers)
+    _append_read_failures(issues, "suspicious_field_names", read_errors)
+    return issues, bool(layers) or bool(read_errors)
 
 def inspect_date_range(
     geo_file,
@@ -229,12 +296,12 @@ def inspect_date_range(
     """Проверить даты и отметки времени вне разумного диапазона."""
 
     limit = max_year if max_year is not None else datetime.now().year
-    stats: List[LayerDateRangeStats] = []
-    for layer in vector_layers(geo_file):
-        layer_stats = _inspect_date_layer(layer, limit)
-        if layer_stats is not None:
-            stats.append(layer_stats)
-    return _with_feature_ids(date_range_issues(stats), stats), bool(stats)
+    stats, read_errors = _collect(
+        lambda layer: _inspect_date_layer(layer, limit), geo_file
+    )
+    issues = _with_feature_ids(date_range_issues(stats), stats)
+    _append_read_failures(issues, "date_range", read_errors)
+    return issues, bool(stats) or bool(read_errors)
 
 
 def _inspect_date_layer(
@@ -243,7 +310,7 @@ def _inspect_date_layer(
     indexes = [
         (index, field.name())
         for index, field in enumerate(layer.fields())
-        if field.type() in (QVariant.String, QVariant.Date, QVariant.DateTime)
+        if field.type() in _STRING_TYPES or field.type() in _DATE_TYPES
     ]
     if not indexes:
         return None
@@ -266,8 +333,9 @@ def _inspect_date_layer(
                     continue
                 invalid[index].append((feature.id(), text.strip()))
                 years[index].append(year)
-    except Exception:
-        return None
+    except Exception as exc:
+        _LOGGER.exception("Failed to read layer %r", layer.name())
+        raise _ReadFailure(str(exc)) from exc
 
     if feature_count <= 0:
         return None
@@ -325,12 +393,10 @@ def inspect_text_length(
 ) -> Tuple[List[QualityIssue], bool]:
     """Проверить аномальную длину значений в текстовых полях."""
 
-    stats: List[LayerTextLengthStats] = []
-    for layer in vector_layers(geo_file):
-        layer_stats = _inspect_length_layer(layer)
-        if layer_stats is not None:
-            stats.append(layer_stats)
-    return _with_feature_ids(text_length_issues(stats), stats), bool(stats)
+    stats, read_errors = _collect(_inspect_length_layer, geo_file)
+    issues = _with_feature_ids(text_length_issues(stats), stats)
+    _append_read_failures(issues, "text_length", read_errors)
+    return issues, bool(stats) or bool(read_errors)
 
 
 def _inspect_length_layer(
@@ -339,7 +405,7 @@ def _inspect_length_layer(
     indexes = [
         (index, field.name())
         for index, field in enumerate(layer.fields())
-        if field.type() == QVariant.String
+        if field.type() in _STRING_TYPES
     ]
     if not indexes:
         return None
@@ -362,8 +428,9 @@ def _inspect_length_layer(
                 lengths[index].append(len(value))
                 feature_ids[index].append(feature.id())
                 values[index].append(value)
-    except Exception:
-        return None
+    except Exception as exc:
+        _LOGGER.exception("Failed to read layer %r", layer.name())
+        raise _ReadFailure(str(exc)) from exc
 
     if feature_count <= 0:
         return None
@@ -402,15 +469,10 @@ def _inspect_length_layer(
         fields=tuple(fields),
     )
 
-def _numeric_text_stats(geo_file) -> List[LayerNumericTextStats]:
+def _numeric_text_stats(geo_file):
     """Собрать статистику числовых и текстовых значений по слоям."""
 
-    stats: List[LayerNumericTextStats] = []
-    for layer in vector_layers(geo_file):
-        layer_stats = _inspect_numeric_layer(layer)
-        if layer_stats is not None:
-            stats.append(layer_stats)
-    return stats
+    return _collect(_inspect_numeric_layer, geo_file)
 
 
 def inspect_numeric_text(
@@ -418,8 +480,10 @@ def inspect_numeric_text(
 ) -> Tuple[List[QualityIssue], bool]:
     """Проверить текстовые поля, где значения записаны числами."""
 
-    stats = _numeric_text_stats(geo_file)
-    return _with_feature_ids(numeric_text_issues(stats), stats), bool(stats)
+    stats, read_errors = _numeric_text_stats(geo_file)
+    issues = _with_feature_ids(numeric_text_issues(stats), stats)
+    _append_read_failures(issues, "numeric_text", read_errors)
+    return issues, bool(stats) or bool(read_errors)
 
 
 def inspect_mixed_types(
@@ -427,8 +491,10 @@ def inspect_mixed_types(
 ) -> Tuple[List[QualityIssue], bool]:
     """Проверить текстовые поля, где смешаны числа и текст."""
 
-    stats = _numeric_text_stats(geo_file)
-    return _with_feature_ids(mixed_type_issues(stats), stats), bool(stats)
+    stats, read_errors = _numeric_text_stats(geo_file)
+    issues = _with_feature_ids(mixed_type_issues(stats), stats)
+    _append_read_failures(issues, "mixed_types", read_errors)
+    return issues, bool(stats) or bool(read_errors)
 
 
 def _inspect_numeric_layer(
@@ -437,7 +503,7 @@ def _inspect_numeric_layer(
     indexes = [
         (index, field.name())
         for index, field in enumerate(layer.fields())
-        if field.type() == QVariant.String
+        if field.type() in _STRING_TYPES
     ]
     if not indexes:
         return None
@@ -475,8 +541,9 @@ def _inspect_numeric_layer(
                     text_ids[index].append(feature.id())
                     if not text_examples[index]:
                         text_examples[index] = value.strip()
-    except Exception:
-        return None
+    except Exception as exc:
+        _LOGGER.exception("Failed to read layer %r", layer.name())
+        raise _ReadFailure(str(exc)) from exc
 
     if feature_count <= 0:
         return None
@@ -507,12 +574,10 @@ def inspect_inner_spaces(
 ) -> Tuple[List[QualityIssue], bool]:
     """Проверить двойные пробелы внутри значений текстовых полей."""
 
-    stats: List[LayerInnerSpaceStats] = []
-    for layer in vector_layers(geo_file):
-        layer_stats = _inspect_inner_layer(layer)
-        if layer_stats is not None:
-            stats.append(layer_stats)
-    return _with_feature_ids(inner_space_issues(stats), stats), bool(stats)
+    stats, read_errors = _collect(_inspect_inner_layer, geo_file)
+    issues = _with_feature_ids(inner_space_issues(stats), stats)
+    _append_read_failures(issues, "inner_spaces", read_errors)
+    return issues, bool(stats) or bool(read_errors)
 
 
 def _inspect_inner_layer(
@@ -521,7 +586,7 @@ def _inspect_inner_layer(
     indexes = [
         (index, field.name())
         for index, field in enumerate(layer.fields())
-        if field.type() == QVariant.String
+        if field.type() in _STRING_TYPES
     ]
     if not indexes:
         return None
@@ -545,8 +610,9 @@ def _inspect_inner_layer(
                 ids[index].append(feature.id())
                 if not examples[index]:
                     examples[index] = escape_inner_spaces(value.strip())
-    except Exception:
-        return None
+    except Exception as exc:
+        _LOGGER.exception("Failed to read layer %r", layer.name())
+        raise _ReadFailure(str(exc)) from exc
 
     if feature_count <= 0:
         return None
@@ -572,12 +638,10 @@ def inspect_edge_spaces(
 ) -> Tuple[List[QualityIssue], bool]:
     """Проверить пробелы, табуляцию и переводы строк по краям значений."""
 
-    stats: List[LayerEdgeSpaceStats] = []
-    for layer in vector_layers(geo_file):
-        layer_stats = _inspect_edge_layer(layer)
-        if layer_stats is not None:
-            stats.append(layer_stats)
-    return _with_feature_ids(edge_space_issues(stats), stats), bool(stats)
+    stats, read_errors = _collect(_inspect_edge_layer, geo_file)
+    issues = _with_feature_ids(edge_space_issues(stats), stats)
+    _append_read_failures(issues, "edge_spaces", read_errors)
+    return issues, bool(stats) or bool(read_errors)
 
 
 def _inspect_edge_layer(
@@ -586,7 +650,7 @@ def _inspect_edge_layer(
     indexes = [
         (index, field.name())
         for index, field in enumerate(layer.fields())
-        if field.type() == QVariant.String
+        if field.type() in _STRING_TYPES
     ]
     if not indexes:
         return None
@@ -617,8 +681,9 @@ def _inspect_edge_layer(
                     trailing[index] += 1
                 if not examples[index]:
                     examples[index] = escape_edge_whitespace(value)
-    except Exception:
-        return None
+    except Exception as exc:
+        _LOGGER.exception("Failed to read layer %r", layer.name())
+        raise _ReadFailure(str(exc)) from exc
 
     if feature_count <= 0:
         return None
@@ -646,12 +711,10 @@ def inspect_blank_strings(
 ) -> Tuple[List[QualityIssue], bool]:
     """Проверить пустые строки и строки из пробелов в текстовых полях."""
 
-    stats: List[LayerBlankStats] = []
-    for layer in vector_layers(geo_file):
-        layer_stats = _inspect_blank_layer(layer)
-        if layer_stats is not None:
-            stats.append(layer_stats)
-    return _with_feature_ids(blank_string_issues(stats), stats), bool(stats)
+    stats, read_errors = _collect(_inspect_blank_layer, geo_file)
+    issues = _with_feature_ids(blank_string_issues(stats), stats)
+    _append_read_failures(issues, "blank_strings", read_errors)
+    return issues, bool(stats) or bool(read_errors)
 
 
 def _inspect_blank_layer(
@@ -660,7 +723,7 @@ def _inspect_blank_layer(
     indexes = [
         (index, field.name())
         for index, field in enumerate(layer.fields())
-        if field.type() == QVariant.String
+        if field.type() in _STRING_TYPES
     ]
     if not indexes:
         return None
@@ -680,8 +743,9 @@ def _inspect_blank_layer(
                 if not value.strip():
                     blanks[index] += 1
                     ids[index].append(feature.id())
-    except Exception:
-        return None
+    except Exception as exc:
+        _LOGGER.exception("Failed to read layer %r", layer.name())
+        raise _ReadFailure(str(exc)) from exc
 
     if feature_count <= 0:
         return None
@@ -706,12 +770,10 @@ def inspect_control_characters(
 ) -> Tuple[List[QualityIssue], bool]:
     """Проверить управляющие и невидимые символы в текстовых полях."""
 
-    stats: List[LayerControlStats] = []
-    for layer in vector_layers(geo_file):
-        layer_stats = _inspect_control_layer(layer)
-        if layer_stats is not None:
-            stats.append(layer_stats)
-    return _with_feature_ids(control_character_issues(stats), stats), bool(stats)
+    stats, read_errors = _collect(_inspect_control_layer, geo_file)
+    issues = _with_feature_ids(control_character_issues(stats), stats)
+    _append_read_failures(issues, "control_chars", read_errors)
+    return issues, bool(stats) or bool(read_errors)
 
 
 def _inspect_control_layer(
@@ -720,7 +782,7 @@ def _inspect_control_layer(
     fields = [
         (index, field.name())
         for index, field in enumerate(layer.fields())
-        if field.type() == QVariant.String
+        if field.type() in _STRING_TYPES
     ]
     if not fields:
         return None
@@ -749,8 +811,9 @@ def _inspect_control_layer(
                         found[index].append(character)
                 if not examples[index]:
                     examples[index] = escape_control_characters(value)
-    except Exception:
-        return None
+    except Exception as exc:
+        _LOGGER.exception("Failed to read layer %r", layer.name())
+        raise _ReadFailure(str(exc)) from exc
 
     if feature_count <= 0:
         return None
@@ -805,8 +868,9 @@ def _inspect_layer(layer: QgsVectorLayer) -> Optional[LayerFillStats]:
                     row_empty = False
             if row_empty:
                 fully_empty_features += 1
-    except Exception:
-        return None
+    except Exception as exc:
+        _LOGGER.exception("Failed to read layer %r", layer.name())
+        raise _ReadFailure(str(exc)) from exc
 
     if feature_count <= 0:
         return None

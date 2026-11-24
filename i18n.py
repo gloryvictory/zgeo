@@ -60,6 +60,7 @@ EN_TRANSLATIONS = {
     "Прочие данные": "Other data",
     "Другие форматы": "Other formats",
     # Заголовок и версия
+    "ZGeo — {}": "ZGeo — {}",
     "ZGeo — геоданные": "ZGeo — geodata",
     "Каталог пространственных данных": "Spatial data catalog",
     "Версия {}": "Version {}",
@@ -948,6 +949,19 @@ EN_TRANSLATIONS = {
         "produce double labels on the map and prevent merging data from "
         "different sources."
     ),
+    "Отмена проверки действует между файлами: большой слой "
+    "дочитывается до конца, потому что разбор одного файла "
+    "нельзя прервать на середине.": (
+        "Cancellation works between files: a large layer is read to the "
+        "end, because parsing a single file cannot be interrupted in the "
+        "middle."
+    ),
+    "Отмена действует между файлами: один большой слой "
+    "дочитывается до конца, потому что разбор файла нельзя "
+    "прервать на середине.": (
+        "Cancellation works between files: one large layer is read to the "
+        "end, because parsing a file cannot be interrupted in the middle."
+    ),
     "Двойной щелчок по ячейке таблицы результатов открывает подробный "
     "список найденных дублей с процентами.": (
         "Double-clicking a results table cell opens the detailed list of "
@@ -1326,6 +1340,7 @@ EN_TRANSLATIONS = {
     "Проверка JSON на формат GeoJSON: 0 из {}": (
         "JSON check for GeoJSON format: 0 of {}"
     ),
+    "Проверка JSON: {} из {}": "JSON check: {} of {}",
     "Проверка JSON: {} из {} · {}": "JSON check: {} of {} · {}",
     "Проверка JSON завершена: проверено {} · исключено {}": (
         "JSON check completed: checked {} · excluded {}"
@@ -1840,6 +1855,35 @@ EN_TRANSLATIONS = {
         "Fields population_2024 and population_2025: they collide after "
         "truncation to 10 characters — duplicate is flagged."
     ),
+    "Для шейпфайлов (.shp) проверяет нелатинские символы, длину имени (не более 10 символов DBF), пробелы, недопустимые символы и дубли после усечения.": (
+        "For Shapefiles (.shp) checks non-Latin characters, name length (10 "
+        "characters max for DBF), spaces, invalid characters and duplicates "
+        "after truncation."
+    ),
+    "Ограничение DBF применяется только к шейпфайлам, поскольку именно формат DBF требует имена до 10 символов и ограничивает набор символов. Для GeoPackage, GeoJSON и других форматов имена полей проверка не применяется.": (
+        "The DBF limit applies only to Shapefiles, because the DBF format "
+        "requires names of up to 10 characters and restricts the character "
+        "set. For GeoPackage, GeoJSON and other formats, field names are not "
+        "checked."
+    ),
+    "Для векторных слоёв шейпфайла ZGeo читает имена атрибутивных полей и проверяет нелатинские символы, длину больше 10 символов (ограничение DBF), пробелы и символы, кроме букв, цифр и подчёркивания.": (
+        "For Shapefile vector layers, ZGeo reads attribute field names and "
+        "checks non-Latin characters, names longer than 10 characters (the "
+        "DBF limit), spaces, and characters other than letters, digits and "
+        "underscores."
+    ),
+    "Поле «Наименование» шейпфайла: нелатинские символы — отмечается.": (
+        "Field «Наименование» (Name) in a Shapefile: non-Latin characters — "
+        "flagged."
+    ),
+    "Поле very_long_field_name шейпфайла: длина больше 10 символов — отмечается.": (
+        "Field very_long_field_name in a Shapefile: longer than 10 characters "
+        "— flagged."
+    ),
+    "Поле building_identifier в GeoPackage: длина 19 символов — это норма, проверка не отмечает.": (
+        "Field building_identifier in GeoPackage: 19 characters is normal — "
+        "not flagged."
+    ),
     "ZGeo проверяет обязательные файлы набора: для SHP — .dbf и .shx, для MIF — .mid, для TAB — .dat, .map и .id.": (
         "ZGeo checks the required dataset files: .dbf and .shx for SHP, "
         ".mid for MIF, and .dat, .map and .id for TAB."
@@ -1989,6 +2033,9 @@ EN_TRANSLATIONS = {
     ),
     "Слой «{}»: имена полей совпадают без учёта регистра: {}": (
         "Layer “{}”: field names match ignoring case: {}"
+    ),
+    "Проверка не выполнена для слоя «{}»: {}": (
+        "Check not run for layer “{}”: {}"
     ),
     "У части слоёв не определена система координат": (
         "Some layers have no CRS"

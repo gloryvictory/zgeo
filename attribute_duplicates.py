@@ -7,10 +7,13 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Sequence, Tuple
 
-from .quality_check import QualityIssue
+from .quality_check import QualityIssue, read_failure_issue
+
+_LOGGER = logging.getLogger(__name__)
 
 DUPLICATE_FULL_ROW = "full_row"
 DUPLICATE_KEY = "key"
@@ -361,7 +364,16 @@ def inspect_attribute_duplicates(
                 feature_ids.append(feature.id())
                 if len(rows) >= max_features:
                     break
-        except Exception:
+        except Exception as exc:
+            _LOGGER.exception("Failed to read layer %r", layer.name())
+            issues.append(
+                read_failure_issue(
+                    "attribute_duplicates",
+                    layer.name().strip() or "—",
+                    str(exc),
+                )
+            )
+            applicable = True
             continue
         if len(rows) < 2:
             applicable = True

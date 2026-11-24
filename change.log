@@ -1,3 +1,33 @@
+Version 1.41.2 — 2026-11-24
+Previous GitHub release: v1.41.1 (2026-11-23)
+
+Overview
+--------
+ZGeo 1.41.2 closes the review findings: a failed layer or database read is now
+visible as a problem instead of a silent "no problems", field types work on
+QGIS 4 / Qt 6, the DBF name limits apply to shapefiles only, and the project
+got CI, an MIT license and a clean repository.
+
+Changes in 1.41.2
+-----------------
+- A layer that cannot be read is reported as "Проверка не выполнена для слоя …"
+  in the issues column and in the log instead of disappearing from the
+  statistics; this covers every attribute check, the duplicates check and the
+  GeoPackage table/column queries.
+- Field types are compared through QMetaType.Type with a QVariant fallback, so
+  the attribute checks work on QGIS 4 / Qt 6 where QVariant.String is gone.
+- The DBF field name limits (10 characters, Latin characters, spaces, invalid
+  characters, truncation duplicates) apply to shapefiles only; GeoPackage,
+  GeoJSON and other formats are no longer flagged.
+- The duplicates check describes its 50 000 feature limit and explains that
+  cancellation works between files.
+- Added GitHub Actions: lint and unit tests on push and pull requests, tests,
+  build and release from a tag.
+- LICENSE is the canonical MIT text, the duplicate LICENSE.md is removed, and
+  release archives are no longer committed to the repository.
+- Removed a duplicate i18n import and completed the English translations.
+- Shortened the plugin description and about text in metadata.txt and fixed
+  the attribute_check module docstring.
 ZGeo change log
 ===============
 Version 1.41.1 — 2026-11-23

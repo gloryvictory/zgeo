@@ -75,7 +75,7 @@ Build the archive:
 powershell -ExecutionPolicy Bypass -File .\scripts\build_zip.ps1
 ```
 
-The ready file will be created at `dist\zgeo-1.18.0.zip`. In QGIS, open:
+The ready file will be created at `dist\zgeo-<version>.zip`. In QGIS, open:
 
 **Plugins → Manage and Install Plugins → Install from ZIP**
 
@@ -181,7 +181,7 @@ After the first scan, two tabs become available in the main window. They are dis
 
 **“Attribute data quality”** — this tab contains:
 
-- **“Field name check”** — non-Latin characters, name length (10 characters max for DBF), spaces, invalid characters and duplicates after truncation;
+- **“Field name check”** — shapefiles only: non-Latin characters, name length (10 characters max for DBF), spaces, invalid characters and duplicates after truncation; the check does not apply to GeoPackage, GeoJSON and other formats;
 - **“Field name duplicates check”** — attribute field names that match ignoring case within the same layer;
 - **“Attribute completeness check”** — NULLs, empty strings and whitespace-only strings, fill rate by field, required fields with empty values, fields below 50% fill and almost empty layers;
 - **“Empty fields (100% NULL)”** — columns whose values are all NULL or empty strings. Such fields have nothing to export, take up space in the schema and can break data exchange;
@@ -332,17 +332,22 @@ zgeo/
 ├── charts.py            # bar charts without external dependencies
 ├── attribute_check.py   # field names, control and invisible characters
 ├── attribute_fill.py    # attribute completeness, empty fields, numbers as text and mixed types
+├── attribute_duplicates.py # attribute duplicates (full rows, keys, case, occurrences)
 ├── file_info.py         # file, CRS and feature information
 ├── geojson_check.py     # JSON compliance with GeoJSON
 ├── geojson_quality.py   # GeoJSON coordinates, rings, bbox and structure
 ├── quality_check.py     # attribute, dataset, layer, readability and topology checks
 ├── readability_check.py # opens and reads files through QGIS providers
+├── content_check.py     # extension/content mismatch
 ├── gpkg_check.py        # GeoPackage/SQLite integrity, foreign keys and CRS
 ├── geometry_check.py    # geometry validity and coordinate checks
 ├── topology_check.py    # overlaps, gaps, dangling lines and intersections
 ├── info_dialog.py       # Information dialog
 ├── check_dialog.py      # quality tabs, check selection and detail panel
 ├── explorer.py          # opening files in Explorer
+├── project_loader.py    # loading layers into the current QGIS project
+├── issue_navigation.py  # choosing the navigation target for a finding
+├── problem_navigation.py # loading features, selecting and zooming
 ├── copy_files.py        # copying datasets with sidecar files
 ├── check_timing.py      # check timing and file throughput
 ├── formatting.py        # size formatting

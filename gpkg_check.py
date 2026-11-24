@@ -6,12 +6,15 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-from .quality_check import QualityIssue
+from .quality_check import QualityIssue, read_failure_issue
 from .scanner import GeoFile
+
+_LOGGER = logging.getLogger(__name__)
 
 SQLITE_EXTENSIONS = frozenset({".gpkg", ".sqlite", ".spatialite"})
 REQUIRED_GPKG_TABLES = (
@@ -77,6 +80,16 @@ def _inspect_connection(
     issues.extend(_foreign_key_issues(connection, check))
 
     table_names = _table_names(connection)
+    if table_names is None:
+        issues.append(
+            read_failure_issue(
+                check,
+                "GeoPackage",
+                "не удалось прочитать список таблиц",
+            )
+        )
+        return issues
+
     is_gpkg = extension == ".gpkg" or any(
         name in table_names for name in REQUIRED_GPKG_TABLES
     )
@@ -308,18 +321,26 @@ def _gpkg_consistency_issues(
                     )
                 )
 
-        if table in table_names and column not in _table_columns(
-            connection, table
-        ):
-            issues.append(
-                QualityIssue(
-                    check,
-                    "Геометрическая колонка {}: в таблице {} нет такой "
-                    "колонки",
-                    (column, table),
-                    location=table,
+        if table in table_names:
+            columns = _table_columns(connection, table)
+            if columns is None:
+                issues.append(
+                    read_failure_issue(
+                        check,
+                        table,
+                        "не удалось прочитать список колонок",
+                    )
                 )
-            )
+            elif column not in columns:
+                issues.append(
+                    QualityIssue(
+                        check,
+                        "Геометрическая колонка {}: в таблице {} нет такой "
+                        "колонки",
+                        (column, table),
+                        location=table,
+                    )
+                )
 
     for table, (data_type, srs_id) in contents.items():
         if table not in table_names:
@@ -372,20 +393,21 @@ def _pragma_rows(
     ]
 
 
-def _table_names(connection: sqlite3.Connection) -> Set[str]:
+def _table_names(connection: sqlite3.Connection) -> Optional[Set[str]]:
     try:
         rows = connection.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table'"
         )
         return {_text(row[0]) for row in rows if _text(row[0])}
     except sqlite3.Error:
-        return set()
+        _LOGGER.exception("Failed to read sqlite_master")
+        return None
 
 
 def _table_columns(
     connection: sqlite3.Connection,
     table: str,
-) -> Set[str]:
+) -> Optional[Set[str]]:
     try:
         rows = connection.execute(
             "SELECT name FROM pragma_table_info(?)",
@@ -393,7 +415,8 @@ def _table_columns(
         )
         return {_text(row[0]) for row in rows if _text(row[0])}
     except sqlite3.Error:
-        return set()
+        _LOGGER.exception("Failed to read columns of table %r", table)
+        return None
 
 
 def _rows_are_ok(rows: List[Tuple[object, ...]]) -> bool:
