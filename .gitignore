@@ -3,6 +3,7 @@ __pycache__/
 .idea/
 .vscode/
 dist/
+.ruff_cache/
 
 # Local AI agent instructions
 AGENTS.md
